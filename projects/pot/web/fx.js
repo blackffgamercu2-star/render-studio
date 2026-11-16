@@ -218,6 +218,7 @@ export function makeWater(o = {}) {
       uSky: { value: new THREE.Color(o.sky || 0xbfe3f2) },
       uSun: { value: new THREE.Vector3(0.4, 0.8, 0.45).normalize() },
       uAmp: { value: o.amp || 0.55 },
+      uSpark: { value: o.spark || 0 }, // v4: moving specular sparkle (0 = v3 look)
     },
     vertexShader: `
       uniform float uT; uniform float uAmp; varying float vH; varying vec3 vWp; varying vec3 vN;
@@ -241,7 +242,9 @@ export function makeWater(o = {}) {
       }`,
     fragmentShader: `
       uniform vec3 uDeep; uniform vec3 uShallow; uniform vec3 uSky; uniform vec3 uSun;
+      uniform float uT; uniform float uSpark;
       varying float vH; varying vec3 vWp; varying vec3 vN;
+      float whash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
       void main(){
         vec3 V = normalize(cameraPosition - vWp);
         float fres = pow(1.0 - max(dot(V, vN), 0.0), 2.0);
@@ -250,6 +253,11 @@ export function makeWater(o = {}) {
         col = mix(col, uSky, fres * 0.55);
         float spec = pow(max(dot(reflect(-uSun, vN), V), 0.0), 60.0);
         col += spec * 0.55;
+        if (uSpark > 0.001) { // v4 sparkle band: twinkling glints riding the swell phase
+          vec2 cell = floor(vWp.xz * 5.0) + floor(uT * 2.5);
+          float tw = step(0.986, whash(cell)) * smoothstep(0.1, 0.75, vH);
+          col += tw * uSpark * (0.35 + 0.65 * fres) * vec3(1.0, 0.98, 0.9);
+        }
         float foam = smoothstep(0.62, 0.8, vH) * 0.5;
         col = mix(col, vec3(0.95), foam);
         gl_FragColor = vec4(col, 1.0);

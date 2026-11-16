@@ -1,51 +1,67 @@
-// Shot plan for "The Pot That Gave Birth" (batch-3 topic 2, EN) —
-// timed to the ACTUAL voice stem (57.29 s, 30 fps, TOTAL 1719), clause
-// timings from faster-whisper alignment (match_ratio 0.952, 12 lines):
-// C1 0-98 borrowed a pot, tiny pot beside it | C2 107-182 "gave birth",
-// believed him | C3 194-243 big copper pot for a wedding | C4 257-311
-// neighbour lent the finest pot | C5 325-399 returned it, small pot
-// beside it | C6 408-438 "What's this?" | C7 452-545 "had a baby... the
-// little one is yours" | C8 562-684 laughed, kept baby pot like treasure |
-// C9 707-834 "may I borrow your golden vessel?" | C10 834-880 handed it
-// over happily | C11 895-1019 empty-handed... "vessel died" | C12 1037-1110
-// "Died? Vessels don't die!" | C13 1128-1195 "if a pot can give birth, a
-// pot can also die" | C14 1214-1416 judge: "He is right... Case closed" |
-// C15 1440-1710 donkey-shadow hook: "How do you pay for a shadow?"
-// QUALITY RULES (owner, batch-3): shots change ONLY at clause boundaries;
-// camera TRACKS the voice-named subject every beat (biggest/centred),
-// never freezes (camFromKeys creep + always a key move), never drifts;
-// characters act in place — no walk-glide; costumes by role (simple
-// village clothes; judge = robe + white turban); hero pots BIG in frame.
-// World: neighbour's courtyard x=0 (house facade z=-3.2, pot shelf),
-// wedding pavilion x=-16, borrower's hut x=+16, judge's court x=+32,
-// donkey roadside x=-32 (tree + signpost board).
-import { M, camFromKeys, blinkAt, q, clamp, lerp, lerp3, ramp, kf, kf3 } from './motion.js';
+// Shot plan for "The Pot That Cooks Itself" — pot (LIBRARY v4: speak.js
+// dialogue performance + materials v4, camrig smooth tracking + solid
+// colliders). Batch 6 topic 1. ONE set: a palace courtyard in strong sun.
+// A poor woman sells the king a pot that cooks with no fire: the pot is
+// black as coal and its lid a polished mirror bending the sun's rays in;
+// peeking lets the trapped heat escape.
+// Voice stem: 55.971 s, 30 fps, TOTAL 1680; timings from faster-whisper
+// word alignment (words.json). Scene changes ONLY at clause boundaries:
+//   S1 0.00-4.92 A poor woman...coins.      S7 27.84-30.30 She bowed...spoke.
+//   S2 5.34-8.30 She cooked...for it.       S8 30.92-33.72 "This pot cooks..."
+//   S3 8.64-13.20 Her rules...never peek.   S9 34.44-41.58 Then she revealed...
+//   S4 13.72-18.00 At noon...cooked.        S10 42.20-46.96 Peeking let...fire.
+//   S5 18.42-22.86 His men tested...noon.   S11 47.58-50.28 The king kept...
+//   S6 23.38-27.38 Then one cloudy...king.  S12 50.72-55.94 But tomorrow...one?
+// GRADE (FILTER_VFX_LIGHTING pack): Golden Hour throughout; the cloudy
+// beat (S6-S8) shifts to a Monsoon-Grey blend and back — grade changes
+// ONLY on clause boundaries. Signature VFX: sun rays converging into the
+// pot (reveal), heat shimmer over the sealed pot, steam burst at the
+// noon reveal, glints on the mirror lid.
+import { M, blinkAt, q, clamp, lerp, ramp } from './motion.js';
+import { buildRig, pushInCam, staticTrackCam, keysCam } from './camrig.js';
+import * as SOL from './solid.js';
+import * as T from './toon.js';
+import * as SPK from './speak.js';
+import { SPEAK_DATA } from './speakdata.js';
 
-export const FPS = 30, TOTAL = 1719, DECK = 0;
+// ---------- v4 dialogue performance ----------
+const SPEAK = SPK.makeSpeakPlayer(SPEAK_DATA);
+const speakFace = (baseName, f) => {
+  const s = SPEAK.at(f);
+  return { expr: 'smile', exprP: SPK.applySpeak({ ...T.faceP(baseName), cheek: 0.5 }, s), headTilt: q(s.nod || 0, 2), clothShade: true };
+};
+
+export const FPS = 30, TOTAL = 1680, DECK = 0;
 export const SHOTS = [
-  { id: 'hook', a: 0, b: 193, light: 'day' },
-  { id: 'wedding', a: 194, b: 311, light: 'day' },
-  { id: 'return', a: 312, b: 451, light: 'day' },
-  { id: 'baby', a: 452, b: 684, light: 'day' },
-  { id: 'borrow', a: 685, b: 894, light: 'day' },
-  { id: 'empty', a: 895, b: 1110, light: 'dusk' },
-  { id: 'judge', a: 1111, b: 1439, light: 'day' },
-  { id: 'hook2', a: 1440, b: 1718, light: 'day' },
+  { id: 'drone', a: 0, b: 159, light: 'gold' },
+  { id: 'seller', a: 160, b: 258, light: 'gold' },
+  { id: 'rules', a: 259, b: 411, light: 'gold' },
+  { id: 'noon', a: 412, b: 551, light: 'gold' },
+  { id: 'tests', a: 552, b: 697, light: 'gold' },
+  { id: 'cloudy', a: 698, b: 833, light: 'grey' },
+  { id: 'bow', a: 834, b: 926, light: 'grey' },
+  { id: 'dialogue', a: 927, b: 1033, light: 'grey' },
+  { id: 'reveal', a: 1034, b: 1256, light: 'gold' },
+  { id: 'peek', a: 1257, b: 1417, light: 'gold' },
+  { id: 'paid', a: 1418, b: 1521, light: 'gold' },
+  { id: 'hookq', a: 1522, b: 1619, light: 'dusk' },
+  { id: 'hook', a: 1620, b: 1679, light: 'dusk' },
 ];
 export const TIMING = SHOTS.map((s) => [s.id, s.a, s.b]);
 export const shotAt = (f) => SHOTS.find((s) => f >= s.a && f <= s.b) || (f < 0 ? SHOTS[0] : SHOTS[SHOTS.length - 1]);
 const smooth = M.smooth;
-M.linear = (t) => clamp(t);
 
-// ---------- lights ----------
-const WATER = { waterDeep: '#223c4e', waterShal: '#2c4a63', glint: '#ffe9c0' };
+// ---------- lights / mood grades ----------
 export const LIGHTS = {
-  dusk: { az: 100, el: 19, sky: '#caa27a', ground: '#5c4a34', hemi: 1.06, sun: '#ffb763', sunI: 2.3, fog: '#e0c9a0', fogNear: 40, fogFar: 320,
-    skyTop: '#54689c', skyHor: '#ffd9a0', sunDisc: '#fff3cf', sunSize: 0.0036, sat: 1.07, vig: 0.24, shadowExt: 18, aurora: 0, gain: '#ffe9d2', ...WATER },
-  lamp: { az: 70, el: 34, sky: '#8a6a4c', ground: '#3c2c1e', hemi: 0.88, sun: '#ffc37a', sunI: 1.9, fog: '#caa27a', fogNear: 30, fogFar: 210,
-    skyTop: '#3c3a55', skyHor: '#caa27a', sunDisc: '#ffe9c0', sunSize: 0.0026, sat: 1.05, vig: 0.3, shadowExt: 14, aurora: 0, gain: '#ffe2b8', ...WATER },
-  day: { az: 125, el: 44, sky: '#bcd2e8', ground: '#5f6a52', hemi: 1.22, sun: '#fff3da', sunI: 2.2, fog: '#cfd8c2', fogNear: 46, fogFar: 380,
-    skyTop: '#5f97d6', skyHor: '#eef0da', sunDisc: '#fff6da', sunSize: 0.003, sat: 1.05, vig: 0.18, shadowExt: 18, aurora: 0, gain: '#ffffff', ...WATER },
+  gold: { az: 232, el: 27, sky: '#f0cf9e', ground: '#8a6f4a', hemi: 1.02, sun: '#ffd9a0', sunI: 2.45, fog: '#e8d3ac', fogNear: 46, fogFar: 330,
+    skyTop: '#3a6ab0', skyHor: '#f2cd8e', sunDisc: '#fff0bc', sunSize: 0.0042, sat: 1.09, vig: 0.26, shadowExt: 22, aurora: 0, gain: '#ffedc8',
+    waterDeep: '#1d4e5f', waterShal: '#2e7ea6', glint: '#ffe9c0' },
+  grey: { az: 232, el: 34, sky: '#bcc3c6', ground: '#6b6e66', hemi: 1.15, sun: '#d4d9dc', sunI: 1.25, fog: '#b4bab4', fogNear: 34, fogFar: 260,
+    skyTop: '#5d6d7c', skyHor: '#c3c8c2', sunDisc: '#000000', sunSize: 0, sat: 0.6, vig: 0.26, shadowExt: 22, aurora: 0, gain: '#ccd2d4',
+    waterDeep: '#24343c', waterShal: '#3c545e', glint: '#cfd8dc' },
+  dusk: { az: 250, el: 13, sky: '#c99a72', ground: '#5c4632', hemi: 0.92, sun: '#ffab5e', sunI: 2.0, fog: '#d9b28c', fogNear: 42, fogFar: 300,
+    skyTop: '#2e3c6e', skyHor: '#f0a668', sunDisc: '#ffbe78', sunSize: 0.0044, sat: 1.05, vig: 0.3, shadowExt: 22, aurora: 0, gain: '#f2ddba',
+    waterDeep: '#1d4e5f', waterShal: '#2e7ea6', glint: '#ffe9c0' },
 };
 const hexLerp = (a, b, t) => {
   const pa = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16)), pb = [1, 3, 5].map((i) => parseInt(b.slice(i, i + 2), 16));
@@ -57,202 +73,319 @@ const blendLight = (A, B, t) => {
   return o;
 };
 export const lightFor = (S, f) => {
-  if (S.id === 'empty') return blendLight(LIGHTS.day, LIGHTS.dusk, smooth(ramp(f, 895, 960)));
-  if (S.id === 'judge') return blendLight(LIGHTS.dusk, LIGHTS.day, smooth(ramp(f, 1111, 1180)));
+  if (S.id === 'cloudy') return blendLight(LIGHTS.gold, LIGHTS.grey, smooth(ramp(f, 698, 740)));
+  if (S.id === 'reveal') return blendLight(LIGHTS.grey, LIGHTS.gold, smooth(ramp(f, 1034, 1100)));
+  if (S.id === 'hookq') return blendLight(LIGHTS.gold, LIGHTS.dusk, smooth(ramp(f, 1522, 1580)));
   return { ...LIGHTS[S.light] };
 };
 
-// ---------- staging ----------
-export const FACADE = [0, 0, -3.2];
-export const POTBIG = [0.35, 0, -2.2];    // big copper pot (returned pot)
-export const POTBABY = [1.05, 0, -1.7];   // the baby pot
-export const VESSELP = [-0.9, 1.05, -2.6]; // golden vessel on the shelf
-export const WED = [-16, 0, -3.5];        // finest pot on its pedestal
-export const HUT = [16, 0, -1.6];
-export const BENCH = [32, 0, -4.6];       // judge's bench
-export const DONKEY = [-32.4, 0, -3.0];
-export const SIGNP = [-34.5, 3.4, -2.0];    // hook board on its signpost (west of the action)
+// ---------- staging (shared by story, main, colliders) ----------
+export const BOARD_POS = [0, 3.1, -6];
+export const PLATFORM = { x: 0, z: 2, r: 1.35, top: 0.18 };
+export const STALL = { x: -7.3, z: 6.1, ry: 0.2 };
+export const TABLE = { x: 4.4, z: 7.2 };
+const POT_STALL = [-6.9, 0.78, 6.0];
+const POT_HOME = [PLATFORM.x, PLATFORM.top, PLATFORM.z];
 
-const HERO = {
-  hook: () => [0.7, 1.0, -1.9],
-  wedding: () => [-16, 1.2, -3.5],
-  return: () => [0.4, 1.0, -2.0],
-  baby: () => [0.8, 0.9, -1.8],
-  borrow: () => [-0.5, 1.2, -2.2],
-  empty: () => [0.5, 1.0, -1.6],
-  judge: () => [32, 1.4, -4.2],
-  hook2: () => [-31, 1.0, -2.2],
+const walkKeys = (keys, f) => {
+  let x = keys[0][1], z = keys[0][2];
+  for (let i = 1; i < keys.length; i++) {
+    if (f <= keys[i][0]) { const a = keys[i - 1], b = keys[i]; const u = smooth(ramp(f, a[0], b[0])); return [lerp(a[1], b[1], u), lerp(a[2], b[2], u)]; }
+    x = keys[keys.length - 1][1]; z = keys[keys.length - 1][2];
+  }
+  return [x, z];
 };
-export const heroPosAt = (f) => HERO[shotAt(f).id](f);
+const WOMAN_KEYS = [
+  [0, -5.3, 6.6], [299, -5.3, 6.6], [345, -1.7, 4.4], [1256, -1.7, 4.4],
+  [1290, -0.95, 3.5], [1335, -0.95, 3.5], [1380, -1.7, 4.4], [1679, -1.7, 4.4],
+];
+const KING_KEYS = [
+  [0, 3.1, 5.6], [411, 3.1, 5.6], [432, 2.2, 4.4], [697, 2.2, 4.4],
+  [720, 2.6, 5.2], [1417, 2.6, 5.2], [1460, 1.9, 4.7], [1679, 1.9, 4.7],
+];
+const C1_KEYS = [
+  [0, 4.8, 3.2], [1256, 4.8, 3.2], [1290, 1.55, 3.3], [1335, 1.55, 3.3], [1380, 4.8, 3.2], [1679, 4.8, 3.2],
+];
+export const womanAt = (f) => { const [x, z] = walkKeys(WOMAN_KEYS, f); return { x, z }; };
+export const kingAt = (f) => { const [x, z] = walkKeys(KING_KEYS, f); return { x, z }; };
+export const c1At = (f) => { const [x, z] = walkKeys(C1_KEYS, f); return { x, z }; };
+const strolling = (f, spans) => spans.some(([a, b]) => f >= a && f <= b) ? 1 : 0;
+export const womanMode = (f) => strolling(f, [[300, 345], [1257, 1290], [1335, 1380]]) ? 'stroll' : 'stand';
+export const potAt = (f) => {
+  if (f < 300) return { x: POT_STALL[0], y: POT_STALL[1], z: POT_STALL[2], carried: 0, resting: 1 };
+  if (f <= 345) {
+    const u = smooth(ramp(f, 300, 345));
+    return { x: lerp(POT_STALL[0], POT_HOME[0], u), y: lerp(POT_STALL[1], POT_HOME[1], u) + Math.sin(u * Math.PI) * 0.22, z: lerp(POT_STALL[2], POT_HOME[2], u), carried: 1, resting: 0 };
+  }
+  return { x: POT_HOME[0], y: POT_HOME[1], z: POT_HOME[2], carried: 0, resting: 1 };
+};
+// lid: lift 0..1 (height + tilt of the mirror lid)
+export const lidAt = (f) => {
+  let lift = 0;
+  const seg = (a, b, c, d, peak) => { if (f >= a && f <= d) lift = Math.max(lift, peak * (f < b ? smooth(ramp(f, a, b)) : f <= c ? 1 : 1 - smooth(ramp(f, c, d)))); };
+  seg(468, 492, 522, 548, 1);      // noon: the king lifts it himself
+  seg(608, 626, 648, 672, 0.9);    // tests: a courtier lifts it again
+  seg(1296, 1308, 1322, 1342, 0.28); // peek: one crack — and she seals it
+  return lift;
+};
+const segMax = (f, segs) => {
+  let s = 0;
+  for (const [a, b, c, d, peak] of segs) if (f >= a && f <= d) s = Math.max(s, peak * (f < b ? smooth(ramp(f, a, b)) : f <= c ? 1 : 1 - smooth(ramp(f, c, d))));
+  return s;
+};
+export const steamAt = (f) => segMax(f, [
+  [468, 486, 540, 551, 1],       // the noon reveal BURST
+  [608, 622, 660, 690, 0.55],    // tests: a smaller, proven plume
+  [1298, 1310, 1330, 1352, 0.8], // peek: trapped heat escaping
+]);
+export const shimmerAt = (f) => segMax(f, [
+  [360, 390, 411, 412, 0.45], [412, 440, 460, 468, 0.8],
+  [552, 580, 680, 697, 0.7], [1090, 1120, 1230, 1256, 1], [1257, 1270, 1290, 1298, 0.6],
+]);
+export const raysAt = (f) => segMax(f, [
+  [1058, 1100, 1210, 1256, 1],   // the reveal: rays bend into the food
+  [1360, 1385, 1405, 1417, 0.6], // "the sun was the fire"
+]);
+export const glintAt = (f) => {
+  let s = 0;
+  const pulse = (a, b, peak) => { if (f >= a && f <= b) s = Math.max(s, peak * Math.sin(ramp(f, a, b) * Math.PI)); };
+  pulse(300, 345, 0.5); pulse(468, 540, 0.9); pulse(608, 660, 0.6);
+  pulse(1100, 1210, 1); pulse(1360, 1417, 0.7); pulse(1450, 1521, 0.55);
+  return s;
+};
+export const coinAt = (f) => {
+  const u = smooth(ramp(f, 1440, 1492));
+  return { x: lerp(TABLE.x, -1.15, u), y: lerp(0.78, 1.02, u) + Math.sin(u * Math.PI) * 0.15, z: lerp(TABLE.z, 4.75, u), k: ramp(f, 1436, 1444) * (1 - ramp(f, 1506, 1520)) };
+};
 
-// ---------- cameras ----------
-// Every shot's first key repeats the previous shot's last key (continuous
-// flight, no cuts); inside a shot the camera surges TO the clause subject
-// and settles into a slow push-in on it. Between clauses inside one shot
-// a key lands exactly on the clause boundary frame.
-const CAMS = {
-  hook: [
-    { f: 0, pos: [7.5, 3.6, 11.0], look: [0, 1.8, -2.6], fov: 46 },
-    { f: 55, pos: [4.2, 2.4, 5.6], look: [0.3, 1.3, -2.2], fov: 42, ease: 'surge' },
-    { f: 107, pos: [2.6, 1.9, 3.8], look: [0.7, 1.0, -1.9], fov: 38, ease: 'surge' },
-    { f: 150, pos: [2.3, 1.8, 3.4], look: [0.7, 1.0, -1.9], fov: 37, ease: 'surge' },
-    { f: 193, pos: [2.2, 1.75, 3.2], look: [0.7, 1.0, -1.9], fov: 36, ease: 'surge' },
-  ],
-  wedding: [
-    { f: 194, pos: [2.2, 1.75, 3.2], look: [0.7, 1.0, -1.9], fov: 36 },
-    { f: 240, pos: [-11, 2.2, 3.5], look: [-16, 1.4, -3.8], fov: 40, ease: 'surge' },
-    { f: 280, pos: [-12.5, 2.1, 3.0], look: [-16, 1.1, -3.5], fov: 42, ease: 'surge' },
-    { f: 311, pos: [-12.8, 2.0, 2.7], look: [-16, 1.1, -3.5], fov: 41, ease: 'surge' },
-  ],
-  return: [
-    { f: 312, pos: [-13.8, 1.85, 1.2], look: [-16, 1.1, -3.5], fov: 36 },
-    { f: 350, pos: [4.5, 2.2, 5.5], look: [0.5, 1.1, -2.0], fov: 40, ease: 'surge' },
-    { f: 408, pos: [3.1, 1.85, 3.9], look: [-0.2, 1.15, -1.9], fov: 37, ease: 'surge' },
-    { f: 451, pos: [2.9, 1.8, 3.6], look: [-0.2, 1.15, -1.9], fov: 36, ease: 'surge' },
-  ],
-  baby: [
-    { f: 452, pos: [2.6, 1.75, 3.2], look: [-0.5, 1.2, -2.0], fov: 36 },
-    { f: 470, pos: [3.5, 2.2, 6.5], look: [0, 2.2, -2.8], fov: 44, ease: 'surge' },
-    { f: 545, pos: [3.3, 2.1, 6.2], look: [0, 2.0, -2.8], fov: 43, ease: 'surge' },
-    { f: 600, pos: [2.6, 1.8, 3.6], look: [-0.7, 1.1, -1.7], fov: 38, ease: 'surge' },
-    { f: 684, pos: [2.4, 1.75, 3.3], look: [-0.7, 1.05, -1.7], fov: 37, ease: 'surge' },
-  ],
-  borrow: [
-    { f: 685, pos: [2.4, 1.75, 3.3], look: [-0.7, 1.05, -1.7], fov: 37 },
-    { f: 720, pos: [3.2, 2.3, 6.2], look: [0, 2.3, -2.8], fov: 44, ease: 'surge' },
-    { f: 810, pos: [3.0, 2.2, 5.9], look: [0, 2.2, -2.8], fov: 43, ease: 'surge' },
-    { f: 850, pos: [2.6, 1.85, 3.8], look: [-0.5, 1.15, -1.8], fov: 38, ease: 'surge' },
-    { f: 894, pos: [2.5, 1.8, 3.6], look: [-0.5, 1.1, -1.8], fov: 37, ease: 'surge' },
-  ],
-  empty: [
-    { f: 895, pos: [2.5, 1.8, 3.6], look: [-0.5, 1.1, -1.8], fov: 37 },
-    { f: 950, pos: [3.0, 2.0, 4.8], look: [0.5, 1.1, -1.6], fov: 39, ease: 'surge' },
-    { f: 985, pos: [3.4, 2.3, 6.3], look: [0, 2.3, -2.8], fov: 44, ease: 'surge' },
-    { f: 1040, pos: [3.2, 2.2, 6.0], look: [0, 2.2, -2.8], fov: 43, ease: 'surge' },
-    { f: 1075, pos: [2.7, 1.8, 3.5], look: [-0.8, 1.2, -1.7], fov: 37, ease: 'surge' },
-    { f: 1110, pos: [2.6, 1.75, 3.3], look: [-0.8, 1.15, -1.7], fov: 36, ease: 'surge' },
-  ],
-  judge: [
-    { f: 1111, pos: [2.6, 1.75, 3.3], look: [-0.8, 1.15, -1.7], fov: 36 },
-    { f: 1145, pos: [14, 6.5, 6.0], look: [26, 0.5, -2.0], fov: 40, ease: 'surge' },
-    { f: 1180, pos: [26, 2.4, 5.5], look: [32, 1.5, -3.5], fov: 40, ease: 'surge' },
-    { f: 1234, pos: [28.0, 2.5, 5.0], look: [32, 1.4, -4.0], fov: 42, ease: 'surge' },
-    { f: 1300, pos: [29.0, 2.6, 6.5], look: [32, 1.5, -4.4], fov: 44, ease: 'surge' },
-    { f: 1400, pos: [28.8, 2.6, 6.8], look: [32, 1.5, -4.4], fov: 45, ease: 'surge' },
-    { f: 1439, pos: [28.9, 2.6, 6.7], look: [32, 1.5, -4.4], fov: 44, ease: 'surge' },
-  ],
-  hook2: [
-    { f: 1440, pos: [30.5, 1.8, 1.5], look: [31.9, 1.35, -4.2], fov: 35 },
-    { f: 1500, pos: [10, 5.0, 9.0], look: [-20, 1.5, -3], fov: 42, ease: 'surge' },
-    { f: 1550, pos: [-26, 3.0, 5.0], look: [-31, 1.3, -2.5], fov: 40, ease: 'surge' },
-    { f: 1600, pos: [-27.5, 2.2, 4.5], look: [-30.8, 1.0, -2.0], fov: 40, ease: 'surge' },
-    { f: 1669, pos: [-32.5, 2.5, 5.5], look: [-34.5, 3.2, -2.0], fov: 40, ease: 'surge' },
-    { f: 1718, pos: [-32.8, 2.45, 5.2], look: [-34.5, 3.3, -2.0], fov: 38, ease: 'surge' },
-  ],
+// ---------- hero / focus ----------
+const FOCUS = {
+  drone: () => [0, 1.2, 2],
+  seller: () => { const w = womanAt(200); return [w.x, 1.2, w.z]; },
+  rules: () => { const p = potAt(340); return [p.x, 0.7, p.z]; },
+  noon: () => [0, 0.75, 2],
+  tests: () => [0, 0.75, 2],
+  cloudy: () => [0.6, 1.1, 3.2],
+  bow: () => { const w = womanAt(880); return [w.x, 1.3, w.z]; },
+  dialogue: () => { const w = womanAt(980); return [w.x, 1.45, w.z]; },
+  reveal: () => [0, 0.8, 2],
+  peek: () => [0, 0.8, 2],
+  paid: () => [0.3, 1.1, 5],
+  hookq: () => BOARD_POS, hook: () => BOARD_POS,
 };
-export const camAt = (f) => camFromKeys(CAMS[shotAt(f).id], f);
+export const heroPosAt = (f) => FOCUS[shotAt(f).id]();
+
+// ---------- cameras: EVERY shot is a camrig track on a subject ----------
+const potPos = (f) => { const p = potAt(f); return [p.x, p.y, p.z]; };
+const womanPos = (f) => { const w = womanAt(f); return [w.x, 0, w.z]; };
+const bezierCam = (P, L, a, b, fov0, fov1) => (f) => {
+  const u = M.smooth(ramp(f, a, b));
+  const w0 = (1 - u) ** 3, w1 = 3 * (1 - u) ** 2 * u, w2 = 3 * (1 - u) * u * u, w3 = u ** 3;
+  const mix = (Q) => [0, 1, 2].map((j) => w0 * Q[0][j] + w1 * Q[1][j] + w2 * Q[2][j] + w3 * Q[3][j]);
+  return { pos: mix(P), look: mix(L), fov: lerp(fov0, fov1, u), roll: 0 };
+};
+const RIG_BY_ID = {
+  drone: { cut: 'hard', raw: bezierCam(
+    [[22, 13, 27], [13, 7.5, 19], [9, 4.5, 15.5], [7.4, 3.1, 13.4]],
+    [[0, 3.0, -6], [0, 2.2, -2], [0, 1.2, 1.6], [0, 1.0, 2.2]], 0, 159, 44, 40) },
+  seller: { cut: 'hard', raw: pushInCam({ subject: womanPos, a: 160, b: 258, d0: 5.6, d1: 4.3, h0: 1.55, h1: 1.45, lookOff: [0, 1.35, 0], fov0: 40, fov1: 34,
+    dir: () => [0.62, 0.72] }) },
+  rules: { cut: 'hard', raw: staticTrackCam({ pos: [-4.8, 2.1, 10.8], subject: potPos, lookOff: [0, 0.3, 0], fov: 38 }) },
+  noon: { cut: 'hard', raw: pushInCam({ subject: potPos, a: 412, b: 551, d0: 5.2, d1: 4.3, h0: 1.7, h1: 1.5, lookOff: [0, 0.5, 0], fov0: 36, fov1: 32,
+    dir: () => [0.55, 0.8] }) },
+  tests: { cut: 'hard', raw: keysCam({ keys: [
+    { f: 552, pos: [6.4, 2.5, 9.8], look: [0, 0.6, 2.1], fov: 40 },
+    { f: 697, pos: [5.7, 2.3, 9.2], look: [0, 0.6, 2.05], fov: 37, ease: 'surge' }] }) },
+  cloudy: { cut: 'hard', raw: keysCam({ keys: [
+    { f: 698, pos: [8.6, 3.5, 13.2], look: [0.4, 1.0, 2.8], fov: 44 },
+    { f: 833, pos: [8.1, 3.3, 12.6], look: [0.4, 1.0, 2.8], fov: 42, ease: 'surge' }] }) },
+  bow: { cut: 'hard', raw: pushInCam({ subject: womanPos, a: 834, b: 926, d0: 4.4, d1: 3.3, h0: 1.55, h1: 1.45, lookOff: [0, 1.4, 0], fov0: 38, fov1: 33,
+    dir: () => [0.5, 0.8] }) },
+  dialogue: { cut: 'hard', raw: pushInCam({ subject: womanPos, a: 927, b: 1033, d0: 3.4, d1: 2.75, h0: 1.58, h1: 1.5, lookOff: [0, 1.45, 0], fov0: 32, fov1: 28,
+    dir: () => [0.45, 0.85] }) },
+  reveal: { cut: 'hard', raw: keysCam({ keys: [
+    { f: 1034, pos: [7.5, 3.4, 13.8], look: [-0.6, 0.8, 2.8], fov: 44 },
+    { f: 1256, pos: [5.4, 2.6, 9.8], look: [0, 0.75, 2], fov: 34, ease: 'surge' }] }) },
+  peek: { cut: 'hard', raw: keysCam({ keys: [
+    { f: 1257, pos: [4.5, 1.95, 8.9], look: [0, 0.65, 2.05], fov: 36 },
+    { f: 1417, pos: [4.1, 1.85, 8.5], look: [0, 0.65, 2.05], fov: 34, ease: 'surge' }] }) },
+  paid: { cut: 'hard', raw: staticTrackCam({ pos: [3.9, 2.2, 11.6], subject: () => [0.3, 0, 5.0], lookOff: [0, 1.05, 0], fov: 38 }) },
+  hookq: { cut: 'blend', blend: 10, raw: keysCam({ keys: [
+    { f: 1522, pos: [5.6, 3.1, 7.8], look: [0.1, 2.9, -5.9], fov: 40 },
+    { f: 1619, pos: [5.1, 3.2, 7.3], look: [0.05, 3.0, -5.95], fov: 37, ease: 'surge' }] }) },
+  hook: { cut: 'hard', raw: keysCam({ keys: [
+    { f: 1620, pos: [5.1, 3.2, 7.3], look: [0.05, 3.0, -5.95], fov: 37 },
+    { f: 1679, pos: [4.9, 3.25, 7.1], look: [0.02, 3.05, -5.97], fov: 36, ease: 'surge' }] }) },
+};
+const RIG = buildRig({
+  total: TOTAL,
+  shots: SHOTS.map((s) => ({ a: s.a, b: s.b, ...RIG_BY_ID[s.id] })),
+  kicks: [{ f: 345, a: 0.03 }, { f: 492, a: 0.03 }],
+  sigma: 2.3, fovSigma: 1.6,
+});
+export const camAt = (f) => RIG.camAt(f);
+export const RIG_META = {
+  kicks: RIG.declared.kicks, hardCuts: RIG.declared.hardCuts,
+  blends: SHOTS.filter((s) => RIG_BY_ID[s.id].cut === 'blend').map((s) => ({ a: s.a - Math.floor(RIG_BY_ID[s.id].blend / 2), b: s.a + Math.ceil(RIG_BY_ID[s.id].blend / 2) })),
+  whips: RIG.declared.whips,
+  samples: RIG.samples,
+};
 export const dofAt = (f) => {
-  const S = shotAt(f), C = camAt(f);
-  const hp = heroPosAt(f);
-  let cinf = 5;
-  if (['baby', 'borrow', 'empty', 'judge'].includes(S.id)) cinf = 3.6;
-  if (S.id === 'hook2') cinf = 3.2;
+  const S = shotAt(f), C = camAt(f), hp = heroPosAt(f);
+  let cinf = 2.4;
+  if (['drone', 'hookq'].includes(S.id)) cinf = 1.4;
+  if (['noon', 'dialogue', 'reveal', 'peek'].includes(S.id)) cinf = 3.6;
+  if (S.id === 'hook') cinf = 3.0;
   const d = Math.hypot(C.pos[0] - hp[0], C.pos[1] - hp[1], C.pos[2] - hp[2]);
   return { focus: d, cinf };
 };
 
 // ---------- world state ----------
 export const worldAt = (f) => {
-  const S = shotAt(f);
-  const W = { boardBirth: 0, boardVessel: 0, boardDied: 0, boardHook: 0, potBabyK: 1, vesselK: 1 };
-  if (S.id === 'baby') W.boardBirth = smooth(ramp(f, 470, 482)) * (1 - smooth(ramp(f, 548, 560)));
-  if (S.id === 'borrow') W.boardVessel = smooth(ramp(f, 730, 742)) * (1 - smooth(ramp(f, 798, 810)));
-  if (S.id === 'empty') W.boardDied = smooth(ramp(f, 985, 997)) * (1 - smooth(ramp(f, 1038, 1050)));
-  if (S.id === 'hook2') W.boardHook = smooth(ramp(f, 1669, 1681));   // holds to the last frame — NO fade-out
-  W.potBabyK = 1 - smooth(ramp(f, 644, 652));   // neighbour picks the baby pot up like a treasure
-  W.vesselK = 1 - smooth(ramp(f, 834, 846));    // golden vessel leaves the shelf when handed over
+  const S = shotAt(f), p = potAt(f), lid = lidAt(f), cn = coinAt(f);
+  const W = {
+    boardTitle: 0, boardHook: 0,
+    potX: p.x, potY: p.y, potZ: p.z, potCarried: p.carried,
+    lidLift: lid, foodK: lid > 0.45 ? 1 : lid * 2,
+    steamK: steamAt(f), shimmerK: shimmerAt(f), raysK: raysAt(f), lidGlint: glintAt(f),
+    coinX: cn.x, coinY: cn.y, coinZ: cn.z, coinK: cn.k,
+    dustK: 0.05,
+  };
+  if (S.id === 'drone') W.boardTitle = smooth(ramp(f, 24, 38)) * (1 - smooth(ramp(f, 54, 68)));
+  if (S.id === 'hookq') W.boardHook = smooth(ramp(f, 1568, 1592));
+  if (S.id === 'hook') W.boardHook = 1;   // held at FULL opacity to the literal last frame
   return W;
 };
 export const fxProfileAt = (f) => {
   const S = shotAt(f);
-  return { smokeRate: (S.light === 'lamp' ? 0.22 : 0.35), dustRate: 0.1, splashRate: 0 };
+  return { smokeRate: 0.05, dustRate: 0.05, splashRate: 0, steamRate: steamAt(f), shimmerRate: shimmerAt(f), grey: S.light === 'grey' ? 1 : 0 };
 };
+export const fxAt = () => [];
 
-// ---------- actors ----------
-const TINT = { dusk: '#ffd9a3', lamp: '#ffcf96', day: '#ffffff' };
-const tintFor = (S, f) => TINT[S.light] || '#ffffff';
-// COSTUMES BY ROLE — borrower & neighbour: simple village clothes (different
-// colours so the two men never blur); judge: dark robe + white turban;
-// wedding guest: festive maroon dress, still simple.
+// ---------- cast (single source for actors AND colliders) ----------
+const TINT = { gold: '#ffffff', grey: '#c3ccd4', dusk: '#f2ddc4' };
+const tintFor = (S) => TINT[S.light] || '#ffffff';
 export const OUTFITS = {
-  borrower: { jacket: '#a8895a', pants: '#6e5a41', boots: '#4a3a28', hat: 'cap', cap: '#d9c9a8', skin: '#c98a5a' },
-  neighbour: { jacket: '#7a8a5a', pants: '#4a5240', boots: '#3a2e22', hat: 'cap', cap: '#e8dcc4', skin: '#e8b08a' },
-  guest: { jacket: '#b03a5a', dress: '#b03a5a', pants: '#5a2a3a', boots: '#3a2a22', hat: 'hair', hair: '#241a12', skin: '#e8b08a' },
-  judge: { jacket: '#3a2e4a', dress: '#3a2e4a', pants: '#2a2238', boots: '#1c1a17', hat: 'turban', turban: '#f7f3e6', skin: '#c98a5a', moustache: true },
-  traveller: { jacket: '#8a6a4a', pants: '#5a4632', boots: '#3a2e22', hat: 'cap', cap: '#c9b896', skin: '#e8b08a' },
-  owner: { jacket: '#6a5a7a', pants: '#3a3444', boots: '#2a2622', hat: 'cap', cap: '#d9c9a8', skin: '#c98a5a' },
+  woman: { jacket: '#9a5a3a', pants: '#6a4a3a', boots: '#3a2a1c', hat: 'hair', hair: '#2c1a10', skin: '#a06a3c' },
+  king: { jacket: '#8a2432', pants: '#3a2a4a', boots: '#241a12', hat: 'crown', skin: '#c98a5a' },
+  court1: { jacket: '#2c4a6e', pants: '#2a3242', boots: '#1c1712', hat: 'cap', cap: '#c8a03a', skin: '#c98a5a' },
+  court2: { jacket: '#4a6a3a', pants: '#33302c', boots: '#241a12', hat: 'hair', hair: '#1c1410', skin: '#8a5a34', moustache: '#241a12' },
+  guard: { jacket: '#5a2a3a', pants: '#2c2226', boots: '#1c1712', hat: 'shako', skin: '#a06a3c' },
 };
-const RW = (T, o, opts, pos, extra = {}) => ({ key: 'pax' + JSON.stringify(o) + JSON.stringify(opts), draw: (p) => T.bodyFront(p, o, opts), x: pos[0], y: pos[1], z: pos[2], ground: pos[3] ?? pos[1], ...extra });
-const stand = (T, tint, f) => (o, expr, seed, pos, extra = {}) => RW(T, o, { expr, mode: 'stand', blink: blinkAt(f, seed), seed }, pos, { tint, ...extra });
-// The donkey is a card animal (kit donkeyCard), standing planted at the roadside.
-const donkey = (T, tint, pos, extra = {}) => ({ key: 'donkey-stand', draw: (p) => T.donkeyCard(p, {}), x: pos[0], y: pos[1], z: pos[2], ground: pos[1], tint, ...extra });
-
-export const actorsAt = (f, T) => {
-  const S = shotAt(f), tint = tintFor(S, f), out = [];
-  const st = stand(T, tint, f);
+export const castAt = (f) => {
+  const S = shotAt(f), tint = tintFor(S), out = [];
+  const std = (id, o, opts, x, z, extra = {}) => out.push({ id, x, y: 0, z, r: 0.32, ground: 0,
+    actor: (T) => ({ key: 'pax' + JSON.stringify(o) + JSON.stringify(opts), draw: (p) => T.bodyFront(p, o, opts), x, y: 0, z, ground: 0, tint, ...extra }) });
+  const w = womanAt(f), k = kingAt(f), c1 = c1At(f);
+  const wBase = { expr: 'smile', mode: 'stand', blink: blinkAt(f, 31), seed: 31 };
   switch (S.id) {
-    case 'hook': {
-      out.push(st(OUTFITS.borrower, 'grin', 51, [0.9, 0, -1.2], { yaw: 0.35 }));
-      out.push(st(OUTFITS.neighbour, f < 155 ? 'neutral' : 'grin', 52, [-0.9, 0, -1.6], { yaw: -0.35 }));
+    case 'drone': {
+      std('woman', OUTFITS.woman, { ...wBase }, w.x, w.z, { yaw: 0.5 });
+      std('king', OUTFITS.king, { expr: 'stern', mode: 'stand', blink: blinkAt(f, 41), seed: 41 }, k.x, k.z, { yaw: -0.5 });
+      std('court1', OUTFITS.court1, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 51), seed: 51 }, c1.x, c1.z, { yaw: -0.3 });
+      std('court2', OUTFITS.court2, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 52), seed: 52 }, -4.6, 0.8, { yaw: 0.4 });
+      std('guard1', OUTFITS.guard, { expr: 'stern', mode: 'stand', blink: blinkAt(f, 61), seed: 61 }, -3, -11.5, {});
+      std('guard2', OUTFITS.guard, { expr: 'stern', mode: 'stand', blink: blinkAt(f, 62), seed: 62 }, 3, -11.5, {});
       break;
     }
-    case 'wedding': {
-      // Men flank the finest pot — nobody stands in front of it.
-      out.push(st(OUTFITS.borrower, 'grin', 51, [-14.6, 0, -2.4], { yaw: -0.3 }));
-      out.push(st(OUTFITS.neighbour, 'grin', 52, [-17.0, 0, -3.4], { yaw: 0.3 }));
-      out.push(st(OUTFITS.guest, 'smile', 53, [-15.2, 0, -4.6], { yaw: 0.15 }));
+    case 'seller': {
+      std('woman', OUTFITS.woman, { ...wBase, prop: ['point', 0.55] }, w.x, w.z, { yaw: 0.6 });
+      std('king', OUTFITS.king, { expr: 'stern', mode: 'stand', blink: blinkAt(f, 41), seed: 41 }, k.x, k.z, { yaw: -0.6 });
       break;
     }
-    case 'return': {
-      const k = q(0.9 * smooth(ramp(f, 325, 360)), 2);
-      out.push(RW(T, OUTFITS.borrower, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 51), seed: 51, prop: ['pot', k] }, [0.9, 0, -1.2], { tint, yaw: 0.35 }));
-      out.push(st(OUTFITS.neighbour, f < 408 ? 'neutral' : 'shock', 52, [-0.9, 0, -1.6], { yaw: -0.35 }));
+    case 'rules': {
+      const carrying = f >= 300 && f <= 345;
+      std('woman', OUTFITS.woman, { ...wBase, mode: womanMode(f), phase: q((f * 0.011) % 1, 2), prop: !carrying && f >= 352 ? ['point', 0.7] : null }, w.x, w.z, { yaw: 0.55 });
+      std('king', OUTFITS.king, { expr: 'stern', mode: 'stand', blink: blinkAt(f, 41), seed: 41 }, k.x, k.z, { yaw: -0.55 });
+      std('court1', OUTFITS.court1, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 51), seed: 51 }, c1.x, c1.z, { yaw: -0.3 });
       break;
     }
-    case 'baby': {
-      const point = f < 562 ? { prop: ['point', 1] } : {};
-      out.push(RW(T, OUTFITS.borrower, { expr: 'grin', mode: 'stand', blink: blinkAt(f, 51), seed: 51, ...point }, [0.9, 0, -1.2], { tint, yaw: 0.35 }));
-      const nExpr = f < 562 ? 'neutral' : 'laugh';
-      const nProp = f >= 644 ? { prop: ['babypot', 0.95] } : {};
-      out.push(RW(T, OUTFITS.neighbour, { expr: nExpr, mode: 'stand', blink: blinkAt(f, 52), seed: 52, ...nProp }, [-0.9, 0, -1.6], { tint, yaw: -0.35 }));
+    case 'noon': {
+      std('woman', OUTFITS.woman, { ...wBase }, w.x, w.z, { yaw: 0.55 });
+      std('king', OUTFITS.king, { expr: f >= 478 && f < 512 ? 'shock' : 'smile', mode: 'stand', blink: blinkAt(f, 41), seed: 41, headTilt: f >= 460 && f < 540 ? -0.07 : 0 }, k.x, k.z, { yaw: -0.55 });
+      std('court1', OUTFITS.court1, { expr: f >= 478 ? 'shock' : 'neutral', mode: 'stand', blink: blinkAt(f, 51), seed: 51 }, c1.x, c1.z, { yaw: -0.3 });
+      std('court2', OUTFITS.court2, { expr: f >= 478 ? 'shock' : 'neutral', mode: 'stand', blink: blinkAt(f, 52), seed: 52 }, -4.6, 0.8, { yaw: 0.4 });
       break;
     }
-    case 'borrow': {
-      out.push(st(OUTFITS.borrower, f < 765 ? 'nervous' : 'grin', 51, [0.9, 0, -1.2], { yaw: 0.35 }));
-      const nProp = f >= 834 ? { prop: ['vessel', 0.9] } : {};
-      out.push(RW(T, OUTFITS.neighbour, { expr: f < 834 ? 'neutral' : 'grin', mode: 'stand', blink: blinkAt(f, 52), seed: 52, ...nProp }, [-0.9, 0, -1.6], { tint, yaw: -0.35 }));
+    case 'tests': {
+      std('woman', OUTFITS.woman, { ...wBase }, w.x, w.z, { yaw: 0.55 });
+      std('king', OUTFITS.king, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 41), seed: 41 }, k.x, k.z, { yaw: -0.55 });
+      std('court1', OUTFITS.court1, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 51), seed: 51 }, c1.x, c1.z, { yaw: -0.3 });
+      std('court2', OUTFITS.court2, { expr: 'smile_closed', mode: 'stand', blink: blinkAt(f, 52), seed: 52 }, -4.6, 0.8, { yaw: 0.4 });
       break;
     }
-    case 'empty': {
-      out.push(st(OUTFITS.borrower, f < 958 ? 'nervous' : 'pained', 51, [0.9, 0, -1.2], { yaw: 0.35 }));
-      out.push(st(OUTFITS.neighbour, f < 1037 ? 'stern' : 'shock', 52, [-0.9, 0, -1.6], { yaw: -0.35 }));
+    case 'cloudy': {
+      std('woman', OUTFITS.woman, { ...wBase, expr: 'neutral', headTilt: 0.12 }, w.x, w.z, { yaw: 0.55 });
+      std('king', OUTFITS.king, { expr: 'stern', mode: 'stand', blink: blinkAt(f, 41), seed: 41 }, k.x, k.z, { yaw: -0.55 });
+      std('court1', OUTFITS.court1, { expr: 'laugh', mode: 'stand', blink: blinkAt(f, 51), seed: 51 }, c1.x, c1.z, { yaw: -0.3 });
+      std('court2', OUTFITS.court2, { expr: 'laugh', mode: 'stand', blink: blinkAt(f, 52), seed: 52 }, -4.6, 0.8, { yaw: 0.4 });
+      std('guard1', OUTFITS.guard, { expr: 'stern', mode: 'stand', blink: blinkAt(f, 61), seed: 61 }, -3, -11.5, {});
+      std('guard2', OUTFITS.guard, { expr: 'stern', mode: 'stand', blink: blinkAt(f, 62), seed: 62 }, 3, -11.5, {});
       break;
     }
-    case 'judge': {
-      // Men flank the bench — the judge stays visible between them.
-      out.push(st(OUTFITS.judge, f < 1248 ? 'neutral' : 'smile', 71, [32, 0, -4.6], { yaw: 0 }));
-      out.push(st(OUTFITS.borrower, 'grin', 51, [31.0, 0, -2.0], { yaw: 0.3 }));
-      out.push(st(OUTFITS.neighbour, f < 1346 ? 'neutral' : 'dazed', 52, [33.0, 0, -2.0], { yaw: -0.3 }));
+    case 'bow': {
+      const bowK = smooth(ramp(f, 848, 872)) * (1 - smooth(ramp(f, 884, 904)));
+      std('woman', OUTFITS.woman, { ...wBase, headTilt: q(bowK * 0.38, 2), prop: f >= 884 ? ['point', 0.85] : null }, w.x, w.z, { yaw: 0.55 });
+      std('king', OUTFITS.king, { expr: 'stern', mode: 'stand', blink: blinkAt(f, 41), seed: 41 }, k.x, k.z, { yaw: -0.55 });
       break;
     }
-    case 'hook2': {
-      out.push(donkey(T, tint, DONKEY, { yaw: 0.2, s: 1.3 }));
-      out.push(RW(T, OUTFITS.traveller, { expr: f < 1600 ? 'neutral' : 'nervous', mode: 'sit', blink: blinkAt(f, 81), seed: 81 }, [-30.6, 0, -0.8], { tint, yaw: 0.4 }));
-      const oProp = f >= 1572 ? { prop: ['point', 1] } : {};
-      out.push(RW(T, OUTFITS.owner, { expr: 'stern', mode: 'stand', blink: blinkAt(f, 82), seed: 82, ...oProp }, [-29.8, 0, -1.8], { tint, yaw: -0.4 }));
+    case 'dialogue': {
+      // THE dialogue beat: the woman PERFORMS her line — mouth driven by
+      // the stem inside the speak segment, closed outside it; the king
+      // only listens (his mouth never opens: narration stays voice-over).
+      std('woman', OUTFITS.woman, { mode: 'stand', blink: blinkAt(f, 31), seed: 31, look: 0.15, ...speakFace('smile', f) }, w.x, w.z, { yaw: 0.5 });
+      std('king', OUTFITS.king, { expr: 'stern', mode: 'stand', blink: blinkAt(f, 41), seed: 41 }, k.x, k.z, { yaw: -0.5 });
       break;
     }
+    case 'reveal': {
+      std('woman', OUTFITS.woman, { ...wBase, prop: ['point', 0.75] }, w.x, w.z, { yaw: 0.55 });
+      std('king', OUTFITS.king, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 41), seed: 41 }, k.x, k.z, { yaw: -0.55 });
+      std('court1', OUTFITS.court1, { expr: 'shock', mode: 'stand', blink: blinkAt(f, 51), seed: 51 }, c1.x, c1.z, { yaw: -0.3 });
+      break;
+    }
+    case 'peek': {
+      std('woman', OUTFITS.woman, { ...wBase, expr: f >= 1330 ? 'stern' : 'smile', mode: womanMode(f), phase: q((f * 0.011) % 1, 2) }, w.x, w.z, { yaw: 0.55 });
+      std('king', OUTFITS.king, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 41), seed: 41 }, k.x, k.z, { yaw: -0.55 });
+      std('court1', OUTFITS.court1, { expr: f >= 1296 && f < 1345 ? 'nervous' : 'smile', mode: strolling(f, [[1257, 1290], [1335, 1380]]) ? 'stroll' : 'stand', phase: q((f * 0.011) % 1, 2), blink: blinkAt(f, 51), seed: 51 }, c1.x, c1.z, { yaw: -0.85 });
+      break;
+    }
+    case 'paid': {
+      std('woman', OUTFITS.woman, { ...wBase }, w.x, w.z, { yaw: 0.55 });
+      std('king', OUTFITS.king, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 41), seed: 41, prop: f >= 1436 && f <= 1500 ? ['point', 0.5] : null }, k.x, k.z, { yaw: -0.55 });
+      std('court1', OUTFITS.court1, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 51), seed: 51 }, c1.x, c1.z, { yaw: -0.3 });
+      break;
+    }
+    case 'hookq': case 'hook': break;
   }
   return out;
 };
-export const fxAt = (f, T) => [];
+export const actorsAt = (f, T) => castAt(f).map((c) => c.actor(T));
+
+// ---------- solidity: statics, dynamics, ground (LIBRARY v3 gate data) ----------
+export const STATICS = [
+  SOL.circle(PLATFORM.x, PLATFORM.z, PLATFORM.r, { h: PLATFORM.top, id: 'platform' }),
+  SOL.aabb(-18, 18, -15.5, -13.8, { h: 5, id: 'facade' }),
+  SOL.aabb(-17.5, -16, -14, 12, { h: 2.6, id: 'wallW' }),
+  SOL.aabb(16, 17.5, -14, 12, { h: 2.6, id: 'wallE' }),
+  SOL.obb(STALL.x, STALL.z, STALL.ry, 1.3, 0.8, { h: 2.2, id: 'stall' }),
+  SOL.obb(TABLE.x, TABLE.z, 0, 0.85, 0.5, { h: 0.78, id: 'table' }),
+  SOL.circle(BOARD_POS[0] - 2.1, BOARD_POS[2], 0.09, { h: 3.3, id: 'boardpost' }),
+  SOL.circle(BOARD_POS[0] + 2.1, BOARD_POS[2], 0.09, { h: 3.3, id: 'boardpost' }),
+  ...[-12, -8, -4, 0, 4, 8, 12].map((x) => SOL.circle(x, -13.2, 0.35, { h: 4.4, id: 'column' })),
+];
+export const WORLD = SOL.makeWorld(STATICS);
+export const dynamicsAt = (f) => {
+  const out = [];
+  for (const a of castAt(f)) out.push(SOL.circle(a.x, a.z, a.r, { kind: 'dynamic', id: a.id }));
+  return out;
+};
+export const groundItemsAt = (f) => {
+  const items = [];
+  const p = potAt(f);
+  // the pot is a carried/resting prop: ground-checked whenever it RESTS
+  // (stall table top 0.78 / platform top 0.18); while carried it is
+  // transitional (in the woman's hands) and unchecked, like a fall.
+  if (p.resting) items.push({ id: 'pot', y: p.y, ground: f < 300 ? 0.78 : PLATFORM.top, maxHover: 0.03 });
+  for (const a of castAt(f)) items.push({ id: a.id, y: a.y, ground: 0, maxHover: 0.06 });
+  return items;
+};
