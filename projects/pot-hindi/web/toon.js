@@ -962,22 +962,6 @@ const hatOn = (p, o, hp, H, cx, hc, light, seed, facing, side)=>{
             ])[0];
             p.ell(tx, ty, 7 * u, 7 * u, "#2b7a4b", 2.5 * u);
         }
-    } else if (o.hat === "turban") {
-        // POT PROJECT: wrapped white turban (judge) — stacked bands + top knot.
-        const col = o.turban || o.cap || "#f7f3e6";
-        const yb = crown + 0.3 * HH, ht = 0.34 * HH, wb = 48 * u;
-        const body = R([
-            ...sag(yb, wb).reverse(),
-            [cx - wb, yb - ht],
-            [cx + wb, yb - ht]
-        ]);
-        p.shadedFill(body, col, mul(col, SH_FELT), light, wb, 0.4);
-        p.poly(body, null, ow);
-        for (const yy of [yb - 0.12 * ht, yb - 0.52 * ht]) {
-            p.stroke(R([[cx - wb + 4 * u, yy], [cx + wb - 4 * u, yy]]), 2.2 * u, shade(col, 0.72));
-        }
-        const [kx, ky] = R([[cx + 10 * u, yb - ht - 4 * u]])[0];
-        p.ell(kx, ky, 9 * u, 8 * u, col, ow * 0.8);
     } else if (o.hat === "cap" || o.hat === "hair") {
         const cut = crown + (o.hat === "cap" ? 0.3 : 0.42) * HH;
         const keep = (x, y)=>y < cut || side && o.hat === "hair" && x < cx - 6 * u && y < hc + 0.42 * H.b;
@@ -1039,6 +1023,39 @@ const hatOn = (p, o, hp, H, cx, hc, light, seed, facing, side)=>{
                 p.ell(px, py, 32 * u, 0.06 * HH, shade(col, 0.8), ow, 0, 180, deg);
             }
         }
+    } else if (o.hat === "crown") {
+        // v4 port (from the project forks): gold royal crown — band with five
+        // triangular points and a red jewel. Sits on the head crown.
+        const yb = crown + 0.28 * HH, ht = 0.34 * HH, wb = 0.42 * W;
+        const pts = [[cx - wb, yb], [cx - wb * 0.5, yb - ht * 0.55], [cx - wb * 0.28, yb],
+            [cx - wb * 0.12, yb - ht], [cx, yb - ht * 0.55], [cx + wb * 0.12, yb - ht],
+            [cx + wb * 0.28, yb], [cx + wb * 0.5, yb - ht * 0.55], [cx + wb, yb]];
+        const body = R(pts);
+        p.shadedFill(body, "#e8b93c", "#a87f1e", light, wb, 0.4);
+        p.poly(body, null, ow);
+        p.clip(body, () => p.band(R([[cx - wb, yb - 0.05 * HH], [cx + wb, yb - 0.05 * HH]]), "#f6d06a", 0.05 * HH, 0.8 * u));
+        const [jx, jy] = R([[cx, yb - 0.14 * HH]])[0];
+        p.ell(jx, jy, 5 * u, 6 * u, "#b3392e", 1.5 * u);
+        p.ell(jx, jy, 2.5 * u, 3 * u, "#e0604f", 1 * u);
+    } else if (o.hat === "turban") {
+        // v4 port (from the project forks): wrapped cream turban — dome + wrap
+        // bands + jewel. Colour via o.turban (default cream).
+        const yb = crown + 0.3 * HH, ht = 0.52 * HH, wb = 0.46 * W;
+        const dome = R([
+            ...sag(yb, wb).reverse(),
+            [cx - wb, yb - ht * 0.55], [cx - wb * 0.55, yb - ht],
+            [cx, yb - ht * 1.02], [cx + wb * 0.55, yb - ht], [cx + wb, yb - ht * 0.55],
+        ]);
+        const col = o.turban || "#f3e3bb";
+        p.shadedFill(dome, col, mul(col, SH_FELT), light, wb, 0.35);
+        p.clip(dome, () => {
+            p.band(R([[cx - wb, yb - 0.2 * HH], [cx + wb, yb - 0.16 * HH]]), mul(col, 0.82), 0.045 * HH, 0.8 * u);
+            p.band(R([[cx - wb * 0.9, yb - 0.36 * HH], [cx + wb * 0.9, yb - 0.32 * HH]]), mul(col, 0.88), 0.04 * HH, 0.8 * u);
+        });
+        p.poly(dome, null, ow);
+        const [jx, jy] = R([[cx, yb - 0.38 * HH]])[0];
+        p.ell(jx, jy, 5.5 * u, 6.5 * u, "#b3392e", 1.5 * u);
+        p.ell(jx, jy, 2.5 * u, 3 * u, "#e0604f", 1 * u);
     } else if (o.hat === "tophat") {
         const yb = crown + 0.22 * HH, ht = 0.8 * HH, wb = 0.31 * W, wt = 0.33 * W, col = "#2e2a36";
         const body = R([
@@ -1128,13 +1145,16 @@ const footStroke = (p, a, b, w, col)=>{
     ], w, col);
 };
 export const bodyFront = (p, o, opts)=>{
-    const { phase = 0, expr = "neutral", mode = "march", look = 0, blink = false, lift = 60, prop = null, tilt = 0, headTilt = 0, wave, light = DEF_LIGHT, facing = 0, seed = 1 } = opts;
+    const { phase = 0, expr = "neutral", mode = "march", look = 0, blink = false, lift = 60, prop = null, tilt = 0, headTilt = 0, wave, light = DEF_LIGHT, facing = 0, seed = 1, exprP = null, airY = 0, squash = 0, lookY = 0, breath = null, clothShade = false } = opts;
     const Bd = BUILD[o.build ?? "adult"], skin = o.skin ?? SKIN, two = Math.PI * 2, lid = lidOf(blink);
     const H = headBlob(seed, Bd.a, facing), W = 2 * H.a, HH = 2 * H.b, u = W / 100;
-    const tall = (1 + Bd.torso + Bd.legs) * HH, sole = 975;
+    const vS = 1 - (squash || 0); // v2: squash & stretch — head widens/shortens, torso chain compresses toward the sole
+    if (squash) { H.a *= 1 + squash * 0.5; H.b *= 1 - squash * 0.55; }
+    const brE = breath == null ? 0 : (0.5 + 0.5 * Math.sin((breath + seed * 23) * 0.0582 - Math.PI / 2)), brY = -2.2 * brE * brE * (3 - 2 * brE); // v2: idle breathing head settle
+    const tall = (1 + Bd.torso + Bd.legs) * HH, sole = 975 - (airY || 0);
     const bob = mode === "march" ? 0.025 * tall * Math.cos(2 * two * phase) : mode === "stroll" ? 0.015 * tall * Math.cos(2 * two * phase) : 0;
-    const torsoBot = mode === "sit" ? sole - 0.2 * HH : sole - Bd.legs * HH + bob;
-    const chin = torsoBot - Bd.torso * HH, hc = chin - H.b, crown = hc - H.b, hipY = torsoBot - 0.12 * HH;
+    const torsoBot = mode === "sit" ? sole - 0.2 * HH : sole - Bd.legs * HH * vS + bob;
+    const chin = torsoBot - Bd.torso * HH * vS, hc = chin - H.b + brY, crown = hc - H.b, hipY = torsoBot - 0.12 * HH;
     const thick = thickAngle(light), ow = 5 * u;
     const legCol = mix(o.pants, INK, 0.55), armCol = mix(o.jacket, INK, 0.5), footCol = o.boots;
     const legW = 5.8 * u, footW = 7.5 * u;
@@ -1525,6 +1545,21 @@ export const bodyFront = (p, o, opts)=>{
                     torsoBot - 0.32 * HH
                 ]
             ], o.sash, 0.13 * HH, 1.8 * u);
+            if (clothShade) {
+                // v4 cloth: soft fold shading — two wavy vertical fold shadows,
+                // a lit fold between them, and a soft hem shadow. Low alpha,
+                // clipped to the torso: richer cloth, same card style.
+                const foldCol = mul(o.jacket, 0.62), hiCol = mul(o.jacket, 1.22);
+                for (const s of [-0.45, 0.5]) {
+                    const fx0 = tcx + s * T.a + 2 * u * facing, pts = [];
+                    for (let i = 0; i <= 6; i++) { const t = i / 6; pts.push([fx0 + Math.sin(t * 5.2 + s * 7) * 2.2 * u, chin + 0.16 * HH + t * (torsoBot - chin - 0.3 * HH)]); }
+                    p.g.save(); p.g.globalAlpha = 0.16; p.stroke(pts, 4.5 * u, foldCol); p.g.restore();
+                }
+                const hp2 = [];
+                for (let i = 0; i <= 6; i++) { const t = i / 6; hp2.push([tcx + 0.02 * T.a + Math.sin(t * 4.4) * 2 * u, chin + 0.2 * HH + t * (torsoBot - chin - 0.36 * HH)]); }
+                p.g.save(); p.g.globalAlpha = 0.13; p.stroke(hp2, 3.5 * u, hiCol); p.g.restore();
+                p.g.save(); p.g.globalAlpha = 0.15; p.ell(tcx, torsoBot - 0.1 * HH, 1.15 * T.a, 0.09 * HH, foldCol, 0); p.g.restore();
+            }
             for(let i = 0; i < 4; i++){
                 const y = chin + 0.12 * HH + i * 0.2 * HH;
                 if (o.sash && Math.abs(y - (torsoBot - 0.32 * HH)) < 0.08 * HH) continue;
@@ -1572,11 +1607,43 @@ export const bodyFront = (p, o, opts)=>{
             p.ell(hx, hy - 19 * u, 11 * u, 10 * u, "#f7c6d9", 2.2 * u);
             p.dot(hx, hy, 5.5 * u);
         } else if (Array.isArray(prop)) {
-            // THIEF PROJECT PATCH: prop-aware held items (kit default drew an axe).
+            // v4: kind-driven held items — prop = [kind, k]. Kinds: 'axe'
+            // (the old kit default, now explicit), 'key', 'letter', 'count',
+            // 'coin', 'carve', 'sew'; 'point'/'push'/anything else = bare
+            // hand, no tool (a pointing or working hand).
             const kind = prop[0];
             const ang = rad(-70 + 105 * clamp(prop[1], 0, 1));
             const Rh = (pts)=>rotPts(pts, ang, hx, hy);
-            if (kind === "key") {
+            if (kind === "axe") {
+                p.band(Rh([
+                    [
+                        hx,
+                        hy + 12 * u
+                    ],
+                    [
+                        hx,
+                        hy - 44 * u
+                    ]
+                ]), "#8a5a34", 5 * u, 1.5 * u, "round");
+                p.poly(Rh([
+                    [
+                        hx - 12 * u,
+                        hy - 58 * u
+                    ],
+                    [
+                        hx + 20 * u,
+                        hy - 58 * u
+                    ],
+                    [
+                        hx + 20 * u,
+                        hy - 42 * u
+                    ],
+                    [
+                        hx - 12 * u,
+                        hy - 42 * u
+                    ]
+                ]), "#7d848c", 2.2 * u);
+            } else if (kind === "key") {
                 const ring = [];
                 for (let i = 0; i <= 12; i++) {
                     const a = i / 12 * Math.PI * 2, c = Rh([[hx + Math.cos(a) * 9 * u, hy - 26 * u + Math.sin(a) * 9 * u]])[0];
@@ -1598,23 +1665,7 @@ export const bodyFront = (p, o, opts)=>{
                 p.poly(Rh([[hx - 4 * u, hy - 8 * u], [hx + 4 * u, hy - 8 * u], [hx, hy - 30 * u]]), "#b9c1c9", 2 * u);
             } else if (kind === "sew") {
                 p.band([[hx - 2 * u, hy + 9 * u], [hx + 3 * u, hy - 17 * u]], "#c8ccd2", 1.8 * u, 0.8 * u, "round");
-            } else if (kind === "pot") {
-                // POT PROJECT: copper pot held in the hand (rim + body + handle arc).
-                p.ell(hx, hy - 6 * u, 11 * u, 9 * u, "#b87333", 2 * u);
-                p.ell(hx, hy - 13 * u, 6 * u, 3 * u, "#8a5a24", 1.5 * u);
-                p.arc(hx - 11 * u, hy - 6 * u, 5 * u, 5 * u, 90, 270, 1.6 * u);
-            } else if (kind === "babypot") {
-                // POT PROJECT: the tiny baby pot, cradled like a treasure.
-                p.ell(hx, hy - 4 * u, 7 * u, 6 * u, "#c98a4a", 1.8 * u);
-                p.ell(hx, hy - 9 * u, 4 * u, 2 * u, "#8a5a24", 1.2 * u);
-            } else if (kind === "vessel") {
-                // POT PROJECT: the golden vessel (gold body, lid, bright sheen).
-                p.ell(hx, hy - 8 * u, 10 * u, 10 * u, "#e8b93c", 2 * u);
-                p.ell(hx, hy - 8 * u, 5 * u, 5 * u, "#f6d06a", 1.2 * u);
-                p.ell(hx, hy - 17 * u, 4 * u, 2.5 * u, "#b8860b", 1.5 * u);
-                p.ell(hx, hy - 19 * u, 6 * u, 2 * u, "#f6d06a", 1.2 * u);
             }
-            // 'push' and anything else: bare hand on the work, no tool.
             p.dot(hx, hy, 5.5 * u);
         }
     }
@@ -1661,7 +1712,8 @@ export const bodyFront = (p, o, opts)=>{
     p.inkRing(hp, ow, thick);
     hatOn(p, o, hp, H, 300, hc, light, seed, facing, false);
     const brim = !!o.hat && o.hat !== "hair" && o.hat !== "bonnet" && o.hat !== "cap";
-    faceFront(p, 300, hc, W, expr, facing, look, lid, brim, skin, o.moustache, o.build === "stout");
+    if (exprP) faceFrontP(p, 300, hc, W, exprP, { facing, look, lookY, lid, brim, skin, moustache: o.moustache, stout: o.build === "stout" });
+    else faceFront(p, 300, hc, W, expr, facing, look, lid, brim, skin, o.moustache, o.build === "stout");
     p.rot = null;
 };
 const ik = (hip, ank, l1, l2)=>{
@@ -2508,15 +2560,6 @@ export const OUTFITS = {
   // --- 1000 tanks (comparison line): the two commanders, flag patch on the chest ---
   cmdUS: { tunic: "#4c5a3a", skin: "#f5c9a0", cap: "#43512f", moustache: "#3a2a1c", patchUS: true },
   cmdCN: { tunic: "#3e5c33", skin: "#f0c297", cap: "#33512b", patchCN: true },
-  // --- 1000 knights vs 1000 samurai (comparison line): the two commanders ---
-  cmdKnight: { tunic: "#e8e2d2", cape: "#8f2228", skin: "#f5c9a0", helmKnight: true, armor: true, surcoat: true, shield: true },
-  cmdSamurai: { tunic: "#2e4370", skin: "#f0c297", kabuto: true, armor: true, lamellar: "#2e4370", mon: true },
-  // --- gold train (mystery-history line): plain period + modern cast, NO insignia ---
-  engineer45: { tunic: "#3d4a5c", skin: "#f5c9a0", cap: "#2e3745", moustache: "#2a2018", shirt: "#e8e0cc" },
-  worker45: { tunic: "#5c5648", skin: "#ecd0b6", cap: "#4a463c", hair: "#3b2a20" },
-  oldman45: { tunic: "#6e625a", skin: "#f3d6bb", hair: "#e8e4da", beard: "#f4f1ea", brows: "#f4f1ea" },
-  hunter: { tunic: "#7a5c36", skin: "#f5c9a0", cap: "#8a6a3c", beard: "#4a3423", beardShort: true },
-  scientist: { tunic: "#e9edf2", skin: "#f0c297", hair: "#2b211c", shirt: "#f4f6f8" },
 };
 
 /** galea: iron bowl, brass brow band, cheek guards, transverse red crest */
@@ -2565,7 +2608,6 @@ const cobweb = (p, cx, cy, r, u) => {
 export const romanFront = (p, key, opts = {}) => {
   const O = typeof key === "string" ? OUTFITS[key] : key;
   const { expr = "neutral", blink = 0, look = 0, facing = 0, seed = 3, L = "hang", R = O.spear ? "spear" : "hang", tilt = 0, headTilt = 0,
-    exprP = null, lookY = 0,
     bob = 0, nohelmet = false, light = rad(-120), web = false, step = 0 } = opts;
   const lid = lidOf(blink), skin = O.skin ?? SKIN;
   const H = headBlob(seed, 118, facing), W = 2 * H.a, HH = 2 * H.b, u = W / 100;
@@ -2655,22 +2697,15 @@ export const romanFront = (p, key, opts = {}) => {
   }
   p.gradFill(tp, O.tunic, mul(O.tunic, SH_CLOTH), light);
   p.clip(tp, () => {
-    if (O.surcoat) { // knight commander: white surcoat with a bold red cross over the steel
-      p.poly([[tcx - 1.5 * T.a, chin - 0.25 * HH], [tcx + 1.5 * T.a, chin - 0.25 * HH], [tcx + 1.5 * T.a, torsoBot + 0.15 * HH], [tcx - 1.5 * T.a, torsoBot + 0.15 * HH]], "#efe8d8", 0);
-      p.poly([[tcx - 0.11 * T.a, chin - 0.2 * HH], [tcx + 0.11 * T.a, chin - 0.2 * HH], [tcx + 0.11 * T.a, torsoBot - 0.02 * HH], [tcx - 0.11 * T.a, torsoBot - 0.02 * HH]], "#c0272d", 0);
-      p.poly([[tcx - 0.62 * T.a, chin + 0.28 * HH], [tcx + 0.62 * T.a, chin + 0.28 * HH], [tcx + 0.62 * T.a, chin + 0.5 * HH], [tcx - 0.62 * T.a, chin + 0.5 * HH]], "#c0272d", 0);
-      p.band([[tcx - 1.4 * T.a, torsoBot - 0.2 * HH], [tcx + 1.4 * T.a, torsoBot - 0.2 * HH]], LEATHER, 0.08 * HH, 1.5 * u);
-      for (let i = -2; i <= 2; i++) p.dot(tcx + i * 0.3 * T.a, torsoBot - 0.2 * HH, 2.4 * u, BRASS);
-    } else if (O.armor) {
+    if (O.armor) {
       const top = chin - 0.1 * HH, bot = torsoBot - 0.25 * HH, n = 5;
       for (let i = 0; i < n; i++) {
         const y0 = top + (bot - top) * i / n, y1 = top + (bot - top) * (i + 1) / n;
-        const c = O.lamellar ? (i % 2 ? mix(O.lamellar, "#ffffff", 0.14) : O.lamellar) : (old ? (i % 2 ? "#8d8679" : "#9a9384") : (i % 2 ? "#a7b0ba" : "#bcc4cc"));
+        const c = old ? (i % 2 ? "#8d8679" : "#9a9384") : (i % 2 ? "#a7b0ba" : "#bcc4cc");
         p.poly([[tcx - 1.5 * T.a, y0], [tcx + 1.5 * T.a, y0 + 3 * u], [tcx + 1.5 * T.a, y1 + 3 * u], [tcx - 1.5 * T.a, y1]], c, 1.8 * u);
       }
       p.band([[tcx - 1.4 * T.a, torsoBot - 0.2 * HH], [tcx + 1.4 * T.a, torsoBot - 0.2 * HH]], LEATHER, 0.08 * HH, 1.5 * u);
       for (let i = -2; i <= 2; i++) p.dot(tcx + i * 0.3 * T.a, torsoBot - 0.2 * HH, 2.4 * u, BRASS);
-      if (O.lamellar) for (let r2 = 0; r2 < n; r2++) for (let i = -3; i <= 3; i++) p.dot(tcx + i * 0.26 * T.a, top + (bot - top) * (r2 + 0.5) / n, 1.6 * u, "#d8b25a");
       if (old) for (let i = 0; i < 5; i++) p.ell(tcx + Math.sin(i * 1.7) * 0.7 * T.a, top + (bot - top) * ((i * 0.31) % 1), 6 * u, 3 * u, "#8a4b22", 0);
     } else {
       p.band([[tcx - 1.4 * T.a, torsoBot - 0.24 * HH], [tcx + 1.4 * T.a, torsoBot - 0.24 * HH]], O.apron ? "#5a3b2a" : "#e2c27a", 0.05 * HH, 1.2 * u);
@@ -2710,11 +2745,6 @@ export const romanFront = (p, key, opts = {}) => {
     }
   });
   p.inkRing(tp, ow, thick);
-  if (O.mon) { // samurai commander's white mon crest on the chest
-    p.ell(tcx, chin + 0.52 * HH, 15 * u, 15 * u, "#f2ede0", 2.2 * u);
-    p.ell(tcx, chin + 0.52 * HH, 8.5 * u, 8.5 * u, null, 2.2 * u);
-    p.dot(tcx, chin + 0.52 * HH, 3 * u, "#c9a227");
-  }
   if (O.armor) for (const s of [-1, 1]) { // shoulder plates
     const sp = ellPts(tcx + s * 0.72 * T.a, chin + 0.1 * HH, 0.42 * T.a, 0.13 * HH, 180, 360, s * 8, 20);
     p.poly(sp, old ? "#9a9384" : "#c5ccd3", 1.8 * u);
@@ -2752,31 +2782,6 @@ export const romanFront = (p, key, opts = {}) => {
     p.stroke([[cx - H.a * 0.5, hc + H.b * 0.1], [cx - H.a * 0.42, hc + H.b * 0.52]], 2.4 * u, "#3c3a2c");
     p.stroke([[cx + H.a * 0.5, hc + H.b * 0.1], [cx + H.a * 0.42, hc + H.b * 0.52]], 2.4 * u, "#3c3a2c");
   }
-  if (O.helmKnight) { // kettle helm: steel dome + wide brim + red plume — face stays open for expressions
-    const pl = ellPts(cx, hc - H.b * 1.06, 0.42 * H.a, 0.3 * H.b, 180, 360, 0, 30);
-    p.shadedFill(pl, "#c0272d", mul("#c0272d", [0.7, 0.62, 0.7]), light, 0.42 * H.a, 0.3);
-    p.inkRing(pl, ow * 0.6, thick);
-    const dome = ellPts(cx, hc - H.b * 0.3, H.a * 1.03, H.b * 0.72, 180, 360, 0, 44);
-    p.shadedFill(dome, STEEL, mul(STEEL, [0.62, 0.64, 0.72]), light, H.a, 0.4);
-    p.clip(dome, () => p.stroke(ellPts(cx - 20 * u, hc - H.b * 0.62, 0.25 * H.a, 0.18 * H.b, 200, 300, 0, 16), 5 * u, "#ffffff66"));
-    p.inkRing(dome, ow * 0.9, thick);
-    p.ell(cx, hc - H.b * 0.3, H.a * 1.24, H.b * 0.17, STEEL, ow * 0.7);
-    p.band([[cx - H.a * 1.24, hc - H.b * 0.3], [cx + H.a * 1.24, hc - H.b * 0.3]], "#8d9299", 3.5 * u, 1.2 * u, "round");
-  }
-  if (O.kabuto) { // kabuto: dark ribbed bowl, flared shikoro neck guard, gold crescent maedate
-    for (let k = 2; k >= 0; k--) for (const sd of [-1, 1]) { // side flares only — the face stays clear
-      const y0 = hc + H.b * (0.02 + k * 0.16), xi = cx + sd * H.a * 0.68, xo = cx + sd * H.a * (1.1 + k * 0.09);
-      p.poly([[xi, y0 - H.b * 0.06], [xo, y0 + H.b * 0.02], [xo + sd * H.a * 0.05, y0 + H.b * 0.17], [xi, y0 + H.b * 0.13]], k % 2 ? "#24334f" : "#2e4370", 1.8 * u);
-    }
-    const dome = ellPts(cx, hc - H.b * 0.32, H.a * 1.05, H.b * 0.75, 180, 360, 0, 44);
-    p.shadedFill(dome, "#2b2f38", mul("#2b2f38", [0.6, 0.62, 0.7]), light, H.a, 0.4);
-    p.clip(dome, () => { for (let i = -2; i <= 2; i++) p.stroke([[cx + i * 0.32 * H.a, hc - H.b * 1.02], [cx + i * 0.32 * H.a, hc - H.b * 0.34]], 2.2 * u, "#4a505c"); });
-    p.inkRing(dome, ow * 0.9, thick);
-    p.band([[cx - H.a * 1.04, hc - H.b * 0.32], [cx + H.a * 1.04, hc - H.b * 0.32]], "#c9a227", 5 * u, 1.6 * u, "round");
-    p.stroke([[cx, hc - H.b * 1.04], [cx, hc - H.b * 1.34]], 3.2 * u, "#c9a227");
-    p.arc(cx, hc - H.b * 1.56, 0.3 * H.a, 0.28 * H.b, 150, 390, 6 * u, "#e8b64c");
-    p.dot(cx, hc - H.b * 1.34, 3.4 * u, "#e8b64c");
-  }
   if (helmet && O.helmet !== "ww2") {
     const bandY = hc - H.b * 0.42, bp = ellPts(cx, bandY, H.a * 1.05, H.b * 0.66, 180, 360, 0, 48);
     p.shadedFill(bp, old ? "#8f8a7e" : STEEL, mul(old ? "#8f8a7e" : STEEL, [0.62, 0.64, 0.72]), light, H.a, 0.4);
@@ -2798,8 +2803,7 @@ export const romanFront = (p, key, opts = {}) => {
     p.clip(bd, () => { for (let i = -3; i <= 3; i++) p.stroke([[cx + i * 9 * u, hc + 0.45 * H.b], [cx + i * 7 * u, hc + 1.35 * H.b]], 1.2 * u, mix(O.beard, "#ffffff", 0.3)); });
     p.inkRing(bd, ow * 0.8, thick);
   }
-  if (exprP) faceFrontP(p, cx, hc, W, exprP, { facing, look, lookY, lid, brim: helmet, skin, moustache: O.beard ? O.beard : O.moustache, stout: !!O.stout });
-    else faceFront(p, cx, hc, W, expr, facing, look, lid, helmet, skin, O.beard ? O.beard : O.moustache, !!O.stout);
+  faceFront(p, cx, hc, W, expr, facing, look, lid, helmet, skin, O.beard ? O.beard : O.moustache, !!O.stout);
   if (O.crown) { // the Sea King's crown: five gold points + jewelled band, seated on the head top
     const gold = "#e8b64c", goldDk = "#a87c26";
     const arc = (ry, a0, a1, n = 26) => { const pts = []; for (let i = 0; i <= n; i++) { const a = rad(a0 + (a1 - a0) * i / n); pts.push([cx + Math.cos(a) * H.a * 1.04, hc + Math.sin(a) * ry]); } return pts; };
@@ -3014,6 +3018,7 @@ const FACEP_DEF = {
     whiteL: 0, whiteR: 0, spiral: 0, heart: 0, pupil: 1,
     curve: 0, mOpen: 0, mW: 0.9, teeth: 0, tongue: 0, lickT: 0, wave: 0, asym: 0,
     sweat: 0, tear: 0, blush: 0, vein: 0,
+    cheek: 0, // v4: soft cheek/jaw contour shading (0 = off, style default)
 };
 export const FACEP = {
     // ---- the v1 set, re-expressed as parameters (same reads, now blendable) ----
@@ -3130,6 +3135,10 @@ export const faceFrontP = (p, cx, cy, W, prm, o = {}) => {
         if (F.tear > 0.03) alphaDo(p, F.tear, () => p.ell(x + side * 2 * u, ey + (9 + 6 * F.tear) * u, 2.6 * u, (4 + 4 * F.tear) * u, "rgba(140,190,255,0.9)", 0));
     }
     if (F.blush > 0.03) for (const s of [-1, 1]) alphaDo(p, F.blush * 0.55, () => p.ell(fx + s * 27 * u, cy + 12 * u, 7.5 * u, 4.2 * u, "#f48282", 0));
+    if (F.cheek > 0.03) { // v4 cheek shading: warm contour low on each cheek + a soft jaw shadow — richer skin, same round-head style
+        for (const s of [-1, 1]) alphaDo(p, F.cheek * 0.16, () => p.ell(fx + s * 25 * u, cy + 13 * u, 10 * u, 6.5 * u, "#8a4f26", 0));
+        alphaDo(p, F.cheek * 0.10, () => p.ell(cx + 8 * u * facing, cy + 27 * u, 13 * u, 4.5 * u, "#8a4f26", 0));
+    }
     if (F.vein > 0.03) alphaDo(p, F.vein, () => { // anger vein at the temple
         const vx = cx + 38 * u * (facing || 1), vy = cy - 27 * u;
         p.stroke([[vx - 5 * u, vy - 5 * u], [vx + 5 * u, vy + 5 * u]], 3 * u, "#c0353a");
@@ -3182,99 +3191,3 @@ export const lookAtP = (fx, fy, tx, ty, maxD = 260) => ({
     x: Math.max(-1, Math.min(1, (tx - fx) / maxD)),
     y: Math.max(-1, Math.min(1, (ty - fy) / maxD)),
 });
-
-
-/** Donkey card — POT PROJECT, adapted from the kit dogCard: grey-brown
- *  donkey, long upright ears, dark mane + tail tuft, faces +x. Canvas
- *  600x1000, feet at y=975. opts: step (0..1 walk phase), earWag (rad). */
-export const donkeyCard = (p, o = {}) => {
-  const { step = 0, earWag = 0 } = o;
-  const light = rad(-120), thick = thickAngle(light), ow = 5.5;
-  const fur = "#9a8a76", furSh = mul(fur, SH_CLOTH), dark = mul(fur, [0.78, 0.76, 0.8]);
-  const belly = "#c9bba6", maneC = "#5a4a38";
-  const ground = 975;
-  const sw = Math.sin(step * Math.PI * 2) * 14, sw2 = Math.sin(step * Math.PI * 2 + Math.PI) * 14;
-  // far legs (darker)
-  p.stroke([[205, 800], [200 + sw2, ground - 4]], 17, dark); p.stroke([[420, 800], [425 + sw, ground - 4]], 17, dark);
-  // tail with dark tuft
-  const wag = Math.sin(step * Math.PI * 4) * 8;
-  p.stroke(curve([128, 706], [90, 760], [84 + wag, 880]), 12, dark); p.dot(84 + wag, 884, 12, maneC);
-  // body
-  const bp = ellPts(300, 742, 188, 94, 0, 360, 0, 48);
-  p.shadedFill(bp, fur, furSh, light, 170, 0.4); p.inkRing(bp, ow, thick);
-  p.clip(bp, () => { p.ell(300, 800, 150, 46, belly, 0); }); p.inkRing(bp, ow, thick);
-  // dark dorsal stripe + mane
-  p.stroke([[180, 660], [300, 648], [420, 660]], 10, maneC);
-  // near legs
-  p.stroke([[178, 806], [172 + sw, ground - 4]], 19, fur); p.stroke([[398, 806], [404 + sw2, ground - 4]], 19, fur);
-  for (const [fx, fy] of [[172 + sw, ground - 2], [404 + sw2, ground - 2], [200 + sw2, ground - 2], [425 + sw, ground - 2]]) p.ell(fx + 8, fy, 15, 7, fur, 2.4);
-  // head + LONG ears
-  const hx = 472, hy = 640;
-  p.ell(hx - 10, hy - 96 + earWag, 16 * 1, 58, fur, ow * 0.7, 0, 360, -0.18);
-  p.ell(hx + 26, hy - 100 - earWag, 16, 58, fur, ow * 0.7, 0, 360, 0.12);
-  p.ell(hx + 44, hy + 24, 54, 30, fur, ow * 0.8); // muzzle
-  const hp = ellPts(hx, hy, 64, 57, 0, 360, 0, 40);
-  p.shadedFill(hp, fur, furSh, light, 60, 0.35); p.inkRing(hp, ow * 0.8, thick);
-  p.dot(hx + 92, hy + 12, 12, INK); // nose
-  p.dot(hx + 16, hy - 14, 7.5, INK); p.dot(hx + 19, hy - 17, 2.6, "#ffffff"); // eye
-  p.stroke([[hx - 34, hy + 44], [hx + 6, hy + 62]], 10, maneC); // dark throat strap
-};
-
-
-// ---------------- Frida (Mexican Navy rescue Labrador, Batch 6) — adapted from
-// the kit dogCard: yellow-lab palette, four-legged, faces +x. Canvas 600x1000,
-// feet at y=975. opts: step (walk phase), sit, pant, sniff (head lowered,
-// searching), goggles (0/1 — lens + strap over the eye), boots (0/1 — red paw
-// boots), vest (0/1 — orange rescue vest panel + silver stripe).
-export const fridaCard = (p, o = {}) => {
-  const { sit = false, step = 0, pant = 0 } = o;
-  const light = rad(-120), thick = thickAngle(light), ow = 5.5;
-  const fur = "#dfb45e", patch = "#b98a3e", furSh = mul(fur, SH_CLOTH), dark = mul(fur, [0.78, 0.76, 0.8]);
-  const cream = "#f4e3ae", bootC = "#a33327", vestC = "#e86a1e";
-  const ground = 975;
-  const head = (hx, hy, s = 1) => {
-    p.ell(hx + 44 * s, hy + 24 * s, 54 * s, 30 * s, fur, ow * 0.8);
-    const hp = ellPts(hx, hy, 64 * s, 57 * s, 0, 360, 0, 40);
-    p.shadedFill(hp, fur, furSh, light, 60 * s, 0.35); p.inkRing(hp, ow * 0.8, thick);
-    p.ell(hx - 26 * s, hy + 26 * s, 27 * s, 58 * s, patch, ow * 0.7, 0, 360, 0.28); // ear
-    p.dot(hx + 92 * s, hy + 12 * s, 12 * s, INK); // nose
-    p.dot(hx + 16 * s, hy - 14 * s, 7.5 * s, INK); p.dot(hx + 19 * s, hy - 17 * s, 2.6 * s, "#ffffff"); // eye
-    p.stroke([[hx + 2 * s, hy - 32 * s], [hx + 28 * s, hy - 36 * s]], 4 * s, patch); // brow line
-    if (o.goggles) { // rescue goggles: strap + tinted lens over the eye
-      p.stroke([[hx - 40 * s, hy - 26 * s], [hx + 30 * s, hy - 10 * s]], 13 * s, "#37424e");
-      p.ell(hx + 17 * s, hy - 13 * s, 18 * s, 14.5 * s, "#9fd4e8", 3.5 * s);
-      p.dot(hx + 11 * s, hy - 19 * s, 3.4 * s, "#ffffff");
-    }
-    if (pant) p.ell(hx + 56 * s, hy + 52 * s, 10 * s, 17 * s, "#e86e78", 2);
-    p.stroke([[hx - 34 * s, hy + 44 * s], [hx + 6 * s, hy + 62 * s]], 12 * s, o.vest ? "#274b73" : "#b03a30"); // collar / vest neck band
-  };
-  const paw = (x, y, r = 15) => p.ell(x, y, r, r * 0.47, o.boots ? bootC : fur, 2.4);
-  if (!sit) {
-    const sw = Math.sin(step * Math.PI * 2) * 20, sw2 = Math.sin(step * Math.PI * 2 + Math.PI) * 20;
-    p.stroke([[205, 800], [200 + sw2, ground - 4]], 17, dark); p.stroke([[420, 800], [425 + sw, ground - 4]], 17, dark);
-    const wag = Math.sin(step * Math.PI * 4) * 10;
-    p.stroke(curve([128, 706], [86, 636], [74 + wag, 566]), 17, fur); p.dot(74 + wag, 562, 10, patch);
-    const bp = ellPts(300, 742, 188, 94, 0, 360, 0, 48);
-    p.shadedFill(bp, fur, furSh, light, 170, 0.4); p.inkRing(bp, ow, thick);
-    p.clip(bp, () => { p.ell(430, 770, 46, 34, cream, 0); });
-    p.inkRing(bp, ow, thick);
-    if (o.vest) { // orange rescue vest across the torso + silver reflective stripe
-      p.clip(bp, () => { p.poly([[238, 640], [372, 640], [372, 850], [238, 850]], vestC, 0); p.band([[244, 742], [366, 742]], "#dfe5ea", 13, 0, "round"); });
-      p.inkRing(bp, ow, thick);
-    }
-    p.stroke([[178, 806], [172 + sw, ground - 4]], 19, fur); p.stroke([[398, 806], [404 + sw2, ground - 4]], 19, fur);
-    paw(180 + sw, ground - 2); paw(412 + sw2, ground - 2); paw(208 + sw2, ground - 2, 14); paw(433 + sw, ground - 2, 14);
-    head(472, 640 + (o.sniff ? 30 : 0));
-  } else {
-    p.stroke(curve([150, 900], [96, 940], [120, 968]), 16, fur);
-    const hp2 = ellPts(215, 866, 88, 74, 0, 360, 0, 44);
-    p.shadedFill(hp2, fur, furSh, light, 100, 0.4); p.inkRing(hp2, ow, thick);
-    const tp = ellPts(338, 706, 82, 128, 0, 360, -0.22, 44);
-    p.shadedFill(tp, fur, furSh, light, 80, 0.4); p.inkRing(tp, ow, thick);
-    if (o.vest) { p.clip(tp, () => { p.poly([[262, 640], [414, 640], [414, 800], [262, 800]], vestC, 0); p.band([[270, 716], [406, 716]], "#dfe5ea", 12, 0, "round"); }); p.inkRing(tp, ow, thick); }
-    p.stroke([[366, 806], [372, ground - 4]], 19, fur); p.stroke([[318, 812], [316, ground - 4]], 17, dark);
-    paw(382, ground - 2, 16); paw(326, ground - 2);
-    p.ell(292, 960, 46, 13, o.boots ? bootC : fur, 2.4); // hind foot / boot
-    head(408, 566 + (o.sniff ? 22 : 0));
-  }
-};

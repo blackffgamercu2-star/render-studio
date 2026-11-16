@@ -2,7 +2,9 @@ import * as THREE from './lib/three.module.js';
 import * as T from './toon.js';
 import * as P from './paint.js';
 import * as FX from './fx.js';
-import { TOTAL, shotAt, camAt, dofAt, lightFor, actorsAt, worldAt, fxAt, fxProfileAt, POTBIG, POTBABY, VESSELP, WED, BENCH, DONKEY, SIGNP } from './story.js';
+import * as PR from './props.js';
+import * as M4 from './materials.js';
+import { TOTAL, shotAt, camAt, dofAt, lightFor, actorsAt, worldAt, fxAt, fxProfileAt, BOARD_POS, PLATFORM, STALL, TABLE } from './story.js';
 
 const W = 1080, H = 1920;
 const canvas = document.getElementById('c');
@@ -13,6 +15,7 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.NoToneMapping;
 
 const scene = new THREE.Scene();
+const envMap = FX.detailEnv(renderer);   // LIBRARY v3: PMREM env so prop sheen moves with the camera
 const camera = new THREE.PerspectiveCamera(40, W / H, 0.08, 1500);
 const rx = (a) => a * Math.PI / 180;
 
@@ -20,10 +23,6 @@ const rx = (a) => a * Math.PI / 180;
 const grad = (() => { const d = new Uint8Array([90, 90, 90, 255, 255, 255, 255, 255]); const t = new THREE.DataTexture(d, 2, 1); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t; })();
 const toon = (opts) => new THREE.MeshToonMaterial({ gradientMap: grad, ...opts });
 const texM = (c, rx_ = 1, ry_ = 1, color = '#ffffff') => toon({ map: P.tex(c, rx_, ry_), color });
-const MW = {
-  dark: toon({ color: '#3c3a38' }),
-  gold: toon({ color: '#c9a227' }),
-};
 
 // ---------- ink / normal-depth contract ----------
 const ndMat = new THREE.ShaderMaterial({
@@ -71,196 +70,181 @@ scene.add(sun); scene.add(sun.target);
 scene.fog = new THREE.Fog('#ffffff', 40, 600);
 
 // ---------- text-board helper (canvas texture plane; boards are in-world props) ----------
-const textBoard = (lines, w, h, bg, fg, font = 900) => {
+const textBoard = (lines, w, h, bg, fg, font = 900, fit = null) => {
   const c = document.createElement('canvas'); c.width = 1024; c.height = Math.round(1024 * h / w);
   const g = c.getContext('2d'); g.fillStyle = bg; g.fillRect(0, 0, c.width, c.height);
   g.strokeStyle = fg; g.lineWidth = 14; g.strokeRect(20, 20, c.width - 40, c.height - 40);
   g.fillStyle = fg; g.textAlign = 'center'; g.textBaseline = 'middle';
-  const fs = Math.min(170, (c.width - 130) / Math.max(...lines.map((l) => l.length)) * 1.72);
+  let fs = Math.min(170, (c.width - 130) / Math.max(...lines.map((l) => l.length)) * 1.72);
+  if (fit && fit.fsMul) fs *= fit.fsMul;
   g.font = `${font} ${fs}px 'Noto Sans Devanagari', Arial`;
-  lines.forEach((l, i) => g.fillText(l, c.width / 2, c.height * (lines.length === 1 ? 0.52 : (i + 0.5) / lines.length)));
+  lines.forEach((l, i) => {
+    let fy;
+    if (fit && fit.pitch && lines.length > 1) fy = 0.5 + (i - (lines.length - 1) / 2) * fit.pitch;
+    else fy = lines.length === 1 ? 0.52 : (i + 0.5) / lines.length;
+    if (fit && fit.dy) fy += fit.dy;
+    g.fillText(l, c.width / 2, c.height * fy);
+  });
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
   const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: t, transparent: true, fog: true }));
   m.userData.ndSkip = true; return m;
 };
-// soft radial glow sprite (NO hard cross — lamp light, not a sparkle)
+const addBoardOccluder = (board, w, h, key) => {
+  const occ = new THREE.Mesh(new THREE.PlaneGeometry(w, h), ndMat);
+  occ.position.copy(board.position); occ.rotation.copy(board.rotation);
+  occ.userData.isOccluder = true; occ.userData.boardKey = key; board.parent.add(occ); return occ;
+};
 const softGlow = (scale, color, opacity) => {
   const c = document.createElement('canvas'); c.width = c.height = 64;
   const g = c.getContext('2d');
-  const grad = g.createRadialGradient(32, 32, 1, 32, 32, 31);
-  grad.addColorStop(0, 'rgba(255,255,255,0.9)'); grad.addColorStop(0.4, 'rgba(255,255,255,0.35)'); grad.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
+  const grd = g.createRadialGradient(32, 32, 1, 32, 32, 31);
+  grd.addColorStop(0, 'rgba(255,255,255,0.9)'); grd.addColorStop(0.4, 'rgba(255,255,255,0.35)'); grd.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grd; g.fillRect(0, 0, 64, 64);
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), color, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending }));
   s.scale.setScalar(scale); s.userData.ndSkip = true; return s;
 };
 
-// ---------- the set ----------
+// ---------- materials ----------
+const goldCanvas = (() => {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 512;
+  const g = c.getContext('2d');
+  const gr = g.createLinearGradient(0, 0, 0, 512);
+  gr.addColorStop(0, '#8a5a14'); gr.addColorStop(0.35, '#d9a441'); gr.addColorStop(0.52, '#ffe9a0'); gr.addColorStop(0.62, '#f6c453'); gr.addColorStop(1, '#9c6b1e');
+  g.fillStyle = gr; g.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 260; i++) {
+    g.strokeStyle = `rgba(255,240,200,${0.03 + Math.random() * 0.05})`; g.lineWidth = 1;
+    const y = Math.random() * 512; g.beginPath(); g.moveTo(0, y); g.lineTo(512, y + (Math.random() - 0.5) * 6); g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4;
+  return t;
+})();
+const foodCanvas = (() => {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = '#e9dcbc'; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 900; i++) { g.fillStyle = `rgba(255,250,235,${0.25 + Math.random() * 0.4})`; g.fillRect(Math.random() * 256, Math.random() * 256, 3, 2); }
+  for (let i = 0; i < 130; i++) { g.fillStyle = i % 3 ? '#c96a28' : '#5d7a2e'; g.beginPath(); g.arc(Math.random() * 256, Math.random() * 256, 3.4, 0, 7); g.fill(); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+})();
 const MAT = {
-  grass: texM(P.grass(61), 16, 16, '#7fae4c'),
-  dirt: texM(P.dirt(35), 8, 8, '#b49a72'),
-  stone: texM(P.stone(64, 40, 5, 58), 3, 2, '#c9c2b2'), stoneDk: texM(P.stone(65, 40, 6, 46), 3, 2, '#a89f8d'),
-  wood: texM(P.beam(66, [26, 45, 32]), 1, 2), woodDk: texM(P.beam(67, [24, 40, 22]), 1, 2),
+  plaza: texM(M4.groundDetail(P.stone(64, 40, 5, 58), 191, { dots: 1200 }), 10, 10, '#cfc4ae'),
+  stone: texM(M4.stoneV4(8), 3, 2, '#c9bda6'), stoneDk: texM(M4.stoneV4(9), 3, 2, '#a3937a'),
+  wood: texM(M4.woodV4(4), 1, 2), woodDk: texM(M4.woodV4(6), 1, 2),
   plaster: texM(P.plaster(71, 36), 2, 2),
-  thatch: toon({ color: '#b08d4f' }), leaf: toon({ color: '#4a6a34' }), leaf2: toon({ color: '#5d8142' }),
-  gold: toon({ color: '#d9a441' }), goldBright: toon({ color: '#f0bc4a' }),
-  copper: toon({ color: '#b87333' }), copperDk: toon({ color: '#8a5a24' }), copperBright: toon({ color: '#d99a55' }),
-  sack: toon({ color: '#c9a24d' }), sackDk: toon({ color: '#a37f36' }),
-  steel: toon({ color: '#565d66' }), steelDk: toon({ color: '#33373d' }),
-  white: toon({ color: '#f7f3e6' }),
-  cushion: toon({ color: '#8c2432' }),
-  canopy: toon({ color: '#b03a5a' }), canopyGold: toon({ color: '#e8c45a' }),
-  marigold: toon({ color: '#e8862a' }),
-  dark: toon({ color: '#33302c' }),
-  shadowSoft: new THREE.MeshBasicMaterial({ color: 0x1a2410, transparent: true, opacity: 0.32, fog: true }),
+  gold: toon({ map: goldCanvas }), goldTrim: toon({ color: '#f0bc4a' }),
+  blackPot: new THREE.MeshStandardMaterial({ color: 0x17181d, roughness: 0.46, metalness: 0.3, envMap, envMapIntensity: 0.9 }),
+  mirror: new THREE.MeshStandardMaterial({ color: 0xf4f6f8, roughness: 0.1, metalness: 1.0, envMap, envMapIntensity: 1.6, side: THREE.DoubleSide }),
+  food: toon({ map: foodCanvas }),
+  crimson: toon({ color: '#7a1f2e' }), teal: toon({ color: '#1f4a4a' }),
+  cloth: toon({ color: '#8a6f42' }), leaf: toon({ color: '#4a7a34' }),
+  white: toon({ color: '#f7f3e6' }), dark: toon({ color: '#33302c' }),
 };
-const world = new THREE.Group(); scene.add(world);
-{
-  const g = world;
-  flat(add(new THREE.PlaneGeometry(340, 240), MAT.grass, 0, -0.03, 0, g, { cast: false }));
-  flat(add(new THREE.PlaneGeometry(90, 7), MAT.dirt, 0, -0.012, 3.4, g, { cast: false }));       // the village road
-  flat(add(new THREE.CircleGeometry(8.5, 22), MAT.dirt, 0, -0.008, 0.5, g, { cast: false }));      // neighbour's courtyard
-  flat(add(new THREE.CircleGeometry(5.5, 18), MAT.dirt, -16, -0.008, -2, g, { cast: false }));     // wedding ground
-  flat(add(new THREE.CircleGeometry(6, 18), MAT.dirt, 32, -0.008, -2, g, { cast: false }));        // court ground
-  flat(add(new THREE.CircleGeometry(5, 18), MAT.dirt, -32, -0.008, -2, g, { cast: false }));       // roadside ground
-  // distant huts + trees (depth for the east/west flights)
-  for (const [hx, hz, ry] of [[-7, -13, 0.2], [8, -14, -0.3], [20, -12, 0.4], [26, -13, -0.2], [-24, -13, 0.1], [-40, -12, -0.4]]) {
-    const h = new THREE.Group(); h.position.set(hx, 0, hz); h.rotation.y = ry; g.add(h);
-    add(tbox(2.6, 1.7, 2.2, 2), MAT.stone, 0, 0.85, 0, h, { cast: false });
-    add(new THREE.ConeGeometry(2.2, 1.2, 4), MAT.thatch, 0, 2.3, 0, h, { cast: false }).rotation.y = Math.PI / 4;
-  }
-  for (const [tx, tz, s] of [[-11, -9, 1], [12.5, -10, 1.2], [23, -9, 0.9], [-24, -10, 1.1]]) {
-    add(new THREE.CylinderGeometry(0.3 * s, 0.44 * s, 2.8 * s, 8), MAT.woodDk, tx, 1.4 * s, tz, g, { cast: false });
-    const can = add(new THREE.SphereGeometry(2.1 * s, 10, 8), MAT.leaf, tx, 3.6 * s, tz, g, { cast: false });
-    can.scale.y = 0.72; can.userData.ndSkip = true;
-  }
-}
-// ---- pot builder: squashed sphere body + neck + rim + side handles ----
-const makePot = (r, mat, matDk) => {
-  const g = new THREE.Group();
-  const body = add(new THREE.SphereGeometry(r, 18, 12), mat, 0, r * 0.72, 0, g); body.scale.y = 0.82;
-  add(new THREE.CylinderGeometry(r * 0.52, r * 0.68, r * 0.3, 14), mat, 0, r * 1.42, 0, g);
-  const rim = add(new THREE.TorusGeometry(r * 0.54, r * 0.07, 8, 18), matDk, 0, r * 1.56, 0, g); rim.rotation.x = Math.PI / 2;
-  for (const s of [-1, 1]) {
-    const h = add(new THREE.TorusGeometry(r * 0.26, r * 0.05, 8, 14, Math.PI), matDk, s * r * 0.92, r * 0.9, 0, g);
-    h.rotation.z = s > 0 ? -Math.PI / 2 : Math.PI / 2;
-  }
-  return g;
-};
-// ================= NEIGHBOUR'S COURTYARD (house facade z=-3.2) =================
-let bigPot, babyPot, vesselMesh, potGlint, vesselGlint;
-{
-  const g = world;
-  add(tbox(7.5, 3.1, 0.35, 2), MAT.plaster, 0, 1.55, -3.7, g, { cast: false });
-  const roof = add(tbox(8.2, 0.14, 5.2, 2), MAT.thatch, 0, 3.35, -1.7, g, { cast: false }); roof.rotation.x = 0.1;
-  add(tbox(1.2, 2.0, 0.1, 2), MAT.dark, -2.2, 1.0, -3.5, g, { cast: false });   // door
-  add(tbox(0.9, 0.9, 0.1, 2), MAT.dark, 2.2, 1.8, -3.5, g, { cast: false });    // window
-  add(tbox(0.9, 0.08, 0.5, 2), MAT.woodDk, 2.2, 1.32, -3.4, g, { cast: false }); // window sill
-  // pot shelf on the facade (the golden vessel lives here)
-  add(tbox(2.6, 0.1, 0.5, 2), MAT.wood, -0.9, 1.0, -2.85, g, { cast: false });
-  add(box(0.08, 0.3, 0.08), MAT.woodDk, -2.0, 0.82, -2.85, g, { cast: false });
-  add(box(0.08, 0.3, 0.08), MAT.woodDk, 0.2, 0.82, -2.85, g, { cast: false });
-  const shelfPot1 = makePot(0.16, MAT.copper, MAT.copperDk); shelfPot1.position.set(-1.55, 1.05, -2.85); g.add(shelfPot1);
-  const shelfPot2 = makePot(0.14, MAT.copper, MAT.copperDk); shelfPot2.position.set(-0.25, 1.05, -2.85); g.add(shelfPot2);
-  // THE big copper pot (hero) + the baby pot, on the ground between the men
-  bigPot = makePot(0.55, MAT.copper, MAT.copperDk); bigPot.position.set(POTBIG[0], 0, POTBIG[2]); g.add(bigPot);
-  babyPot = makePot(0.28, MAT.copperBright, MAT.copperDk); babyPot.position.set(POTBABY[0], 0, POTBABY[2]); g.add(babyPot);
-  // THE golden vessel, ornate: gold pot + lid + knob, on the shelf
-  vesselMesh = makePot(0.32, MAT.goldBright, MAT.gold); vesselMesh.position.set(VESSELP[0], VESSELP[1], VESSELP[2]); g.add(vesselMesh);
-  const lid = add(new THREE.ConeGeometry(0.2, 0.16, 12), MAT.gold, VESSELP[0], VESSELP[1] + 0.52, VESSELP[2], g, { cast: false });
-  add(new THREE.SphereGeometry(0.05, 8, 6), MAT.goldBright, VESSELP[0], VESSELP[1] + 0.62, VESSELP[2], g, { cast: false });
-  vesselMesh.userData.lid = lid;
-  potGlint = FX.glint(0.5); potGlint.position.set(POTBIG[0], 1.15, POTBIG[2] + 0.2); potGlint.userData.ndSkip = true; g.add(potGlint);
-  vesselGlint = FX.glint(0.45); vesselGlint.position.set(VESSELP[0], VESSELP[1] + 0.55, VESSELP[2] + 0.15); vesselGlint.userData.ndSkip = true; g.add(vesselGlint);
-  // crates + barrel west of the courtyard
-  const c1 = FX.crate(1.15); c1.position.set(-5.5, 0.55, 0.55); g.add(c1);
-  const c2 = FX.crate(0.95); c2.position.set(-5.35, 1.55, 0.6); c2.rotation.y = 0.4; g.add(c2);
-  const b1 = FX.barrel(0.52, 1.25); b1.position.set(-4.35, 0.62, 0.35); g.add(b1);
-}
-// ================= WEDDING PAVILION (x=-16) =================
-{
-  const g = world, wx = -16;
-  for (const [px, pz] of [[-18.5, -5.5], [-13.5, -5.5], [-18.5, -1.5], [-13.5, -1.5]])
-    add(new THREE.CylinderGeometry(0.09, 0.11, 2.8, 8), MAT.woodDk, px, 1.4, pz, g, { cast: false });
-  add(tbox(5.6, 0.12, 4.6, 2), MAT.canopy, wx, 2.9, -3.5, g, { cast: false });
-  add(tbox(5.7, 0.08, 0.18, 2), MAT.canopyGold, wx, 2.98, -1.25, g, { cast: false });
-  // marigold garland along the canopy front edge
-  for (let i = 0; i < 9; i++) {
-    const gx = wx - 2.4 + i * 0.6;
-    add(new THREE.SphereGeometry(0.09, 8, 6), i % 2 ? MAT.marigold : MAT.canopyGold, gx, 2.78 - 0.06 * Math.sin(i * 1.2), -1.28, g, { cast: false });
-  }
-  // THE finest pot on its stone pedestal
-  add(tbox(1.0, 0.5, 1.0, 2), MAT.stone, wx, 0.25, -3.5, g, { cast: false });
-  const fine = makePot(0.5, MAT.copper, MAT.copperDk); fine.position.set(WED[0], 0.5, WED[2]); g.add(fine);
-  const fineGlint = FX.glint(0.5); fineGlint.position.set(WED[0], 1.35, WED[2] + 0.2); fineGlint.userData.ndSkip = true; g.add(fineGlint);
-  // wedding lamps + marigold pots
-  for (const lx of [-18, -14]) {
-    add(new THREE.CylinderGeometry(0.09, 0.12, 0.5, 8), MAT.gold, lx, 0.25, -2.0, g, { cast: false });
-    const lg = softGlow(1.2, 0xffc98a, 0.2); lg.position.set(lx, 0.62, -2.0); g.add(lg);
-  }
-  for (const [mx, mz] of [[-14.5, -4.5], [-17.5, -4.5]]) {
-    add(new THREE.CylinderGeometry(0.18, 0.14, 0.3, 8), MAT.copperDk, mx, 0.15, mz, g, { cast: false });
-    add(new THREE.SphereGeometry(0.16, 8, 6), MAT.marigold, mx, 0.38, mz, g, { cast: false });
-  }
-}
-// ================= BORROWER'S HUT (x=+16) =================
-{
-  const g = world, hx = 16;
-  flat(add(new THREE.CircleGeometry(4.6, 18), MAT.dirt, hx, -0.006, -1.2, g, { cast: false }));
-  add(tbox(7.5, 3.1, 0.35, 2), MAT.plaster, hx, 1.55, -3.7, g, { cast: false });
-  add(tbox(0.35, 3.1, 4.4, 2), MAT.plaster, hx + 3.7, 1.55, -1.6, g, { cast: false });
-  const roof = add(tbox(8.2, 0.14, 5.2, 2), MAT.thatch, hx, 3.35, -1.7, g, { cast: false }); roof.rotation.x = 0.1;
-  add(tbox(1.1, 1.9, 0.1, 2), MAT.dark, hx - 1.2, 0.95, -3.5, g, { cast: false });
-  const hp = makePot(0.3, MAT.copper, MAT.copperDk); hp.position.set(hx + 1.8, 0, -0.6); g.add(hp);
-}
-// ================= JUDGE'S COURT (x=+32) =================
-{
-  const g = world, cx = 32;
-  add(tbox(9, 4.5, 0.4, 2), MAT.stoneDk, cx, 2.25, -7.0, g, { cast: false });
-  add(tbox(9.8, 0.5, 1.1, 2), MAT.stone, cx, 4.7, -7.0, g, { cast: false });
-  for (const px of [28.5, 35.5]) add(new THREE.CylinderGeometry(0.32, 0.38, 6.4, 10), MAT.stoneDk, px, 3.2, -5.5, g, { cast: false });
-  add(tbox(6, 0.15, 3.5, 2), MAT.canopy, cx, 3.6, -5.0, g, { cast: false });
-  for (const px of [29.5, 34.5]) add(new THREE.CylinderGeometry(0.09, 0.11, 3.6, 8), MAT.woodDk, px, 1.8, -4.0, g, { cast: false });
-  // the bench: seat + back + red cushion
-  add(tbox(3.2, 0.5, 1.0, 2), MAT.woodDk, BENCH[0], 0.9, BENCH[2], g, { cast: false });
-  add(tbox(3.2, 1.0, 0.15, 2), MAT.woodDk, BENCH[0], 1.6, BENCH[2] - 0.45, g, { cast: false });
-  add(tbox(3.0, 0.12, 0.9, 2), MAT.cushion, BENCH[0], 1.2, BENCH[2], g, { cast: false });
-  add(tbox(4.6, 0.22, 1.4, 2), MAT.stone, cx, 0.11, -4.2, g, { cast: false });   // dais step
-  add(tbox(5.4, 0.22, 1.4, 2), MAT.stoneDk, cx, 0.11, -2.9, g, { cast: false }); // lower step
-  // brass scales of justice on a side table
-  add(tbox(1.2, 0.1, 0.7, 2), MAT.wood, cx - 3.6, 0.75, -5.2, g, { cast: false });
-  for (const [lx, lz] of [[-0.5, -0.25], [0.5, -0.25], [-0.5, 0.25], [0.5, 0.25]]) add(box(0.09, 0.72, 0.09), MAT.woodDk, cx - 3.6 + lx, 0.36, -5.2 + lz, g, { cast: false });
-  add(new THREE.CylinderGeometry(0.05, 0.05, 0.7, 8), MAT.gold, cx - 3.6, 1.15, -5.2, g, { cast: false });
-  add(new THREE.CylinderGeometry(0.22, 0.22, 0.03, 12), MAT.gold, cx - 3.95, 0.82, -5.2, g, { cast: false });
-  add(new THREE.CylinderGeometry(0.22, 0.22, 0.03, 12), MAT.gold, cx - 3.25, 0.82, -5.2, g, { cast: false });
-}
-// ================= DONKEY ROADSIDE (x=-32) =================
-{
-  const g = world, rx0 = -32;
-  // the big shade tree whose shadow the traveller sits in — placed WELL clear
-  // of the hook signpost: its canopy used to poke in front of the hook board
-  // and cover the text (EN f1718 defect). Shadow disc stays where it was.
-  add(new THREE.CylinderGeometry(0.34, 0.5, 3.4, 8), MAT.woodDk, -38.0, 1.7, -6.0, g, { cast: false });
-  const can1 = add(new THREE.SphereGeometry(2.6, 10, 8), MAT.leaf, -38.0, 4.4, -6.0, g, { cast: false }); can1.scale.y = 0.72;
-  const can2 = add(new THREE.SphereGeometry(1.8, 10, 8), MAT.leaf2, -36.7, 3.8, -5.1, g, { cast: false }); can2.scale.y = 0.7;
-  // the donkey's shadow on the ground (the traveller sits inside it)
-  const sh = flat(add(new THREE.CircleGeometry(1.9, 18), MAT.shadowSoft, -31.5, 0.012, -2.0, g, { cast: false }));
-  sh.scale.set(1.3, 1, 1);
-  // signpost for the hook board
-  add(box(0.12, 3.4, 0.12), MAT.woodDk, -33.3, 1.7, -2.0, g, { cast: false });
-  add(box(0.12, 3.4, 0.12), MAT.woodDk, -30.7, 1.7, -2.0, g, { cast: false });
-  add(tbox(2.9, 0.14, 0.14, 2), MAT.woodDk, -32, 2.2, -2.0, g, { cast: false });
-}
-// ---- boards (transforms mirrored in boards.json — keep in sync) ----
-const boardBirth = textBoard(['बर्तन ने बच्चे को', 'जन्म दिया!'], 2.6, 1.1, '#7a3b12', '#ffd76a'); boardBirth.position.set(0, 4.3, -3.12); world.add(boardBirth);
-const boardVessel = textBoard(['सोने का बर्तन'], 2.2, 0.75, '#4a2c14', '#ffd76a'); boardVessel.position.set(0, 4.3, -3.12); world.add(boardVessel);
-const boardDied = textBoard(['सोने का बर्तन', 'मर गया!'], 2.6, 1.1, '#3a1a1a', '#ff9a7a'); boardDied.position.set(0, 4.3, -3.12); world.add(boardDied);
-const boardHook = textBoard(['छाँव की कीमत', 'क्या है?'], 2.6, 1.1, '#2e4a2e', '#ffe9a8'); boardHook.position.set(SIGNP[0], SIGNP[1], SIGNP[2]); world.add(boardHook);
 
-// ---------- FX: haze ----------
-const smoke = new FX.Smoke(scene, 130); smoke.pool.forEach((p) => { p.s.userData.ndSkip = true; });
-const hazeEmit = smoke.addEmitter(0, 2.4, 0, { rate: 0.35, color: 0xffffff, opacity: 0.04, scale: 2.2, grow: 1.3, life: 2.6, vy: 0.1, wind: -0.5 });
-const dustEmit = smoke.addEmitter(-16, 1.6, -3.5, { rate: 0, color: 0xffe2b8, opacity: 0.1, scale: 0.5, grow: 1.2, life: 2.2, vy: 0.16, wind: 0.15 });
-const fxClouds = new FX.Clouds(scene, { count: 6, y: 42, opacity: 0.2, color: 0xf4f6fa, drift: 0.5 });
+// ---------- the palace courtyard ----------
+const world = new THREE.Group(); scene.add(world);
+const banners = [];
+{
+  const g = world;
+  const plaza = flat(add(new THREE.CircleGeometry(30, 48), MAT.plaza, 0, 0, 2, g, { cast: false }));
+  plaza.scale.set(1.15, 1, 1);
+  const ring = flat(add(new THREE.RingGeometry(1.62, 1.86, 40), MAT.stoneDk, PLATFORM.x, 0.012, PLATFORM.z, g, { cast: false }));
+  // the platform: a real stone drum the pot rests ON (top = story PLATFORM.top)
+  add(new THREE.CylinderGeometry(PLATFORM.r, PLATFORM.r + 0.12, PLATFORM.top, 28), MAT.plaza, PLATFORM.x, PLATFORM.top / 2, PLATFORM.z, g, { cast: false });
+  add(new THREE.TorusGeometry(PLATFORM.r + 0.02, 0.035, 8, 36), MAT.stoneDk, PLATFORM.x, PLATFORM.top - 0.02, PLATFORM.z, g, { cast: false }).rotation.x = Math.PI / 2;
+  // palace facade (north, z=-14): wall, columns, arch, steps, banners
+  add(tbox(36, 7.5, 1.6, 3), MAT.stone, 0, 3.75, -14.6, g, { cast: false });
+  add(tbox(36, 0.7, 2.2, 3), MAT.stoneDk, 0, 7.85, -14.6, g, { cast: false });
+  for (const cx of [-12, -8, -4, 4, 8, 12]) {
+    add(new THREE.CylinderGeometry(0.35, 0.4, 4.4, 12), MAT.stone, cx, 2.2, -13.2, g, { cast: false });
+    add(tbox(0.95, 0.28, 0.95, 2), MAT.stoneDk, cx, 4.55, -13.2, g, { cast: false });
+    add(tbox(1.0, 0.3, 1.0, 2), MAT.stoneDk, cx, 0.15, -13.2, g, { cast: false });
+  }
+  const archT = add(new THREE.TorusGeometry(2.5, 0.42, 10, 24, Math.PI), MAT.stoneDk, 0, 4.4, -13.4, g, { cast: false });
+  add(tbox(7.6, 0.5, 1.1, 2), MAT.stoneDk, 0, 0.25, -12.6, g, { cast: false });
+  add(tbox(9.4, 0.24, 1.5, 2), MAT.stoneDk, 0, 0.12, -11.9, g, { cast: false });
+  for (const bx of [-6.2, 6.2]) {
+    const pole = add(new THREE.CylinderGeometry(0.05, 0.06, 5.6, 7), MAT.woodDk, bx, 2.8, -12.9, g, { cast: false });
+    const ban = add(new THREE.PlaneGeometry(1.15, 2.6), bx < 0 ? MAT.crimson : MAT.teal, bx, 3.6, -12.82, g, { cast: false });
+    ban.userData.phase = bx; banners.push(ban);
+    add(new THREE.SphereGeometry(0.09, 8, 6), MAT.goldTrim, bx, 5.68, -12.9, g, { cast: false });
+  }
+  // side walls (low, warm stone) + corner planters with shrubs
+  add(tbox(1.4, 2.6, 26, 3), MAT.stone, -16.7, 1.3, -1, g, { cast: false });
+  add(tbox(1.4, 2.6, 26, 3), MAT.stone, 16.7, 1.3, -1, g, { cast: false });
+  for (const [px, pz] of [[-14.6, 8.5], [14.6, 8.5], [-14.6, -8], [14.6, -8]]) {
+    add(tbox(1.3, 0.6, 1.3, 2), MAT.stoneDk, px, 0.3, pz, g, { cast: false });
+    const bush = add(new THREE.SphereGeometry(0.62, 10, 8), MAT.leaf, px, 0.95, pz, g, { cast: false }); bush.scale.y = 0.8;
+  }
+  // the woman's cooking stall (west): table, canopy, hanging mini pots, baskets
+  const stall = new THREE.Group(); stall.position.set(STALL.x, 0, STALL.z); stall.rotation.y = STALL.ry; g.add(stall);
+  add(tbox(2.6, 0.1, 1.5, 2), MAT.wood, 0, 0.74, 0, stall, { cast: false });
+  for (const [lx, lz] of [[-1.2, -0.65], [1.2, -0.65], [-1.2, 0.65], [1.2, 0.65]])
+    add(new THREE.CylinderGeometry(0.05, 0.05, 0.74, 6), MAT.woodDk, lx, 0.37, lz, stall, { cast: false });
+  for (const px of [-1.25, 1.25]) add(new THREE.CylinderGeometry(0.05, 0.05, 2.3, 6), MAT.woodDk, px, 1.15, -0.6, stall, { cast: false });
+  const canopy = add(tbox(2.9, 0.07, 1.9, 2), MAT.cloth, 0, 2.32, 0, stall, { cast: false }); canopy.rotation.x = 0.1;
+  for (const hx of [-0.7, 0, 0.7]) {
+    add(new THREE.CylinderGeometry(0.012, 0.012, 0.3, 4), MAT.dark, hx, 2.05, 0.3, stall, { cast: false });
+    const mp = add(new THREE.SphereGeometry(0.14, 10, 8), MAT.blackPot, hx, 1.82, 0.3, stall, { cast: false }); mp.scale.y = 0.82;
+  }
+  add(new THREE.CylinderGeometry(0.3, 0.24, 0.4, 9), MAT.wood, -0.8, 0.99, -0.2, stall, { cast: false });
+  add(new THREE.CylinderGeometry(0.26, 0.21, 0.34, 9), MAT.woodDk, 0.75, 0.96, 0.25, stall, { cast: false });
+  // the king's coin table (east): low table + coin sacks resting on it
+  add(tbox(1.7, 0.09, 1.0, 2), MAT.wood, TABLE.x, 0.74, TABLE.z, g, { cast: false });
+  for (const [lx, lz] of [[-0.75, -0.4], [0.75, -0.4], [-0.75, 0.4], [0.75, 0.4]])
+    add(new THREE.CylinderGeometry(0.05, 0.05, 0.74, 6), MAT.woodDk, TABLE.x + lx, 0.37, TABLE.z + lz, g, { cast: false });
+  const sack2 = add(new THREE.SphereGeometry(0.21, 10, 8), MAT.cloth, TABLE.x - 0.45, 0.93, TABLE.z + 0.15, g, { cast: false }); sack2.scale.y = 0.85;
+  // board posts (title + hook boards share this frame)
+  for (const px of [BOARD_POS[0] - 2.1, BOARD_POS[0] + 2.1]) add(new THREE.CylinderGeometry(0.06, 0.07, 3.3, 7), MAT.woodDk, px, 1.65, BOARD_POS[2], g, { cast: false });
+  add(tbox(4.6, 0.12, 0.12, 2), MAT.woodDk, BOARD_POS[0], 3.9, BOARD_POS[2], g, { cast: false });
+}
+
+// ---------- THE POT (hero prop, built from real parts) ----------
+// Black-as-coal body (it drinks the heat), a rim, two handles, a base
+// ring — and the polished MIRROR lid: a shallow dome of real metal that
+// catches the sun. The lid lifts/tilts on the story's beats; the cooked
+// food disc is revealed only while the lid is up.
+const potG = new THREE.Group(); world.add(potG);
+const potBody = add(new THREE.SphereGeometry(0.42, 22, 16), MAT.blackPot, 0, 0.3, 0, potG);
+potBody.scale.set(1, 0.84, 1);
+add(new THREE.TorusGeometry(0.4, 0.045, 8, 24), MAT.blackPot, 0, 0.56, 0, potG).rotation.x = Math.PI / 2;
+add(new THREE.TorusGeometry(0.3, 0.04, 8, 20), MAT.blackPot, 0, 0.045, 0, potG).rotation.x = Math.PI / 2;
+for (const s of [-1, 1]) {
+  const hd = add(new THREE.TorusGeometry(0.13, 0.032, 6, 14, Math.PI), MAT.blackPot, s * 0.42, 0.38, 0, potG);
+  hd.rotation.z = s * Math.PI / 2;
+}
+const foodMesh = add(new THREE.SphereGeometry(0.36, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), MAT.food, 0, 0.53, 0, potG, { cast: false });
+foodMesh.scale.set(1, 0.42, 1);
+const lidG = new THREE.Group(); potG.add(lidG);
+const lidDome = add(new THREE.SphereGeometry(0.41, 24, 12, 0, Math.PI * 2, 0, Math.PI * 0.46), MAT.mirror, 0, 0, 0, lidG);
+lidDome.scale.set(1, 0.55, 1);
+add(new THREE.SphereGeometry(0.075, 10, 8), MAT.goldTrim, 0, 0.24, 0, lidG);
+const lidGlint = softGlow(0.85, '#fff3cf', 0); lidGlint.position.set(0.1, 0.32, 0.1); potG.add(lidGlint);
+// sun-ray cones (the reveal): soft additive shafts from the sun to the lid
+const rayMat = new THREE.MeshBasicMaterial({ color: 0xffdf9e, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false });
+const rays = [];
+for (const off of [[0, 0], [0.35, 0.2], [-0.3, 0.28]]) {
+  const cone = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 1.55, 1, 12, 1, true), rayMat);
+  cone.userData.ndSkip = true; cone.userData.off = off; world.add(cone); rays.push(cone);
+}
+// the paid coin sack (travels table -> the woman's hands in the paid beat)
+const sackG = new THREE.Group(); world.add(sackG);
+const sackBody = add(new THREE.SphereGeometry(0.21, 10, 8), MAT.cloth, 0, 0, 0, sackG); sackBody.scale.y = 0.85;
+add(new THREE.CylinderGeometry(0.05, 0.08, 0.12, 7), MAT.cloth, 0, 0.2, 0, sackG);
+const sackGlint = softGlow(0.55, '#ffe9a8', 0); sackGlint.position.set(0.05, 0.15, 0.05); sackG.add(sackGlint);
+
+// ---------- boards (transforms mirrored in boards.json — keep in sync) ----------
+const boardTitle = textBoard(['खुद खाना पकाने', 'वाला बर्तन'], 4.6, 1.2, '#3a2410', '#ffe9a8', 900, { fsMul: 0.85, pitch: 0.40, dy: 0.02 });
+boardTitle.position.set(...BOARD_POS); world.add(boardTitle); addBoardOccluder(boardTitle, 4.6, 1.2, 'boardTitle');
+const boardHook = textBoard(['लेकिन कल... एक बंदर', 'जंगल वाली सड़क पर', 'हर गाड़ी को रोककर सबसे', 'टोल कैसे वसूलता था?'], 4.6, 1.5, '#2e1a3a', '#ffd76a', 900, { pitch: 0.21, fsMul: 0.93 });
+boardHook.position.set(...BOARD_POS); world.add(boardHook); addBoardOccluder(boardHook, 4.6, 1.5, 'boardHook');
+
+// ---------- FX: courtyard dust motes + pot steam + heat shimmer + clouds ----------
+const smoke = new FX.Smoke(scene, 160); smoke.pool.forEach((p) => { p.s.userData.ndSkip = true; });
+const dustEmit = smoke.addEmitter(0, 1.1, 3, { rate: 0.15, color: 0xffe2b8, opacity: 0.07, scale: 0.5, grow: 1.2, life: 2.4, vy: 0.12, wind: 0.12 });
+const steamEmit = smoke.addEmitter(PLATFORM.x, 0.95, PLATFORM.z, { rate: 0, color: 0xffffff, opacity: 0.24, scale: 0.72, grow: 1.7, life: 1.7, vy: 0.9, wind: 0.18 });
+const shimmerEmit = smoke.addEmitter(PLATFORM.x, 0.8, PLATFORM.z, { rate: 0, color: 0xfff2cc, opacity: 0.05, scale: 0.42, grow: 1.3, life: 1.1, vy: 1.35, wind: 0.05 });
+const fxClouds = new FX.Clouds(scene, { count: 6, y: 46, opacity: 0.22, color: 0xf4f6fa, drift: 0.5 });
 fxClouds.items.forEach((cl) => { cl.userData.x0 = cl.position.x; cl.traverse((m) => { m.userData.ndSkip = true; }); });
 let fxF = -1;
 const fxReset = () => {
@@ -272,7 +256,9 @@ const fxStepTo = (f) => {
   if (f < fxF || f > fxF + 240) { fxReset(); fxF = -1; }
   while (fxF < f) {
     fxF++; const t = fxF / 30, dt = 1 / 30, pr = fxProfileAt(fxF);
-    hazeEmit.rate = pr.smokeRate; dustEmit.rate = pr.dustRate;
+    dustEmit.rate = pr.smokeRate * 3;
+    steamEmit.rate = pr.steamRate * 3.2;
+    shimmerEmit.rate = pr.shimmerRate * 1.7;
     smoke.update(t, dt);
     fxClouds.update(t, dt);
   }
@@ -366,15 +352,46 @@ function placeSun(L, focus) {
   sun.position.copy(focus).addScaledVector(tmpV, 80); sun.target.position.copy(focus);
   const ext = L.shadowExt || 30, sc = sun.shadow.camera; sc.left = -ext; sc.right = ext; sc.top = ext; sc.bottom = -ext; sc.near = 1; sc.far = 200; sc.updateProjectionMatrix();
 }
+const _va = new THREE.Vector3(), _vb = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
 function worldState(Ws, f) {
   fxStepTo(f);
   skyU.time.value = f / 30;
   const setB = (mesh, v) => { mesh.material.opacity = v; mesh.visible = v > 0.01; };
-  setB(boardBirth, Ws.boardBirth || 0); setB(boardVessel, Ws.boardVessel || 0); setB(boardDied, Ws.boardDied || 0); setB(boardHook, Ws.boardHook || 0);
-  const bk = Ws.potBabyK ?? 1; babyPot.visible = bk > 0.02; babyPot.scale.setScalar(Math.max(bk, 0.001));
-  const vk = Ws.vesselK ?? 1; vesselMesh.visible = vk > 0.02; vesselMesh.userData.lid.visible = vk > 0.02;
-  potGlint.material.opacity = 0.3;
-  vesselGlint.material.opacity = vk * 0.4;
+  setB(boardTitle, Ws.boardTitle || 0); setB(boardHook, Ws.boardHook || 0);
+  scene.traverse((o) => { if (o.userData.isOccluder) o.visible = o.userData.boardKey === 'always' || (Ws[o.userData.boardKey] || 0) > 0.01; });
+  // THE POT rides the story: carried by the woman, then resting on the
+  // platform; the mirror lid lifts/tilts on the noon/tests/peek beats
+  potG.position.set(Ws.potX, Ws.potY, Ws.potZ);
+  const lift = Ws.lidLift || 0;
+  lidG.position.set(0, 0.58 + lift * 0.34, -lift * 0.3);
+  lidG.rotation.x = -lift * 0.38;
+  foodMesh.visible = (Ws.foodK || 0) > 0.03;
+  lidGlint.material.opacity = (Ws.lidGlint || 0) * 0.9;
+  lidGlint.visible = (Ws.lidGlint || 0) > 0.02;
+  // sun rays converge on the lid (soft shafts, brightest at the source,
+  // widening as they fall — never a hard wedge: additive + open cone)
+  const rk = Ws.raysK || 0;
+  rayMat.opacity = rk * 0.085;
+  const lidPos = _vb.set(Ws.potX, Ws.potY + 0.62, Ws.potZ);
+  for (const cone of rays) {
+    cone.visible = rk > 0.01;
+    if (!cone.visible) continue;
+    const off = cone.userData.off;
+    _va.copy(skyU.sunDir.value).multiplyScalar(16).add(lidPos); _va.x += off[0]; _va.z += off[1];
+    cone.position.copy(_va).add(lidPos).multiplyScalar(0.5);
+    const len = _va.distanceTo(lidPos);
+    cone.scale.set(1, len, 1);
+    cone.quaternion.setFromUnitVectors(_up, _va.sub(lidPos).normalize().negate());
+  }
+  // the paid sack travels from the coin table to the woman
+  sackG.visible = (Ws.coinK || 0) > 0.01;
+  if (sackG.visible) {
+    sackG.position.set(Ws.coinX, Ws.coinY, Ws.coinZ);
+    sackGlint.material.opacity = (Ws.lidGlint || 0) * 0.8;
+    sackGlint.visible = (Ws.lidGlint || 0) > 0.05;
+  }
+  // facade banners sway in gusts (never a uniform wave)
+  banners.forEach((b, i) => { b.rotation.y = Math.sin(f * 0.021 + i * 1.7 + Math.sin(f * 0.006 + i) * 1.3) * 0.13; });
 }
 function drawActors(list, cam) {
   cards.forEach((c) => { c.mesh.visible = c.blob.visible = false; });
@@ -393,6 +410,7 @@ function drawActors(list, cam) {
 const swapForNd = (on) => {
   scene.traverse((o) => {
     if (on) {
+      if (o.userData.isOccluder) { o.userData.vis0 = o.visible; return; }
       if (o.userData.ndSkip || o === sky || o.userData.sky) { o.userData.vis0 = o.visible; o.visible = false; return; }
       if (!o.isMesh) return;
       o.userData.mat0 = o.material;
