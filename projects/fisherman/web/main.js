@@ -397,7 +397,7 @@ function worldState(Ws, f) {
   skyU.time.value = f / 30;
   const setB = (mesh, v) => { mesh.material.opacity = v; mesh.visible = v > 0.01; };
   setB(boardTitle, Ws.boardTitle || 0); setB(boardHook, Ws.boardHook || 0);
-  scene.traverse((o) => { if (o.userData.isOccluder) o.visible = o.userData.boardKey === 'always' || (Ws[o.userData.boardKey] || 0) > 0.01; });
+  scene.traverse((o) => { if (o.userData.isOccluder) { o.userData.boardVisible = o.userData.boardKey === 'always' || (Ws[o.userData.boardKey] || 0) > 0.01; o.visible = false; } });
   // THE BOAT rides the story: moored at the quay, then rowed to dark water.
   // Tiny bob only on the hull mesh — the seated old man and basket ride the
   // story positions exactly, so nothing visually detaches from its surface.
@@ -465,7 +465,7 @@ function drawActors(list, cam) {
 const swapForNd = (on) => {
   scene.traverse((o) => {
     if (on) {
-      if (o.userData.isOccluder) { o.userData.vis0 = o.visible; return; }
+      if (o.userData.isOccluder) { o.userData.vis0 = o.visible; o.visible = !!o.userData.boardVisible; return; }
       if (o.userData.ndSkip || o === sky || o.userData.sky) { o.userData.vis0 = o.visible; o.visible = false; return; }
       if (!o.isMesh) return;
       o.userData.mat0 = o.material;
