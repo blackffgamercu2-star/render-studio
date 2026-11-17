@@ -132,6 +132,7 @@ const setG = new THREE.Group(); scene.add(setG);
 const bells = [];       // every bell in the room: { group, glow, phase }
 let heroWire = null, heroGlint = null, shaftMesh = null, ropeG = null, baleG = null, sackG = null;
 let floorGlow = null, hangGlow = null, moonGlow = null;
+let wireLampG = null, wireLampGlow = null, wireLampLight = null;
 const guardGlows = [];
 const guardFlames = [];
 const makeBell = (x, y, z, parent, mode = 'stake') => {
@@ -280,6 +281,19 @@ const makeBell = (x, y, z, parent, mode = 'stake') => {
   makeBell(DOOR.x - 0.05, 2.66, DOOR.z - 0.85, g, 'cord');
   makeBell(DOOR.x - 0.05, 2.66, DOOR.z + 0.85, g, 'cord');
   heroGlint = softGlow(0.85, '#ffe9b0', 0); heroGlint.position.set(-6, 0.55, -2.55); g.add(heroGlint);
+  // the lead thief's lantern, set down on the floor beyond the hero wire
+  // before the creep — its warm pool is what the wire hit plays in: the
+  // bell and the crossing point sit between it and the camera, so the
+  // contact reads lit from behind the wire, never blown out. It is gated
+  // by worldAt's lampWireK (bells beat only) so no other shot's framing
+  // ever sees it or its light.
+  wireLampG = new THREE.Group(); wireLampG.position.set(-6.9, 0, -3.1); wireLampG.visible = false; g.add(wireLampG);
+  add(new THREE.CylinderGeometry(0.13, 0.16, 0.07, 10), MAT.iron, 0, 0.035, 0, wireLampG, { cast: false });
+  add(new THREE.CylinderGeometry(0.1, 0.12, 0.3, 10, 1, true), MAT.chim, 0, 0.22, 0, wireLampG, { cast: false }).userData.ndSkip = true;
+  add(new THREE.SphereGeometry(0.055, 8, 6), MAT.flame, 0, 0.2, 0, wireLampG, { cast: false });
+  add(new THREE.ConeGeometry(0.13, 0.09, 10), MAT.iron, 0, 0.42, 0, wireLampG, { cast: false });
+  wireLampGlow = softGlow(0.85, '#ffa64e', 0); wireLampGlow.position.set(-6.9, 0.42, -3.1); g.add(wireLampGlow);
+  wireLampLight = new THREE.PointLight(0xffa64e, 0, 6.5, 2.0); wireLampLight.position.set(-6.75, 0.85, -2.95); scene.add(wireLampLight);
   // the east double door (behind the board wall)
   add(tbox(0.16, 3.4, 1.7, 2), MAT.beam, DOOR.x + 0.2, 1.7, DOOR.z - 0.9, g, { cast: false });
   add(tbox(0.16, 3.4, 1.7, 2), MAT.beam, DOOR.x + 0.2, 1.7, DOOR.z + 0.9, g, { cast: false });
@@ -460,6 +474,11 @@ function worldState(Ws, f) {
   if (hangGlow) hangGlow.material.opacity = 0.38 * flick;
   floorLight.intensity = (4 + 14 * (Ws.lampK || 0)) * flick;
   if (floorGlow) floorGlow.material.opacity = (0.22 + 0.4 * (Ws.lampK || 0)) * flick;
+  // the thief's set-down lantern at the hero wire (bells beat only)
+  const wlk = Ws.lampWireK || 0;
+  if (wireLampG) wireLampG.visible = wlk > 0.01;
+  if (wireLampLight) wireLampLight.intensity = 13 * wlk * flick;
+  if (wireLampGlow) wireLampGlow.material.opacity = 0.5 * wlk * flick;
   if (moonGlow) moonGlow.material.opacity = 0.45 + 0.08 * Math.sin(f * 0.05);
   if (shaftMesh) shaftMesh.material.opacity = 0.13 * (Ws.shaftK || 0);
   if (ropeG) ropeG.rotation.x = 0.02 * Math.sin(f * 0.045);
