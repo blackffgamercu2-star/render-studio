@@ -1,6 +1,13 @@
 // Shot plan for "The Man Who Won Every Bet" — bets (SALTED MINE V3 style:
 // painted world, round-white-head cards, word-by-word captions, body.js
 // actions, speak.js dialogue performance). Batch 9 E5 (Mirror Trick Tales).
+// R2 REBUILD (approved moonrent-hindi R2 standard): opening hero BIG from
+// f0, object INSERT fills the frame (the capsule pigeon in the cote), the
+// ACTION beat is a front three-quarter close-up (the dawn landing + the
+// capsule untied at the perch — camera never behind the cards), a REACTION
+// face ≥65% wide (the bookmaker at the finish post as the no-name horse
+// wins), and the FINAL is a character beat + hook board together (the
+// gambler kneels in the foreground pointing up at the board).
 // Sets: the village SQUARE (bookmaker's stall + champion ring), the distant
 // RACECOURSE, the STREET to the gambler's house (porch, roof platform,
 // DOVECOTE), and the open SKY for the pigeon's flight home.
@@ -86,13 +93,13 @@ export const SON = { x: 6.3, z: 5.6 };
 export const HOUSE = { x: -3.4, z: 17.8 };
 export const PLATFORM_Y = 3.68;
 export const COTE = { x: -1.55, y: 4.72, z: 16.6 };
-export const PERCH = [COTE.x - 0.34, COTE.y - 0.10, COTE.z - 0.62];
+export const PERCH = [COTE.x - 0.15, COTE.y + 0.01, COTE.z - 1.15];   // R2: the iron perch bar in FRONT of the cote — clear of the cote's own perched pigeons, in front of the gambler
 const GAMBLER_STALL = { x: -2.2, z: -0.7 };        // in front of the counter
 const BOOK_STALL = { x: -2.9, z: -2.78 };          // behind the counter
 const PORCH_G = { x: HOUSE.x - 0.45, z: 14.8 };   // gambler at his door
 const PORCH_B = { x: HOUSE.x - 1.9, z: 13.55 };   // bookmaker below the porch
-const PLAT_G = { x: COTE.x + 0.8, z: COTE.z - 0.4 };   // gambler on the roof platform
-const PLAT_B = { x: COTE.x - 0.62, z: COTE.z - 0.55 };  // bookmaker on the roof platform
+const PLAT_G = { x: COTE.x - 0.03, z: COTE.z - 0.85 };   // R2: gambler on the platform just behind the perch bar — kneels facing the landed pigeon, card clear of the perch ledge
+const PLAT_B = { x: COTE.x + 0.95, z: COTE.z - 0.35 };  // R2: bookmaker at the platform's east edge (by the ladder) — clear of the capsule insert framing
 
 // ---------- walking paths (luckiest / follow) ----------
 const walk = (f, a, b, p0, p1) => {
@@ -173,6 +180,7 @@ export const riderAt = (f) => {
 const gamblerWink = winkTrack([{ a: 1118, b: 1130 }]);                 // end of the laugh, into the answer
 const sonPose = poseWindows([{ a: 1250, b: 1302, mode: 'kneel1', inF: 6, outF: 7 }]);   // ties the capsule on
 const gamblerPlatPose = poseWindows([{ a: 1540, b: 1588, mode: 'kneel1', inF: 6, outF: 7 }]); // takes the capsule off
+const gamblerHookPose = poseWindows([{ a: 1608, b: 1699, mode: 'kneel1', inF: 6, outF: 1 }]); // R2 final: kneels before the hook board, pointing up at it
 const bookTurn = turnTrack([{ f0: 838, dur: 16, dir: 1 }, { f0: 918, dur: 14, dir: -1 }]);     // searching the cote
 const gamblerGaze = gazeTrack([
   { f: 0, look: -0.2, lookY: 0.05 },
@@ -198,13 +206,13 @@ const FOCUS = {
   gold: () => [0.2, 1.3, 1.9],
   lastsecond: () => [STALL.x + 0.1, 1.05, STALL.z + 0.4],
   follow: () => { const w = followG(740); return [w.x, 1.3, w.z]; },
-  dovecote: () => [COTE.x, COTE.y, COTE.z],
+  dovecote: () => [COTE.x - 0.34, COTE.y - 0.06, COTE.z - 0.72],   // R2: the capsule pigeon on the perch (the insert subject)
   accuse: () => [PORCH_G.x, 1.35, PORCH_G.z],
   laugh: () => [PORCH_G.x, 1.45, PORCH_G.z],
   dialogue: () => [PORCH_G.x, 1.45, PORCH_G.z],
   son: () => [SON.x, 1.2, SON.z],
   flight: () => flightPigPos(1400),
-  sixhours: () => [COTE.x, COTE.y - 0.4, COTE.z],
+  sixhours: () => [-1.65, 4.7, 15.55],   // R2: the perch-bar exchange point — pigeon, hands, capsule
   hook: () => BOARD_POS,
 };
 export const heroPosAt = (f) => FOCUS[shotAt(f).id]();
@@ -212,23 +220,33 @@ export const heroPosAt = (f) => FOCUS[shotAt(f).id]();
 // ---------- cameras: EVERY shot is a camrig track on a subject ----------
 const raceKeys = () => {
   const a = B('race');
-  return [0, 11, 22, 34, 45, 56, 68, 79, 90].map((d, i) => {
+  // R2: track the no-name grey (xs[2]) past the finish post, then swing off
+  // the track onto the bookmaker at the post — his stunned face ends the
+  // shot at reaction scale (≥65% of frame width).
+  const track = [0, 11, 22, 34, 45].map((d, i) => {
     const h = horsesAt(a + d);
-    return { f: a + d, pos: [h.xs[2] - 3.2, 1.7, 8.2], look: [h.xs[2] + 0.6, 1.25, 0], fov: 40 - i * 0.6, ...(i === 8 ? { ease: 'io' } : { ease: 'linear' }) };
+    return { f: a + d, pos: [h.xs[2] - 3.2, 1.7, 7.6], look: [h.xs[2] + 0.8, 1.25, 0], fov: 40 - i * 0.6, ease: 'linear' };
   });
+  const h52 = horsesAt(a + 52);
+  return [...track,
+    { f: a + 52, pos: [h52.xs[2] - 3.0, 1.68, 7.5], look: [h52.xs[2] + 1.4, 1.3, 1.2], fov: 37, ease: 'linear' },
+    { f: a + 61, pos: [2.6, 1.64, 7.1], look: [4.6, 1.42, 3.2], fov: 34.5, ease: 'linear' },
+    { f: a + 71, pos: [4.3, 1.55, 6.15], look: [5.45, 1.48, 3.65], fov: 32, ease: 'linear' },
+    { f: a + 82, pos: [4.5, 1.52, 5.75], look: [5.58, 1.5, 3.62], fov: 30, ease: 'linear' },
+    { f: a + 91, pos: [4.42, 1.51, 5.6], look: [5.6, 1.51, 3.6], fov: 29, ease: 'io' }];
 };
 const flightKeys = () => {
   const a = B('flight');
   return [0, 13, 26, 39, 52, 65, 78, 91, 104].map((d, i) => {
     const p = flightPigPos(a + d);
-    return { f: a + d, pos: [p[0] - 3.6, p[1] + 1.5, p[2] + 4.4], look: [p[0], p[1], p[2]], fov: 38 - i * 0.5, ...(i === 8 ? { ease: 'io' } : { ease: 'linear' }) };
+    return { f: a + d, pos: [p[0] - 2.9, p[1] + 1.15, p[2] + 3.5], look: [p[0], p[1], p[2]], fov: 36 - i * 0.4, ...(i === 8 ? { ease: 'io' } : { ease: 'linear' }) };
   });
 };
 const luckKeys = () => {
   const a = B('luckiest');
   return [0, 42, 84, 126].map((d, i) => {
     const w = gamblerWalk(a + d);
-    return { f: a + d, pos: [w.x + 3.4, 1.8, w.z + 4.6], look: [w.x, 1.3, w.z], fov: 39 - i * 1.5, ...(i === 3 ? { ease: 'io' } : { ease: 'linear' }) };
+    return { f: a + d, pos: [w.x + 2.7, 1.7, w.z + 3.6], look: [w.x, 1.3, w.z], fov: 37 - i * 1.8, ...(i === 3 ? { ease: 'io' } : { ease: 'linear' }) };
   });
 };
 const followKeys = () => {
@@ -237,55 +255,57 @@ const followKeys = () => {
     const g = followG(a + d), b = followB(a + d);
     const mx = (g.x + b.x) / 2, mz = (g.z + b.z) / 2;
     // behind-and-beside tracking: the pair walks NORTH up the lane
-    // (x ~ 0..1.25, z increasing) — camera trails 4.2 behind + 1.0 east,
+    // (x ~ 0..1.25, z increasing) — camera trails 3.55 behind + 0.85 east,
     // looking past them up the lane so both stack in depth in the 9:16 frame
-    return { f: a + d, pos: [mx + 1.0, 1.95, mz - 4.2], look: [mx - 0.1, 1.3, mz + 1.2], fov: 40 - i * 1.4, ...(i === 3 ? { ease: 'io' } : { ease: 'linear' }) };
+    return { f: a + d, pos: [mx + 0.85, 1.82, mz - 3.55], look: [mx - 0.1, 1.3, mz + 1.2], fov: 38 - i * 1.8, ...(i === 3 ? { ease: 'io' } : { ease: 'linear' }) };
   });
 };
 const RIG_BY_ID = {
   payout: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('payout'), pos: [0.9, 1.55, 2.7], look: [-2.25, 1.25, -1.5], fov: 40 },
-    { f: B('payout') + 70, pos: [0.45, 1.5, 1.95], look: [-2.3, 1.28, -1.55], fov: 36 },
-    { f: E('payout'), pos: [0.1, 1.46, 1.5], look: [-2.35, 1.3, -1.6], fov: 33, ease: 'io' }] }) },
+    { f: B('payout'), pos: [-0.35, 1.32, 2.05], look: [-2.22, 1.42, -0.85], fov: 36 },
+    { f: B('payout') + 70, pos: [-0.55, 1.36, 1.8], look: [-2.24, 1.44, -0.9], fov: 34 },
+    { f: E('payout'), pos: [-0.72, 1.4, 1.6], look: [-2.26, 1.46, -0.95], fov: 32, ease: 'io' }] }) },
   race: { cut: 'hard', raw: keysCam({ keys: raceKeys() }) },
   champion: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('champion'), pos: [0.6, 3.4, 8.6], look: [3.35, 0.9, 2.6], fov: 38 },
-    { f: E('champion'), pos: [1.2, 3.0, 7.6], look: [3.4, 0.95, 2.6], fov: 34, ease: 'io' }] }) },
+    { f: B('champion'), pos: [1.3, 2.0, 7.2], look: [3.38, 0.98, 2.6], fov: 36 },
+    { f: E('champion'), pos: [1.8, 1.8, 6.5], look: [3.4, 1.0, 2.6], fov: 32, ease: 'io' }] }) },
   luckiest: { cut: 'hard', raw: keysCam({ keys: luckKeys() }) },
   gold: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('gold'), pos: [3.1, 1.72, 6.0], look: [0.3, 1.28, 2.0], fov: 36 },
-    { f: E('gold'), pos: [2.7, 1.64, 5.35], look: [0.25, 1.3, 1.95], fov: 31, ease: 'io' }] }) },
+    { f: B('gold'), pos: [1.0, 1.6, 5.6], look: [0.62, 1.25, 2.05], fov: 34 },
+    { f: E('gold'), pos: [0.9, 1.55, 5.0], look: [0.6, 1.27, 2.05], fov: 30, ease: 'io' }] }) },
   lastsecond: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('lastsecond'), pos: [-0.7, 1.85, 0.85], look: [-2.55, 0.98, -1.9], fov: 32 },
-    { f: B('lastsecond') + 80, pos: [-0.82, 1.78, 0.68], look: [-2.6, 0.97, -1.9], fov: 30 },
-    { f: E('lastsecond'), pos: [-0.95, 1.72, 0.52], look: [-2.62, 0.97, -1.88], fov: 28, ease: 'io' }] }) },
+    { f: B('lastsecond'), pos: [0.55, 1.72, 1.6], look: [-2.7, 1.08, -1.85], fov: 34 },
+    { f: B('lastsecond') + 80, pos: [0.38, 1.66, 1.38], look: [-2.73, 1.06, -1.88], fov: 32 },
+    { f: E('lastsecond'), pos: [0.22, 1.62, 1.2], look: [-2.75, 1.05, -1.9], fov: 30, ease: 'io' }] }) },
   follow: { cut: 'hard', raw: keysCam({ keys: followKeys() }) },
   dovecote: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('dovecote'), pos: [3.0, 3.2, 8.2], look: [-2.4, 4.2, 16.4], fov: 41 },
-    { f: B('dovecote') + 80, pos: [1.6, 4.3, 11.2], look: [-1.8, 4.5, 16.5], fov: 35 },
-    { f: E('dovecote'), pos: [0.35, 4.85, 12.9], look: [COTE.x - 0.1, COTE.y + 0.05, COTE.z], fov: 29, ease: 'io' }] }) },
+    { f: B('dovecote'), pos: [2.7, 3.3, 8.6], look: [-1.7, 4.35, 16.3], fov: 41 },
+    { f: B('dovecote') + 80, pos: [0.4, 4.3, 11.8], look: [-1.8, 4.55, 16.0], fov: 35 },
+    { f: B('dovecote') + 125, pos: [-2.15, 4.5, 13.95], look: [-1.87, 4.6, 15.9], fov: 31 },
+    { f: E('dovecote'), pos: [-2.75, 4.22, 14.35], look: [-1.88, 4.62, 15.9], fov: 29, ease: 'io' }] }) },
   accuse: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('accuse'), pos: [-7.6, 1.7, 10.6], look: [-4.6, 1.35, 14.3], fov: 36 },
-    { f: E('accuse'), pos: [-7.3, 1.66, 11.0], look: [-4.62, 1.37, 14.32], fov: 32, ease: 'io' }] }) },
+    { f: B('accuse'), pos: [-7.15, 1.66, 11.15], look: [-4.72, 1.36, 14.35], fov: 34 },
+    { f: E('accuse'), pos: [-6.9, 1.62, 11.5], look: [-4.72, 1.36, 14.35], fov: 30, ease: 'io' }] }) },
   laugh: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('laugh'), pos: [-5.9, 1.75, 10.8], look: [PORCH_G.x - 0.1, 1.45, PORCH_G.z], fov: 33 },
-    { f: E('laugh'), pos: [-5.7, 1.72, 11.15], look: [PORCH_G.x - 0.08, 1.46, PORCH_G.z], fov: 29, ease: 'io' }] }) },
+    { f: B('laugh'), pos: [-5.75, 1.72, 11.15], look: [PORCH_G.x - 0.05, 1.5, PORCH_G.z], fov: 31 },
+    { f: E('laugh'), pos: [-5.6, 1.7, 11.45], look: [PORCH_G.x - 0.05, 1.5, PORCH_G.z], fov: 27, ease: 'io' }] }) },
   dialogue: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('dialogue'), pos: [-5.6, 1.75, 11.2], look: [PORCH_G.x, 1.44, PORCH_G.z], fov: 31 },
-    { f: E('dialogue'), pos: [-5.45, 1.72, 11.5], look: [PORCH_G.x + 0.02, 1.45, PORCH_G.z], fov: 27, ease: 'io' }] }) },
+    { f: B('dialogue'), pos: [-5.5, 1.74, 11.5], look: [PORCH_G.x, 1.47, PORCH_G.z], fov: 29 },
+    { f: E('dialogue'), pos: [-5.35, 1.71, 11.8], look: [PORCH_G.x, 1.47, PORCH_G.z], fov: 25, ease: 'io' }] }) },
   son: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('son'), pos: [8.6, 1.35, 10.6], look: [SON.x, 1.05, SON.z], fov: 36 },
-    { f: B('son') + 50, pos: [8.0, 1.5, 9.8], look: [SON.x - 0.15, 1.25, SON.z - 0.15], fov: 33 },
-    { f: E('son'), pos: [7.4, 1.9, 9.0], look: [SON.x - 0.7, 2.0, SON.z - 0.7], fov: 30, ease: 'io' }] }) },
+    { f: B('son'), pos: [8.7, 1.45, 10.9], look: [SON.x, 1.1, SON.z], fov: 35 },
+    { f: B('son') + 50, pos: [7.9, 1.35, 9.3], look: [SON.x - 0.25, 1.1, SON.z + 0.3], fov: 32 },
+    { f: E('son'), pos: [7.5, 1.8, 8.8], look: [SON.x - 1.1, 2.4, SON.z - 0.6], fov: 28, ease: 'io' }] }) },
   flight: { cut: 'hard', raw: keysCam({ keys: flightKeys() }) },
   sixhours: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('sixhours'), pos: [-0.2, 5.5, 11.6], look: [COTE.x, COTE.y, COTE.z], fov: 34 },
-    { f: B('sixhours') + 74, pos: [-0.45, 5.6, 11.0], look: [COTE.x + 0.42, COTE.y - 0.05, COTE.z], fov: 31 },
-    { f: B('sixhours') + 118, pos: [-5.5, 6.6, 5.2], look: [-0.2, 3.0, 17.8], fov: 40 },
-    { f: E('sixhours'), pos: [-13, 8.5, -1], look: [0.6, 2.0, 13.7], fov: 44, ease: 'io' }] }) },
+    { f: B('sixhours'), pos: [1.6, 6.0, 11.0], look: [-1.2, 4.9, 15.9], fov: 37 },
+    { f: B('sixhours') + 52, pos: [0.3, 5.5, 12.3], look: [-1.65, 5.0, 15.6], fov: 34 },
+    { f: B('sixhours') + 78, pos: [-0.4, 5.25, 13.3], look: [-1.64, 4.64, 15.55], fov: 32 },
+    { f: B('sixhours') + 110, pos: [-0.55, 5.15, 13.1], look: [-1.66, 4.6, 15.55], fov: 31 },
+    { f: E('sixhours'), pos: [-0.7, 5.2, 12.95], look: [-1.63, 4.58, 15.6], fov: 31, ease: 'io' }] }) },
   hook: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('hook'), pos: [5.2, 3.8, 27.5], look: [0.05, 2.9, 12.5], fov: 39 },
-    { f: E('hook'), pos: [5.0, 3.75, 27.0], look: [0.02, 2.92, 12.5], fov: 37, ease: 'io' }] }) },
+    { f: B('hook'), pos: [1.45, 2.45, 25.45], look: [0.02, 2.82, 12.55], fov: 44 },
+    { f: E('hook'), pos: [1.25, 2.3, 24.65], look: [0.02, 2.84, 12.55], fov: 42.5, ease: 'io' }] }) },
 };
 const RIG = buildRig({
   total: TOTAL,
@@ -301,12 +321,17 @@ export const RIG_META = {
   samples: RIG.samples,
 };
 export const dofAt = (f) => {
-  const S = shotAt(f), C = camAt(f), hp = heroPosAt(f);
-  let cinf = 2.2;
-  if (['race', 'flight', 'champion', 'luckiest', 'follow'].includes(S.id)) cinf = 1.3;
+  const S = shotAt(f), C = camAt(f);
+  let hp = heroPosAt(f), cinf = 2.2;
+  if (['flight', 'champion', 'luckiest', 'follow'].includes(S.id)) cinf = 1.3;
   if (['dialogue', 'laugh', 'lastsecond', 'dovecote', 'accuse'].includes(S.id)) cinf = 3.6;
   if (S.id === 'hook') cinf = 2.6;
-  if (S.id === 'sixhours' && f > B('sixhours') + 100) cinf = 1.2;
+  // R2 race: focus rides the winning grey, then snaps to the bookmaker's
+  // face for the reaction push-in.
+  if (S.id === 'race') { cinf = 1.3; hp = f < B('race') + 58 ? [horsesAt(f).xs[2], 1.2, 0.9] : [5.6, 1.5, 3.6]; }
+  // R2 sixhours: focus locked on the perch exchange point; the close phase
+  // gets a stronger blur so the untying reads against a soft roof.
+  if (S.id === 'sixhours') { cinf = f > B('sixhours') + 70 ? 3.0 : 1.6; hp = [-1.65, 4.7, 15.55]; }
   const d = Math.hypot(C.pos[0] - hp[0], C.pos[1] - hp[1], C.pos[2] - hp[2]);
   return { focus: d, cinf };
 };
@@ -358,12 +383,19 @@ export const castAt = (f) => {
       std('bookmaker', OUTFITS.bookmaker, { expr: 'nervous', mode: 'stand', blink: blinkAt(f, 12), seed: 12, prop: ['point', -0.4],
         ...head(f, 12, 1, 0.3, -0.05, 0.2) }, BOOK_STALL.x, BOOK_STALL.z, { yaw: 0.3 });
       std('villager1', OUTFITS.villager1, { expr: 'shock', mode: 'stand', blink: blinkAt(f, 13), seed: 13,
-        ...head(f, 13, -2, -0.3, 0.25, 0) }, 0.6, 1.6, { yaw: -0.5 });
+        ...head(f, 13, -2, -0.3, 0.25, 0) }, -4.75, 0.5, { yaw: -0.5 });
       std('villager2', OUTFITS.villager2, { expr: 'shock', mode: 'stand', blink: blinkAt(f, 14), seed: 14,
         ...head(f, 14, -2, 0.35, 0.2, 0) }, -4.3, 1.9, { yaw: 0.55 });
       break;
     }
-    case 'race': break;   // horses only — the race sells the line
+    case 'race': {
+      // R2 REACTION: the bookmaker waits at the finish post — the camera
+      // leaves the horses and lands on his stunned face as the no-name
+      // grey wins by lengths.
+      std('bookmaker', OUTFITS.bookmaker, { expr: 'shock', mode: 'stand', blink: blinkAt(f, 12), seed: 12,
+        ...head(f, 12, -2.5, -0.35, 0.15, -0.2) }, 5.6, 3.6, { yaw: -0.35 });
+      break;
+    }
     case 'champion': {
       const fallU = smooth(ramp(f, B('champion') + 34, B('champion') + 56));
       std('champion', OUTFITS.champion, { expr: fallU > 0.5 ? 'dazed' : 'stern', mode: fallU > 0.04 ? 'fall' : 'stand', phase: q(fallU, 2),
@@ -389,15 +421,17 @@ export const castAt = (f) => {
       break;
     }
     case 'gold': {
-      // a man presses a pouch of gold on him — just to stand near him
-      std('gambler', OUTFITS.gambler, { expr: 'grin', mode: 'stand', blink: blinkAt(f, 11), seed: 11,
+      // R2 exchange framing (mirrors the approved moonrent pair-3): the two
+      // men stand close, faces big at the frame edges, hands + gold meeting
+      // at centre as the camera pushes in.
+      std('gambler', OUTFITS.gambler, { expr: 'grin', mode: 'stand', blink: blinkAt(f, 11), seed: 11, prop: ['point', 0.55],
         ...head(f, 11, -1.5, 0.3, 0.0, 0.3) }, 0.2, 1.8, { yaw: 0.4 });
       std('villager1', OUTFITS.villager1, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 13), seed: 13, prop: ['point', 0.75],
-        ...head(f, 13, -1, -0.45, 0.05, -0.35) }, 1.6, 2.5, { yaw: -0.55 });
+        ...head(f, 13, -1, -0.45, 0.05, -0.35) }, 1.05, 2.35, { yaw: -0.55 });
       std('villager2', OUTFITS.villager2, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 14), seed: 14,
         ...head(f, 14, -1, -0.2, 0.15, 0) }, -1.15, 3.1, { yaw: 0.5 });
       std('villager3', OUTFITS.villager3, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 15), seed: 15,
-        ...head(f, 15, -1, 0.3, 0.15, 0) }, 0.75, 3.85, { yaw: -0.2 });
+        ...head(f, 15, -1, 0.3, 0.15, 0) }, 2.6, 3.3, { yaw: -0.2 });
       break;
     }
     case 'lastsecond': {
@@ -466,7 +500,15 @@ export const castAt = (f) => {
         ...head(f, 11, -1.5, GG.look, GG.lookY, -0.2) }, PLAT_G.x, PLAT_G.z, { y: PLATFORM_Y, ground: PLATFORM_Y, blob: false, yaw: -0.5 });
       break;
     }
-    case 'hook': break;   // the board shot — no cast
+    case 'hook': {
+      // R2 FINAL: character beat + hook board together — the gambler kneels
+      // in the foreground pointing up at the board as it fades in behind
+      // him; his head stays below the panel, the text fully readable.
+      const HP = gamblerHookPose(f);
+      std('gambler', OUTFITS.gambler, { expr: 'grin', mode: HP.mode, squash: HP.squash, blink: blinkAt(f, 11), seed: 11, prop: ['point', 0.12],
+        ...head(f, 11, -2, 0.1, 0.5, 0) }, 0.45, 19.3, { yaw: 0.1 });
+      break;
+    }
   }
   return out;
 };
