@@ -186,6 +186,75 @@ const dirtCanvas = (seed) => {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4;
   return t;
 };
+// impact-scar texture: same rock family as the tunnel walls but painted at
+// close-up density (fine grain, thin strata) + jagged radial cracks and a
+// scorched dent at the centre (canvas centre = crater centre)
+const craterCanvas = (seed) => {
+  const c = document.createElement('canvas'); c.width = c.height = 512;
+  const g = c.getContext('2d');
+  let sd = seed; const rnd = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
+  g.fillStyle = '#9a7350'; g.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 14; i++) {
+    const y0 = i * 37 + rnd() * 14, h = 10 + rnd() * 18;
+    g.fillStyle = '#6e4c2c'; g.globalAlpha = 0.30 + rnd() * 0.18;
+    g.beginPath(); g.moveTo(0, y0);
+    for (let x = 0; x <= 512; x += 32) g.lineTo(x, y0 + Math.sin(x * 0.03 + i * 2.1) * 4 + rnd() * 3);
+    for (let x = 512; x >= 0; x -= 32) g.lineTo(x, y0 + h + Math.sin(x * 0.026 + i) * 4);
+    g.closePath(); g.fill();
+  }
+  g.globalAlpha = 1;
+  for (let i = 0; i < 5200; i++) { g.fillStyle = rnd() > 0.5 ? 'rgba(255,230,190,0.13)' : 'rgba(30,16,6,0.14)'; g.fillRect(rnd() * 512, rnd() * 512, 1.8, 1.8); }
+  for (let i = 0; i < 200; i++) {
+    const x = rnd() * 512, y = rnd() * 512, r = 5 + rnd() * 26;
+    const gr = g.createRadialGradient(x, y, 1, x, y, r);
+    gr.addColorStop(0, rnd() > 0.5 ? 'rgba(255,214,160,0.10)' : 'rgba(40,22,8,0.10)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+  }
+  const cx = 256, cy = 256;
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * Math.PI * 2 + rnd() * 0.5, len = 80 + rnd() * 105;
+    let x = cx, y = cy; const steps = 5 + (rnd() * 3 | 0);
+    g.strokeStyle = 'rgba(34,18,7,0.6)'; g.lineWidth = 3; g.beginPath(); g.moveTo(x, y);
+    for (let k = 1; k <= steps; k++) { const t = k / steps; x = cx + Math.cos(a + (rnd() - 0.5) * 0.35) * len * t; y = cy + Math.sin(a + (rnd() - 0.5) * 0.35) * len * t; g.lineTo(x, y); }
+    g.stroke();
+    if (rnd() > 0.35) { const bx = cx + Math.cos(a) * len * 0.55, by = cy + Math.sin(a) * len * 0.55, ba = a + (rnd() > 0.5 ? 0.7 : -0.7); g.lineWidth = 1.6; g.beginPath(); g.moveTo(bx, by); g.lineTo(bx + Math.cos(ba) * len * 0.3, by + Math.sin(ba) * len * 0.3); g.stroke(); }
+  }
+  const sc = g.createRadialGradient(cx, cy, 4, cx, cy, 105);
+  sc.addColorStop(0, 'rgba(24,12,4,0.62)'); sc.addColorStop(0.55, 'rgba(30,16,6,0.30)'); sc.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = sc; g.beginPath(); g.arc(cx, cy, 105, 0, 7); g.fill();
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return t;
+};
+// radial alpha fade so a crater patch melts into the wall around it
+const craterAlpha = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const g = c.getContext('2d');
+  const gr = g.createRadialGradient(128, 128, 40, 128, 128, 128);
+  gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.5, '#ffffff'); gr.addColorStop(1, '#000000');
+  g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
+  return new THREE.CanvasTexture(c);
+})();
+// burlap for the gold sack: woven cross-hatch, vertical fold bands, stitched seam
+const sackCanvas = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const g = c.getContext('2d');
+  let sd = 47; const rnd = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
+  g.fillStyle = '#96793f'; g.fillRect(0, 0, 256, 256);
+  for (let y = 0; y < 256; y += 3) { g.fillStyle = (y / 3) % 2 ? 'rgba(60,40,14,0.10)' : 'rgba(255,230,180,0.07)'; g.fillRect(0, y, 256, 1.6); }
+  for (let x = 0; x < 256; x += 3) { g.fillStyle = (x / 3) % 2 ? 'rgba(60,40,14,0.08)' : 'rgba(255,230,180,0.05)'; g.fillRect(x, 0, 1.6, 256); }
+  for (let i = 0; i < 7; i++) {
+    const x0 = i * 38 + rnd() * 12, w = 16 + rnd() * 20;
+    const gr = g.createLinearGradient(x0, 0, x0 + w, 0);
+    const dk = rnd() > 0.45;
+    gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(0.5, dk ? 'rgba(52,34,10,0.20)' : 'rgba(255,226,170,0.14)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr; g.fillRect(x0, 0, w, 256);
+  }
+  g.strokeStyle = 'rgba(46,28,8,0.55)'; g.lineWidth = 2; g.setLineDash([7, 5]);
+  g.beginPath(); g.moveTo(0, 42); g.lineTo(256, 42); g.stroke(); g.setLineDash([]);
+  for (let i = 0; i < 130; i++) { const x = rnd() * 256, y = rnd() * 256, r = 4 + rnd() * 18; const gr = g.createRadialGradient(x, y, 1, x, y, r); gr.addColorStop(0, 'rgba(50,32,10,0.10)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4;
+  return t;
+})();
 const MAT = {
   rock: toon({ map: rockCanvas(8, '#9a7350', '#6e4c2c', 'rgba(255,214,160,1)'), color: '#b98d5f' }),
   rockDk: toon({ map: rockCanvas(9, '#7d5a38', '#54381e', 'rgba(230,190,140,1)'), color: '#96754c' }),
@@ -197,6 +266,7 @@ const MAT = {
   steel: new THREE.MeshStandardMaterial({ color: 0x8f979e, roughness: 0.38, metalness: 0.85, envMap, envMapIntensity: 0.9 }),
   ironDk: new THREE.MeshStandardMaterial({ color: 0x2c2c30, roughness: 0.55, metalness: 0.6, envMap, envMapIntensity: 0.5 }),
   cloth: toon({ color: '#8a6f42' }),
+  sack: toon({ map: sackCanvas, color: '#c9a86a' }), rope: toon({ color: '#4c3016' }),
   red: toon({ color: '#a02c22' }),
   lampGlass: new THREE.MeshBasicMaterial({ color: 0xffc36a }),
   dark: toon({ color: '#33302c' }),
@@ -324,6 +394,59 @@ const saltFlecks = [];
     world.add(m); saltFlecks.push(m);
   }
 }
+// gold IMPACT CRATERS on the exact spots the shots hit (one per shot): a
+// scarred rock patch (close-up grain + painted radial cracks, edges faded
+// into the wall), a dented crater bowl with a jagged broken lip of rock
+// shards, and chunky 3D gold nuggets embedded in and around the hole —
+// everything shaded geometry, faded in per-patch (saltP). Local frame:
+// +Z out of the wall, X along the tunnel, Y up.
+const splatMats = [];
+{
+  const craterTex = craterCanvas(23);
+  let seed = 97; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const spots = [[3.49, 1.8, 0.6, -1], [-3.49, 2.0, -3.0, 1], [3.49, 1.6, -5.0, -1]];
+  for (const [sx, sy, sz, dir] of spots) {
+    const mats = [];
+    const reg = (mat, base) => { mat.transparent = true; mat.opacity = 0; mats.push({ mat, base }); return mat; };
+    const smat = new THREE.MeshBasicMaterial({ map: sparkTex, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
+    splatMats.push({ mats, smat });
+    const grp = new THREE.Group(); grp.position.set(sx, sy, sz); grp.rotation.y = dir < 0 ? -Math.PI / 2 : Math.PI / 2; grp.rotateZ(rnd() * 6.28); world.add(grp);
+    // scarred rock patch (alpha-faded edges melt it into the tunnel wall)
+    const patchMat = reg(toon({ map: craterTex, color: '#ad8456' }), 1);
+    patchMat.alphaMap = craterAlpha; patchMat.depthWrite = false;
+    const patch = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 1.9), patchMat);
+    patch.userData.ndSkip = true; grp.add(patch);
+    // dented crater bowl: lathe profile — recessed centre, raised lip
+    const prof = [[0.001, -0.052], [0.05, -0.05], [0.10, -0.04], [0.14, -0.022], [0.175, 0.0], [0.205, 0.014]].map(([x, y]) => new THREE.Vector2(x, y));
+    const bowlMat = reg(MAT.rockDk.clone(), 1); bowlMat.color.set('#7d5f3a'); bowlMat.side = THREE.DoubleSide;
+    const bowlGeo = new THREE.LatheGeometry(prof, 20); bowlGeo.rotateX(Math.PI / 2);
+    const bowl = new THREE.Mesh(bowlGeo, bowlMat); bowl.position.z = 0.004; bowl.userData.ndSkip = true; grp.add(bowl);
+    // dark core at the bottom of the dent
+    const hole = new THREE.Mesh(new THREE.CircleGeometry(0.06, 14), reg(toon({ color: '#201105' }), 1));
+    hole.position.z = -0.04; hole.userData.ndSkip = true; grp.add(hole);
+    // broken lip: flat rock chunks half-buried around the rim (rubble, not spikes)
+    const chunkMat = reg(MAT.rockDk.clone(), 1); chunkMat.color.set('#755631');
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 + rnd() * 0.5, rr = 0.155 + rnd() * 0.055;
+      const ch = new THREE.Mesh(new THREE.IcosahedronGeometry(0.034 + rnd() * 0.026, 0), chunkMat);
+      ch.position.set(Math.cos(a) * rr, Math.sin(a) * rr, 0.002 + rnd() * 0.012);
+      ch.rotation.set(rnd() * 3, rnd() * 3, rnd() * 3); ch.scale.set(1, 0.85, 0.5);
+      ch.userData.ndSkip = true; grp.add(ch);
+    }
+    // embedded gold: smooth chunky nuggets in the bowl + on the lip, flecks
+    // beyond (spheres like the vein/pile gold — no facet ink, they read gold)
+    const goldA = reg(MAT.gold.clone(), 1), goldB = reg(MAT.goldDk.clone(), 1);
+    const nug = (x, y, z, r, mat) => { const m = new THREE.Mesh(new THREE.SphereGeometry(r, 7, 5), mat); m.position.set(x, y, z); m.rotation.set(rnd() * 3, rnd() * 3, rnd() * 3); m.scale.set(0.85 + rnd() * 0.4, 0.75 + rnd() * 0.35, 0.55 + rnd() * 0.25); m.userData.ndSkip = true; grp.add(m); };
+    nug(0.01, 0.0, -0.012, 0.062, goldA); nug(-0.06, 0.05, -0.016, 0.048, goldA); nug(0.065, -0.045, -0.014, 0.043, goldA);
+    for (let i = 0; i < 5; i++) { const a = rnd() * 6.28, rr = 0.13 + rnd() * 0.09; nug(Math.cos(a) * rr, Math.sin(a) * rr, 0.014 + rnd() * 0.014, 0.03 + rnd() * 0.022, goldA); }
+    for (let i = 0; i < 5; i++) { const a = rnd() * 6.28, rr = 0.28 + rnd() * 0.24; nug(Math.cos(a) * rr, Math.sin(a) * rr, 0.004, 0.014 + rnd() * 0.01, rnd() > 0.4 ? goldA : goldB); }
+    // two small glints only — the flat dot/star splat look is gone
+    for (let i = 0; i < 2; i++) {
+      const st = new THREE.Mesh(new THREE.PlaneGeometry(0.13, 0.13), smat);
+      st.position.set((rnd() - 0.5) * 0.2, (rnd() - 0.5) * 0.2, 0.045); st.userData.ndSkip = true; grp.add(st);
+    }
+  }
+}
 const pileGlints = [];
 {
   let seed = 13; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
@@ -345,7 +468,84 @@ const pileGlints = [];
   pile(-2.7, -6.5, 1.1, false);
   pile(0.85, 0.7, 0.8, true);
 }
-const fuseSpark = softGlow(0.5, '#ffd27a', 0); fuseSpark.position.set(2.95, 1.02, -30.6); world.add(fuseSpark);
+const fuseSpark = softGlow(0.3, '#ffd27a', 0); fuseSpark.position.set(2.95, 1.02, -30.6); world.add(fuseSpark);
+
+// ---------- the loading-insert rig: work crate + break-action shotgun ----------
+// The crate is permanent set dressing near the entrance; the rig (shotgun
+// broken open on the crate top, spare shells, the gold pouch) appears only
+// for the `insert` shot, posed per-frame by worldAt's load keys.
+{
+  const crateG = new THREE.Group(); crateG.position.set(2.02, 0, 2.32); crateG.rotation.y = -0.35; world.add(crateG);
+  add(tbox(0.95, 0.75, 0.7, 2), MAT.wood, 0, 0.375, 0, crateG, { cast: false });
+  add(tbox(1.0, 0.05, 0.75, 2), MAT.woodDk, 0, 0.775, 0, crateG, { cast: false });
+}
+const loadG = new THREE.Group(); loadG.position.set(2.02, 0.8, 2.32); loadG.rotation.y = -0.5; world.add(loadG);
+const loadParts = { fills: [] };
+{
+  const g = loadG;
+  // THE INSERT SUBJECT: two open shells standing on the crate, mouths up.
+  // Gold pours from the pouch (resting on a wooden block behind them) into
+  // shell A; a nugget drops into shell B; the opened shotgun lies behind.
+  // A shell = brass base + red tube + dark mouth + gold fill disc (fillK).
+  const mkShell = (sx, sz, tipped) => {
+    const sg = new THREE.Group(); sg.position.set(sx, tipped ? 0.03 : 0, sz); if (tipped) sg.rotation.z = Math.PI / 2; g.add(sg);
+    add(new THREE.CylinderGeometry(0.03, 0.03, 0.022, 10), MAT.goldDk, 0, 0.011, 0, sg, { cast: false });
+    add(new THREE.CylinderGeometry(0.028, 0.028, 0.06, 10), MAT.red, 0, 0.052, 0, sg, { cast: false });
+    if (!tipped) {
+      const mouth = new THREE.Mesh(new THREE.CircleGeometry(0.024, 10), MAT.dark);
+      mouth.position.set(0, 0.0835, 0); mouth.rotation.x = -Math.PI / 2; sg.add(mouth);
+      const fillMat = MAT.gold.clone(); fillMat.transparent = true; fillMat.opacity = 0;
+      const fill = new THREE.Mesh(new THREE.SphereGeometry(0.0235, 10, 6), fillMat);
+      fill.scale.y = 0.38; fill.position.set(0, 0.0825, 0); fill.userData.ndSkip = true; sg.add(fill); loadParts.fills.push(fillMat);
+    }
+    return sg;
+  };
+  mkShell(-0.02, 0.20, false);
+  mkShell(0.13, 0.24, false);
+  mkShell(0.235, 0.10, true);
+  // (no gun in the insert: the `load` shot before it and the firing shots
+  // after it carry the gun — the insert stays tight on shells + gold)
+  // the gold pouch rests on a low wooden block, neck tipped over shell A —
+  // a CLOTH SACK: lumpy woven body, gathered fold neck, rope tie (not a rock)
+  add(tbox(0.24, 0.16, 0.26, 2), MAT.wood, -0.06, 0.08, -0.02, g, { cast: false });
+  const pouch = new THREE.Group(); pouch.position.set(-0.06, 0.235, -0.02); g.add(pouch); loadParts.pouch = pouch;
+  {
+    let sd = 53; const srnd = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
+    const bodyGeo = new THREE.SphereGeometry(0.098, 14, 11);
+    const bp = bodyGeo.attributes.position;
+    for (let i = 0; i < bp.count; i++) { const vx = bp.getX(i), vy = bp.getY(i), vz = bp.getZ(i); const n = 1 + (srnd() - 0.5) * 0.10; const pinch = vy > 0.03 ? 1 - 0.38 * Math.min(1, (vy - 0.03) / 0.068) : 1; bp.setXYZ(i, vx * n * pinch, vy * (vy < -0.04 ? 0.82 : n), vz * n * pinch); }
+    bodyGeo.computeVertexNormals();
+    const pb = add(bodyGeo, MAT.sack, 0, 0, 0, pouch, { cast: false }); pb.scale.set(1.07, 0.8, 1.0); pb.rotation.z = 0.07;
+    // gathered neck: radial cloth folds, leaning toward shell A
+    const neckGeo = new THREE.CylinderGeometry(0.024, 0.042, 0.042, 12, 1);
+    const np = neckGeo.attributes.position;
+    for (let i = 0; i < np.count; i++) { const vx = np.getX(i), vz = np.getZ(i); const s = 1 + 0.11 * Math.sin(Math.atan2(vz, vx) * 6 + 0.7); np.setX(i, vx * s); np.setZ(i, vz * s); }
+    neckGeo.computeVertexNormals();
+    const neck = add(neckGeo, MAT.sack, 0, 0.066, 0.012, pouch, { cast: false }); neck.rotation.x = 0.6;
+    // rope tie hugging the neck base + two short hanging ends
+    const rope = add(new THREE.TorusGeometry(0.040, 0.0105, 6, 14), MAT.rope, 0, 0.052, 0.006, pouch, { cast: false });
+    rope.rotation.x = Math.PI / 2 + 0.6;
+    const re1 = add(new THREE.CylinderGeometry(0.006, 0.005, 0.04, 5), MAT.rope, 0.026, 0.028, 0.034, pouch, { cast: false }); re1.rotation.z = 0.35; re1.rotation.x = -0.2;
+    const re2 = add(new THREE.CylinderGeometry(0.006, 0.005, 0.032, 5), MAT.rope, 0.037, 0.031, 0.026, pouch, { cast: false }); re2.rotation.z = 0.6;
+  }
+  // the pour stream (sack mouth -> shell A mouth), aligned to the FULL-POUR
+  // pose — it is only visible while pourK > 0, when the sack tips forward
+  const streamMat = new THREE.MeshBasicMaterial({ color: 0xffd76a, transparent: true, opacity: 0, depthWrite: false });
+  const sFrom = new THREE.Vector3(-0.06, 0.296, 0.041), sTo = new THREE.Vector3(-0.02, 0.088, 0.20);
+  const sDir = sTo.clone().sub(sFrom);
+  const stream = new THREE.Mesh(new THREE.CylinderGeometry(0.0045, 0.0065, sDir.length(), 6), streamMat);
+  stream.position.copy(sFrom).addScaledVector(sDir, 0.5);
+  stream.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), sDir.clone().normalize().negate());
+  stream.userData.ndSkip = true; g.add(stream);
+  loadParts.streamMat = streamMat;
+  const nug = add(new THREE.SphereGeometry(0.03, 8, 6), MAT.gold, -0.02, 0.36, 0.06, g, { cast: false });
+  nug.scale.set(1, 0.8, 1); nug.visible = false; loadParts.nugget = nug;
+  for (const [hx, hz] of [[0.25, 0.27], [0.28, 0.21], [0.22, 0.29]]) {
+    const hn = add(new THREE.SphereGeometry(0.016, 7, 5), MAT.gold, hx, 0.012, hz, g, { cast: false }); hn.scale.y = 0.7;
+  }
+  const gl = softGlow(0.26, '#ffe9a8', 0); gl.position.set(0.13, 0.15, 0.26); g.add(gl); loadParts.glint = gl;
+  loadG.visible = false;
+}
 
 // ---------- the shotgun (3D prop, posed by story gunAt) ----------
 const gunG = new THREE.Group(); world.add(gunG);
@@ -356,7 +556,7 @@ const gunG = new THREE.Group(); world.add(gunG);
   barrel.rotation.x = Math.PI / 2;
   add(tbox(0.05, 0.07, 0.3, 2), MAT.gunWood, 0, 0.0, 0.18, gunG, { cast: false });
 }
-const muzzle = softGlow(1.15, '#ffdf9e', 0); world.add(muzzle);
+const muzzle = softGlow(0.9, '#ffdf9e', 0); world.add(muzzle);
 
 // ---------- the paid coin sacks ----------
 const sackG = new THREE.Group(); world.add(sackG);
@@ -508,6 +708,7 @@ function worldState(Ws, f) {
   veinGlow.material.opacity = vk * 0.5;
   veinGlints.forEach((gl, i) => { gl.material.opacity = vk * (0.35 + 0.4 * Math.abs(Math.sin(f * 0.11 + i * 1.9))); });
   saltFlecks.forEach((m) => { m.material.opacity = (Ws.saltK || 0) * (0.35 + 0.65 * Math.abs(Math.sin(f * 0.07 + m.userData.phase))); });
+  splatMats.forEach((s, i) => { const k = (Ws.saltP || [])[i] || 0; for (const e of s.mats) e.mat.opacity = k * e.base; s.smat.opacity = k * (0.3 + 0.5 * Math.abs(Math.sin(f * 0.11 + i * 2.1))); });
   fuseSpark.material.opacity = (Ws.fuseK || 0) * (0.5 + 0.5 * Math.abs(Math.sin(f * 0.9)));
   const G = gunAt(f);
   gunG.visible = G.k > 0.01; gunG.scale.setScalar(0.85);
@@ -516,13 +717,23 @@ function worldState(Ws, f) {
     gunG.rotation.set(G.rx || 0, G.ry || 0, G.rz || 0);
     const tip = new THREE.Vector3(0, 0.05, 0.85).applyEuler(gunG.rotation).add(gunG.position);
     muzzle.position.copy(tip);
-    muzzle.material.opacity = (Ws.muzzleK || 0) * 0.95;
+    muzzle.material.opacity = (Ws.muzzleK || 0) * 0.55;
     muzzle.visible = (Ws.muzzleK || 0) > 0.02;
   } else muzzle.visible = false;
   sackG.visible = (Ws.sackK || 0) > 0.01;
   if (sackG.visible) {
     sackG.position.set(Ws.sackX, Ws.sackY, Ws.sackZ);
     sackGlint.material.opacity = (Ws.sackK || 0) * 0.7 * Math.abs(Math.sin(f * 0.09));
+  }
+  loadG.visible = (Ws.loadK || 0) > 0.01;
+  if (loadG.visible) {
+    for (const fm of loadParts.fills) fm.opacity = (Ws.fillK || 0) * 0.95;
+    loadParts.streamMat.opacity = (Ws.pourK || 0) * 0.85;
+    loadParts.pouch.rotation.x = 0.15 + 0.35 * (Ws.pourK || 0);
+    const nt = Ws.nugT ?? -1;
+    loadParts.nugget.visible = nt >= 0;
+    if (nt >= 0) loadParts.nugget.position.set(-0.02 + 0.15 * nt, 0.36 - 0.265 * nt * nt, 0.06 + 0.18 * nt);
+    loadParts.glint.material.opacity = (Ws.fillK || 0) * (0.14 + 0.18 * Math.abs(Math.sin(f * 0.3)));
   }
 }
 function drawActors(list, cam) {
