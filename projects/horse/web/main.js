@@ -380,7 +380,7 @@ const horseParts = { legs: [], ears: [] };
   // neck + head on the neck pivot (front-top of the chest)
   const neckG = new THREE.Group(); neckG.position.set(0.72, 1.3, 0); b.add(neckG); horseParts.neckG = neckG;
   const neck = add(new THREE.CylinderGeometry(0.155, 0.27, 0.88, 11), MAT.coat, 0.26, 0.3, 0, neckG); neck.rotation.z = -0.62;
-  const maneN = add(tbox(0.85, 0.2, 0.05, 2), MAT.coatDk, 0.02, 0.44, 0, neckG); maneN.rotation.z = -0.62;
+  const maneN = add(tbox(0.85, 0.2, 0.05, 2), MAT.coatDk, 0.07, 0.43, 0, neckG); maneN.rotation.z = 0.95; // R2 fix: the box's long axis now runs ALONG the neck's rear edge (was -0.62, which speared it diagonally through the neck — the "plank" visible in every v1 horse frame)
   const headG = new THREE.Group(); headG.position.set(0.52, 0.62, 0); neckG.add(headG); horseParts.headG = headG;
   const skull = add(new THREE.SphereGeometry(0.29, 13, 10), MAT.coat, 0, 0, 0, headG); skull.scale.set(1.3, 0.8, 0.64);
   const muzzle = add(tbox(0.36, 0.21, 0.21, 2), MAT.muzzle, 0.38, -0.07, 0, headG);
@@ -438,6 +438,29 @@ const treatG = new THREE.Group(); treatG.position.set(6.95, 0.98, 13.0); world.a
     add(new THREE.ConeGeometry(0.045, 0.34, 8), MAT.carrot, 0, -0.14, 0, cg, { cast: false }).rotation.x = Math.PI;
     add(new THREE.SphereGeometry(0.05, 7, 6), MAT.carrotTop, 0, 0.06, 0, cg, { cast: false });
   }
+}
+
+// ---------- the midnight treat bowl, waiting by the shed door ----------
+// Permanent set dressing in front of the dealer's shed — and the star of
+// the L14 INSERT: the 'treat' camera opens on this bowl (story.js) before
+// pulling back to the kneeling dealer and the horse. A wooden feed bowl
+// heaped with the special treat: carrots, always in the same place.
+const bowlG = new THREE.Group(); bowlG.position.set(7.05, 0, 13.15); world.add(bowlG);
+{
+  add(new THREE.CylinderGeometry(0.27, 0.18, 0.17, 14), MAT.woodDk, 0, 0.085, 0, bowlG, { cast: false });
+  add(new THREE.TorusGeometry(0.265, 0.02, 6, 18), MAT.wood, 0, 0.17, 0, bowlG, { cast: false }).rotation.x = Math.PI / 2;
+  add(new THREE.SphereGeometry(0.2, 10, 7), MAT.hay, 0, 0.15, 0, bowlG, { cast: false }).scale.set(1.15, 0.4, 1.15);
+  for (let i = 0; i < 5; i++) {
+    const a = i / 5 * Math.PI * 2 + 0.5;
+    const cg = new THREE.Group(); cg.position.set(Math.cos(a) * 0.09, 0.17, Math.sin(a) * 0.09); cg.rotation.set(Math.sin(a) * 0.55, 0, Math.cos(a) * 0.55 + 0.3); bowlG.add(cg);
+    add(new THREE.ConeGeometry(0.042, 0.32, 8), MAT.carrot, 0, 0.1, 0, cg, { cast: false });
+    add(new THREE.SphereGeometry(0.048, 7, 6), MAT.carrotTop, 0, 0.28, 0, cg, { cast: false });
+  }
+  // two strays beside the bowl — tonight's ration, spilled ready
+  const stray = (x, z, rz) => { const cg = new THREE.Group(); cg.position.set(x, 0.045, z); cg.rotation.z = rz; cg.rotation.y = rz * 1.7; bowlG.add(cg);
+    add(new THREE.ConeGeometry(0.042, 0.32, 8), MAT.carrot, 0, 0, 0, cg, { cast: false }).rotation.x = Math.PI / 2;
+    add(new THREE.SphereGeometry(0.048, 7, 6), MAT.carrotTop, 0, 0, 0.19, cg, { cast: false }); };
+  stray(0.42, 0.14, 0.7); stray(-0.38, 0.24, -0.5);
 }
 
 // ---------- the seventh buyer's hand lantern (mesh; light is lampHand) --
