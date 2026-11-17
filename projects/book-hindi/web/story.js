@@ -2,6 +2,17 @@
 // lock: painted 3D world, flat round-white-head card characters, reference
 // camera grammar — every clause a new shot, push-ins, inserts, word-by-word
 // captions; body.js actions; speak.js performed dialogue).
+// R2 REBUILD (2026-11-17, moonrent R2 standard): same world, cast, timing
+// and mix — every camera re-staged: hook opens ON the showman BIG (head
+// ~40%+) at a low angle with the giant book towering behind him; 'opens'
+// arcs into a pure page INSERT (the open book fills ~90% of frame width,
+// no faces); 'listen' pushes into the fair-kid's wonder face (>=65%);
+// 'reads' is the front-close ACTION beat (the boy flips a page — pageK —
+// and reads, face + page centred); dialogue stays a performed close push;
+// the final frame is a character beat — the showman KNEELS large in the
+// centre-left foreground pointing up at the hook board (board ~85% of
+// frame width, whole panel inside with margins), the boy small under
+// its left end, his head below the board's lowest ink line.
 // ONE fair set + ONE cutaway: the village fair in warm daylight — the
 // giant "book" (a hollow box) centre stage on its platform, stalls,
 // bunting, a ferris wheel behind; and the box's INTERIOR dressed as a
@@ -87,7 +98,7 @@ export const heroAt = (f) => {
     case 'names': return { x: 0.4, z: -2.9 };
     case 'door': return { x: 2.7, z: -7.3 };
     case 'laugh': case 'dialogue': return { x: S.id === 'laugh' ? 1.2 : 0.9, z: S.id === 'laugh' ? -4.6 : -4.2 };
-    case 'hookboard': return { x: -5.75, z: -3.5 };   // left of the board, clear of the swinging cover
+    case 'hookboard': return { x: -3.85, z: -0.62 };   // R2 FINAL (fix 2): centre-left FOREGROUND, kneeling at s=1.05 — head ~21% of frame width, fully in frame, crown below the board's bottom edge so no glyph is ever covered
     default: return { x: 14, z: 8 };
   }
 };
@@ -97,7 +108,7 @@ export const kidAt = (f) => {
     case 'hook': return { x: -1.5, z: -3.2 };
     case 'big': return { x: -1.6, z: -3.4 };
     case 'invite': return { x: -1.3, z: -2.9 };
-    case 'opens': return { x: -1.5, z: -3.2 };
+    case 'opens': return { x: 14, z: 8 };   // parked — the R2 page insert is a pure object shot, no faces
     case 'listen': return { x: -1.2, z: -3.0 };
     case 'name': return { x: -0.7, z: -2.9 };
     case 'jinn': return { x: -1.4, z: -3.3 };
@@ -106,7 +117,7 @@ export const kidAt = (f) => {
     case 'door': return { x: -0.9, z: -8.0 };
     case 'laugh': return { x: -1.2, z: -3.8 };
     case 'dialogue': return { x: -1.5, z: -3.6 };
-    case 'hookboard': return { x: 1.6, z: -4.4 };
+    case 'hookboard': return { x: 15, z: 9 };   // parked — the final frame is the hero, the boy and the board
     default: return { x: 15, z: 9 };
   }
 };
@@ -119,7 +130,7 @@ export const oldAt = (f) => {
     case 'jinn': return { x: 0.6, z: -3.8 };
     case 'money': return { x: 0.2, z: -3.3 };
     case 'names': return { x: 1.4, z: -2.8 };
-    case 'door': return { x: -1.9, z: -7.6 };
+    case 'door': return { x: -2.6, z: -7.9 };   // R2: shifted left so the boy's doorway stays centre-frame
     case 'laugh': return { x: 2.3, z: -4.0 };
     case 'dialogue': return { x: 2.0, z: -3.8 };
     default: return { x: 16, z: 10 };
@@ -128,10 +139,10 @@ export const oldAt = (f) => {
 export const womanAt = (f) => {
   const S = shotAt(f);
   switch (S.id) {
-    case 'hook': return { x: 2.9, z: -3.4 };
+    case 'hook': return { x: 17, z: 11 };   // parked — the R2 opening is the showman + the book only
     case 'invite': return { x: -2.2, z: -3.3 };
-    case 'opens': return { x: -2.4, z: -3.9 };
-    case 'listen': return { x: -2.3, z: -3.8 };
+    case 'opens': return { x: 17, z: 11 };   // parked — pure page insert, no faces
+    case 'listen': return { x: -2.9, z: -4.3 };   // back-left: clears the push into the kid's face
     case 'jinn': return { x: -2.5, z: -3.6 };
     case 'names': return { x: -1.8, z: -2.7 };
     case 'door': return { x: 1.9, z: -7.6 };
@@ -145,7 +156,7 @@ export const manAt = (f) => {
     case 'hook': return { x: -2.8, z: -4.0 };
     case 'jinn': return { x: 2.9, z: -4.1 };
     case 'money': return { x: 2.8, z: -3.2 };
-    case 'door': return { x: 0.9, z: -8.2 };
+    case 'door': return { x: 2.9, z: -8.6 };   // R2 fix: right edge — his shock face stays a reactor, the boy's doorway keeps the centre
     case 'dialogue': return { x: 2.9, z: -4.3 };
     case 'hookboard': return { x: 14, z: 8 };   // parked — the final frame is the hero, the boy and the board
     default: return { x: 18, z: 12 };
@@ -160,7 +171,7 @@ export const boyAt = (f) => {
       return { x: 29.65, z: -30.55, y: 0.11, ground: 0.11, s: 0.7, mode: 'sit' };
     case 'door': return { x: 0, z: -6.26, y: 0.14, ground: 0.14, s: 0.66, mode: 'kneel', group: 'bookbox' };
     case 'dialogue': return { x: 0.3, z: -4.95, s: 0.7, mode: 'stand' };
-    case 'hookboard': return { x: -1.7, z: -3.4, s: 0.7, mode: 'stand' };   // under the board's right end — his head stays below its lowest ink
+    case 'hookboard': return { x: -4.75, z: -2.7, s: 0.7, mode: 'stand' };   // under the board's LEFT end (hero kneels in the centre-left foreground) — head below its lowest ink, fully in frame at the tighter R2 fov
     default: return { x: 40, z: 20, s: 0.7, mode: 'stand' };
   }
 };
@@ -170,8 +181,8 @@ const FOCUS = {
   hook: () => [0.4, 1.4, -5.4],
   big: () => [0, 1.5, -6],
   invite: () => { const h = heroAt(200); return [h.x, 1.5, h.z]; },
-  opens: () => [0, 1.3, -5.9],
-  listen: () => [-0.6, 1.2, -3.3],
+  opens: () => [0, 1.15, -5.8],
+  listen: () => [-1.2, 1.02, -3.0],
   name: () => { const k = kidAt(470); return [k.x, 1.0, k.z]; },
   jinn: () => [0.2, 1.3, -3.9],
   money: () => [1.3, 0.9, -3.8],
@@ -191,79 +202,96 @@ export const heroPosAt = (f) => FOCUS[shotAt(f).id]();
 // ---------- cameras: EVERY shot is a camrig track on a subject ----------
 const heroPos = (f) => { const h = heroAt(f); return [h.x, h.y || 0, h.z]; };
 const RIG_BY_ID = {
-  // hook: opens ON the showman mid-action — he throws the great cover
-  // open with one hand and presents the book with the other; slow push.
+  // hook: R2 OPENING — ON the showman BIG from frame 0, low angle, mid-
+  // action (one arm flinging the cover open, the other presenting); the
+  // giant book towers behind his shoulder; the push-in runs from f0.
   hook: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 0, pos: [3.2, 1.75, 2.2], look: [0.1, 1.35, -5.2], fov: 41 },
-    { f: 89, pos: [2.7, 1.62, 0.9], look: [0.3, 1.4, -5.1], fov: 37, ease: 'surge' }] }) },
+    { f: 0, pos: [2.2, 0.98, -2.0], look: [1.3, 1.6, -4.7], fov: 41 },
+    { f: 89, pos: [2.05, 1.03, -2.35], look: [1.32, 1.58, -4.68], fov: 38, ease: 'surge' }] }) },
   // big: low angle — the book towers a full man's height, the showman
-  // himself standing beside it for scale, pages glinting
+  // himself standing FULLY in frame beside it for scale, pages glinting
   big: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 90, pos: [3.1, 1.0, -0.2], look: [0.55, 1.5, -5.9], fov: 40 },
-    { f: 172, pos: [2.8, 1.05, -0.7], look: [0.5, 1.48, -5.9], fov: 37, ease: 'surge' }] }) },
-  invite: { cut: 'hard', raw: pushInCam({ subject: heroPos, a: 173, b: 259, d0: 4.6, d1: 3.2, h0: 1.62, h1: 1.58, lookOff: [0, 1.5, 0], fov0: 40, fov1: 35,
+    { f: 90, pos: [3.4, 1.0, 0.2], look: [0.62, 1.4, -5.9], fov: 43 },
+    { f: 172, pos: [3.15, 1.05, -0.3], look: [0.64, 1.42, -5.9], fov: 40, ease: 'surge' }] }) },
+  invite: { cut: 'hard', raw: pushInCam({ subject: heroPos, a: 173, b: 259, d0: 3.5, d1: 2.5, h0: 1.62, h1: 1.57, lookOff: [0, 1.5, 0], fov0: 38, fov1: 33,
     dir: () => [0.25, 0.97] }) },
-  // opens: the cover swings wide and the golden pages catch the sun
+  // opens: the cover swings wide — the camera ARCS from the left across
+  // the front as it opens, landing in a pure page INSERT: the open book
+  // (golden page face + swung cover) fills ~90% of the frame width.
+  // No faces anywhere in this shot (kid + woman parked).
   opens: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 260, pos: [-2.5, 1.5, -0.9], look: [0, 1.25, -5.8], fov: 39 },
-    { f: 347, pos: [-2.1, 1.45, -1.6], look: [0, 1.3, -5.85], fov: 35, ease: 'surge' }] }) },
-  // listen: a slow drift across the crowd's faces — mouths open, eyes wide
+    { f: 260, pos: [-2.2, 1.5, -1.3], look: [0, 1.25, -5.8], fov: 40 },
+    { f: 308, pos: [0.55, 1.36, -2.5], look: [0, 1.17, -5.78], fov: 43, ease: 'smooth' },
+    { f: 347, pos: [1.42, 1.32, -3.32], look: [-0.12, 1.15, -5.78], fov: 45, ease: 'surge' }] }) },
+  // listen: a drift across the crowd's faces that PUSHES IN on the
+  // fair-kid — the REACTION beat: his wonder face passes 65% of frame
+  // width as the book talks (V3 buyer-close-up grammar).
   listen: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 348, pos: [0.2, 1.35, 0.6], look: [-0.9, 1.15, -3.3], fov: 36 },
-    { f: 424, pos: [0.55, 1.3, 0.2], look: [0.9, 1.2, -3.5], fov: 33, ease: 'surge' }] }) },
-  // name: ON the boy who asked — his face fills the frame as the book
+    { f: 348, pos: [0.35, 1.34, 0.65], look: [-0.5, 1.18, -3.35], fov: 37 },
+    { f: 388, pos: [-0.15, 1.26, -0.15], look: [-0.95, 1.1, -3.2], fov: 34, ease: 'smooth' },
+    { f: 424, pos: [-1.04, 1.14, -1.6], look: [-1.2, 1.03, -3.0], fov: 31, ease: 'surge' }] }) },
+  // name: ON the boy who asked — a push into his face as the book
   // answers with his own name; the book looms soft behind him
-  name: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 425, pos: [-0.5, 1.25, 0.3], look: [-0.7, 1.0, -2.95], fov: 37 },
-    { f: 528, pos: [-0.55, 1.2, -0.5], look: [-0.68, 1.02, -2.95], fov: 32, ease: 'surge' }] }) },
+  name: { cut: 'hard', raw: pushInCam({ subject: () => { const k = kidAt(470); return [k.x, 0, k.z]; }, a: 425, b: 528, d0: 2.7, d1: 1.85, h0: 1.18, h1: 1.12, lookOff: [0, 1.03, 0], fov0: 35, fov1: 30,
+    dir: () => [0.18, 0.98] }) },
   jinn: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 529, pos: [2.8, 1.6, 0.9], look: [0.2, 1.3, -3.9], fov: 40 },
-    { f: 626, pos: [2.4, 1.5, 0.3], look: [0.1, 1.32, -3.95], fov: 36, ease: 'surge' }] }) },
+    { f: 529, pos: [2.5, 1.55, 0.5], look: [0.15, 1.3, -3.95], fov: 38 },
+    { f: 626, pos: [2.2, 1.48, -0.1], look: [0.12, 1.31, -3.95], fov: 34, ease: 'surge' }] }) },
   // money: down at the bowl — coin after coin, his blessing hand over them
   money: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 627, pos: [2.6, 1.35, -0.9], look: [1.3, 0.95, -3.75], fov: 38 },
-    { f: 737, pos: [2.3, 1.25, -1.5], look: [1.25, 0.9, -3.8], fov: 34, ease: 'surge' }] }) },
+    { f: 627, pos: [2.35, 1.3, -1.15], look: [1.28, 0.92, -3.8], fov: 36 },
+    { f: 737, pos: [2.1, 1.2, -1.75], look: [1.26, 0.9, -3.8], fov: 32, ease: 'surge' }] }) },
   // reveal: the camera slips AROUND the book — seams, boards, a door:
   // it was never a book at all
   reveal: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 738, pos: [-3.4, 1.7, -2.2], look: [-0.3, 1.3, -6.2], fov: 40 },
-    { f: 848, pos: [-3.1, 1.6, -3.4], look: [-0.15, 1.25, -6.3], fov: 36, ease: 'surge' }] }) },
-  // inside: the payoff insert — a small boy among little books, reading
+    { f: 738, pos: [-3.3, 1.65, -2.4], look: [-0.2, 1.28, -6.25], fov: 38 },
+    { f: 848, pos: [-2.95, 1.55, -3.6], look: [-0.15, 1.24, -6.3], fov: 34, ease: 'surge' }] }) },
+  // inside: the payoff — a small boy among little books, reading;
+  // closer than v1, his corner centred
   inside: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 849, pos: [31.15, 1.35, -28.8], look: [29.6, 0.78, -30.45], fov: 39 },
-    { f: 960, pos: [30.95, 1.3, -29.05], look: [29.6, 0.8, -30.45], fov: 35, ease: 'surge' }] }) },
+    { f: 849, pos: [30.62, 1.24, -28.95], look: [29.62, 0.8, -30.48], fov: 36 },
+    { f: 960, pos: [30.45, 1.18, -29.22], look: [29.62, 0.81, -30.48], fov: 32, ease: 'surge' }] }) },
   // holes: over the boy's shoulder — the glowing listening holes ahead,
   // his head tipped toward them in the lower frame
   holes: { cut: 'hard', raw: keysCam({ keys: [
     { f: 961, pos: [29.3, 0.98, -31.4], look: [30.02, 1.22, -28.82], fov: 36 },
     { f: 1044, pos: [29.42, 0.96, -31.1], look: [30.0, 1.24, -28.84], fov: 32, ease: 'surge' }] }) },
+  // reads: the ACTION beat — front close on the boy inside the box: he
+  // FLIPS a page of the stand book (pageK, f1068-1084), finds the
+  // answer, points and reads it out; face + page centred together.
   reads: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1045, pos: [28.85, 1.15, -28.85], look: [29.68, 0.84, -30.42], fov: 38 },
-    { f: 1148, pos: [29.0, 1.1, -29.15], look: [29.68, 0.85, -30.42], fov: 34, ease: 'surge' }] }) },
+    { f: 1045, pos: [28.92, 1.13, -29.0], look: [29.67, 0.84, -30.43], fov: 36 },
+    { f: 1148, pos: [29.05, 1.09, -29.3], look: [29.67, 0.84, -30.43], fov: 32, ease: 'surge' }] }) },
   // names: before the show — the showman works the crowd, collecting
   // names with a smile and a pointing finger
   names: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1149, pos: [1.9, 1.5, 0.7], look: [0.1, 1.25, -2.9], fov: 39 },
-    { f: 1271, pos: [1.6, 1.42, 0.1], look: [0.05, 1.28, -2.95], fov: 35, ease: 'surge' }] }) },
+    { f: 1149, pos: [1.75, 1.48, 0.35], look: [0.08, 1.27, -2.92], fov: 37 },
+    { f: 1271, pos: [1.5, 1.4, -0.2], look: [0.06, 1.28, -2.94], fov: 33, ease: 'surge' }] }) },
   // sneeze: inside again — the boy's head snaps, the little books jump
   sneeze: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1272, pos: [30.7, 1.3, -28.8], look: [29.68, 0.85, -30.42], fov: 39 },
-    { f: 1353, pos: [30.5, 1.26, -29.05], look: [29.68, 0.87, -30.42], fov: 35, ease: 'surge' }] }) },
+    { f: 1272, pos: [30.6, 1.28, -28.9], look: [29.68, 0.86, -30.42], fov: 37 },
+    { f: 1353, pos: [30.42, 1.24, -29.15], look: [29.68, 0.87, -30.42], fov: 34, ease: 'surge' }] }) },
   // door: behind the book — the crowd hauls the back door open and the
-  // whole fair sees the boy blinking inside
+  // whole fair sees the boy blinking inside; pushed closer than v1 so
+  // the boy in the doorway reads big, the old man off to the left edge
   door: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1354, pos: [3.5, 1.75, -11.8], look: [-0.25, 1.1, -6.35], fov: 41 },
-    { f: 1450, pos: [3.1, 1.65, -11.1], look: [-0.2, 1.12, -6.38], fov: 37, ease: 'surge' }] }) },
+    { f: 1354, pos: [3.3, 1.7, -11.3], look: [-0.2, 1.1, -6.38], fov: 39 },
+    { f: 1450, pos: [2.85, 1.6, -10.55], look: [-0.15, 1.11, -6.4], fov: 35, ease: 'surge' }] }) },
   laugh: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1451, pos: [2.4, 1.55, -1.6], look: [1.15, 1.45, -4.55], fov: 37 },
-    { f: 1490, pos: [2.15, 1.5, -2.1], look: [1.18, 1.46, -4.58], fov: 34, ease: 'surge' }] }) },
+    { f: 1451, pos: [2.3, 1.52, -1.85], look: [1.17, 1.46, -4.57], fov: 35 },
+    { f: 1490, pos: [2.05, 1.48, -2.3], look: [1.18, 1.46, -4.58], fov: 32, ease: 'surge' }] }) },
   // dialogue: the performed line — a slow push into the showman's face,
   // the boy standing free beside the open book behind him
-  dialogue: { cut: 'hard', raw: pushInCam({ subject: heroPos, a: 1491, b: 1599, d0: 3.2, d1: 2.45, h0: 1.6, h1: 1.56, lookOff: [0, 1.5, 0], fov0: 33, fov1: 30,
+  dialogue: { cut: 'hard', raw: pushInCam({ subject: heroPos, a: 1491, b: 1599, d0: 3.0, d1: 2.3, h0: 1.6, h1: 1.56, lookOff: [0, 1.5, 0], fov0: 33, fov1: 29.5,
     dir: () => [0.38, 0.93] }) },
+  // hookboard: R2 FINAL (fix 2) — a character beat at the moonrent R2
+  // framing: the tighter fov (49->47) puts the board at ~85% of frame
+  // width, whole panel inside with margins on all sides (boardverify
+  // PARTIAL=0); the showman kneels in the centre-left foreground
+  // pointing up at it; the boy waits under its left end.
   hookboard: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1600, pos: [-2.95, 2.2, 7.4], look: [-3.7, 1.9, -5.25], fov: 50 },
-    { f: 1673, pos: [-3.45, 2.15, 6.2], look: [-3.75, 1.92, -5.28], fov: 48, ease: 'surge' }] }) },
+    { f: 1600, pos: [-3.15, 2.2, 5.6], look: [-3.42, 1.94, -5.2], fov: 49 },
+    { f: 1673, pos: [-3.3, 2.16, 4.2], look: [-3.42, 1.93, -5.2], fov: 47, ease: 'surge' }] }) },
 };
 const RIG = buildRig({
   total: TOTAL,
@@ -305,10 +333,14 @@ export const worldAt = (f) => {
   let shakeK = 0;
   if (f >= 1336 && f <= 1353) shakeK = smooth(ramp(f, 1336, 1344));
   else if (f > 1353 && f <= 1390) shakeK = 1 - smooth(ramp(f, 1354, 1390));
+  // the page flip: inside the box the boy turns a page of his stand
+  // book while hunting the answer (reads, f1068-1084), then it rests
+  // turned for the rest of the film (main.js pageHinge).
+  const pageK = f < 1068 ? 0 : smooth(ramp(f, 1068, 1084));
   return {
     always: 1,
     hookK: S.id === 'hookboard' ? smooth(ramp(f, 1608, 1632)) : 0,
-    coverK, doorK, shakeK,
+    coverK, doorK, shakeK, pageK,
     boxK: ['inside', 'holes', 'reads', 'sneeze'].includes(S.id) ? 1 : 0,
     wheelA: f * 0.0035,
     blastX: 0, blastY: 1.35, blastZ: -5.55,
@@ -492,8 +524,9 @@ export const castAt = (f) => {
       break;
     }
     case 'reads': {
-      // he flips a little book, finds the answer, reads it out big
-      boy({ prop: f >= 1090 ? ['point', 0.3] : null, ...head(f, 91, kf([[1045, 2.5], [1090, 1], [1148, 0.5]], f), 0.1, 0.3 + nodAt(f, 1105, 9, 0.45) + nodAt(f, 1130, 9, 0.45), 0.05) }, { yaw: 0.08 });
+      // he flips a page of the stand book (pageK, f1068-1084 — his head
+      // dips with the turn), finds the answer, reads it out big
+      boy({ prop: f >= 1090 ? ['point', 0.3] : null, ...head(f, 91, kf([[1045, 2.5], [1090, 1], [1148, 0.5]], f), 0.1, 0.3 + nodAt(f, 1072, 9, 0.4) + nodAt(f, 1105, 9, 0.45) + nodAt(f, 1130, 9, 0.45), 0.05) }, { yaw: 0.08 });
       break;
     }
     case 'names': {
@@ -546,7 +579,14 @@ export const castAt = (f) => {
       break;
     }
     case 'hookboard': {
-      hero({ prop: ['point', 0.8], ...head(f, 31, -2, 0.5, -0.05, 0.5) }, { yaw: 0.45 });
+      // R2 FINAL (fix 2): the film ends on a CHARACTER BEAT (V3's
+      // final-frame grammar, moonrent R2 staging) — the showman KNEELS
+      // in the centre-left foreground, grinning up and pointing at the
+      // hook board behind him; kneeling keeps his crown below the
+      // board's bottom edge, so the board stays fully readable at full
+      // opacity to the last frame. Gaze/lean/yaw turn him up-left
+      // toward the board (mirrors moonrent's kneeling hero).
+      hero({ mode: 'kneel', prop: ['point', 0.35], ...head(f, 31, -2.5, 0.45, -0.35, 0.45) }, { yaw: 0.45, s: 1.05 });
       boy({ ...head(f, 91, -1.5, 0.45, -0.05, 0.45) }, { yaw: 0.4 });
       kid({ ...head(f, 41, -1, -0.4, 0, -0.4) }, { yaw: -0.35 });
       man({ ...head(f, 81, -1, -0.45, 0, -0.45) }, { yaw: -0.4 });
