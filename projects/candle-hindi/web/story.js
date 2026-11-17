@@ -2,6 +2,15 @@
 // V3 style lock: painted 3D world, flat round-white-head card characters,
 // reference camera grammar — every clause a new shot, push-ins, inserts,
 // word-by-word captions; body.js actions; speak.js performed dialogue).
+// R2 REBUILD (the approved moonrent R2 standard): opening hero BIG from
+// frame 0 (head ~40%+ of frame width, low angle, mid-action); the tube
+// REVEAL is a pure object INSERT (pot -> tube -> wick fills the frame, no
+// cast, no partial faces); the table-move is a front three-quarter ACTION
+// close-up (both men's hands on the table, tube tearing, flame dying at
+// centre); the moneylender's horror REACTION pushes to >=65% face width;
+// the FINAL is a character beat + hook board together (board ~84% of
+// frame width high in frame, hero BIG in the foreground below it,
+// pointing up at it, text fully readable).
 // ONE set: the moneylender's room — the tall candle table with its rope
 // barrier, the oil pot hidden underneath, charpai, shelf, crates.
 // Voice stem: Google AI Studio Puck (series voice), 55.051 s, 30 fps,
@@ -56,7 +65,7 @@ export const LIGHTS = {
   night: { az: 150, el: 30, sky: '#5a4632', ground: '#1c1108', hemi: 0.56, sun: '#cbb59a', sunI: 0.5, fog: '#160d06', fogNear: 9, fogFar: 46,
     skyTop: '#0d0906', skyHor: '#2e1f10', sunDisc: '#000000', sunSize: 0, sat: 1.08, vig: 0.32, shadowExt: 14, aurora: 0, gain: '#ffd9ae',
     waterDeep: '#1d4e5f', waterShal: '#2e7ea6', glint: '#ffe9c0' },
-  under: { az: 150, el: 24, sky: '#4a3620', ground: '#140b04', hemi: 0.42, sun: '#bfae94', sunI: 0.34, fog: '#100a05', fogNear: 5, fogFar: 30,
+  under: { az: 150, el: 24, sky: '#4a3620', ground: '#140b04', hemi: 0.52, sun: '#bfae94', sunI: 0.44, fog: '#100a05', fogNear: 5, fogFar: 30,
     skyTop: '#0a0603', skyHor: '#241708', sunDisc: '#000000', sunSize: 0, sat: 1.06, vig: 0.36, shadowExt: 10, aurora: 0, gain: '#eecfa4',
     waterDeep: '#1d4e5f', waterShal: '#2e7ea6', glint: '#ffe9c0' },
   day: { az: 105, el: 48, sky: '#ffe0b0', ground: '#4a3418', hemi: 1.12, sun: '#ffd9a0', sunI: 1.85, fog: '#2a1a0c', fogNear: 12, fogFar: 60,
@@ -114,17 +123,17 @@ export const gunAt = (f) => ({ k: 0, x: 0, y: 0, z: 0 });
 export const heroAt = (f) => {
   const S = shotAt(f);
   switch (S.id) {
-    case 'hook': return { x: 0.05, z: -2.85 };
+    case 'hook': return { x: 0.15, z: -2.5 };
     case 'claim': return { x: 0.15, z: -2.8 };
-    case 'coins': return { x: 0.15, z: -2.75 };
+    case 'coins': return { x: 1.6, z: -2.75 };
     case 'forbidden': { const u = smooth(ramp(f, 330, 372)); return { x: lerp(0.15, 0.95, u), z: lerp(-2.75, -2.5, u) }; }
     case 'blow': return { x: 2.65, z: -2.95 };
     case 'truth': return { x: 1.55, z: -4.45 };
     case 'moving': return { x: 0.3, z: -2.5 };
-    case 'snap': return { x: 3.35, z: -2.5 };
+    case 'snap': return { x: 2.1 + tableXAt(f), z: -2.55 };
     case 'exposed': return { x: 2.7, z: -2.55 };
     case 'tag': case 'dialogue': return { x: 1.15, z: -2.35 };
-    case 'hookboard': return { x: -1.92, z: -7.9 };
+    case 'hookboard': return { x: -0.6, z: -3.3 };
     default: return { x: 12, z: 6 };
   }
 };
@@ -153,14 +162,14 @@ export const vilAAt = (f) => {
   switch (S.id) {
     case 'hook': return { x: -1.35, z: -1.7 };
     case 'claim': return { x: -1.25, z: -1.95 };
-    case 'coins': return { x: 2.75, z: -2.5 };
+    case 'coins': return { x: 2.45, z: -2.6 };
     case 'forbidden': return { x: -0.9, z: -1.8 };
     case 'blow': return { x: 0.0, z: -2.6 };
     case 'moving': {
       if (f < 1200) { const u = smooth(ramp(f, 1140, 1200)); return { x: lerp(5.2, 4.2, u), z: lerp(-6.0, -5.6, u) }; }
       return { x: 4.2, z: -5.6 };
     }
-    case 'snap': return { x: 0.3, z: -3.35 };
+    case 'snap': return { x: 0.72 + tableXAt(f), z: -2.45 };
     case 'exposed': return { x: 0.2, z: -2.6 };
     case 'tag': return { x: -0.7, z: -1.6 };
     case 'dialogue': return { x: -0.8, z: -1.7 };
@@ -174,7 +183,7 @@ export const vilBAt = (f) => {
     case 'coins': return { x: 3.35, z: -1.45 };
     case 'forbidden': { const u = smooth(ramp(f, 318, 362)); return { x: lerp(2.9, 2.25, u), z: lerp(-1.9, -2.45, u) }; }
     case 'moving': return { x: -4.6, z: -5.6 };
-    case 'snap': return { x: 2.35, z: -3.35 };
+    case 'snap': return { x: 1.4 + tableXAt(f), z: -4.5 };
     case 'exposed': return { x: 3.6, z: -1.9 };
     case 'tag': return { x: 3.0, z: -1.7 };
     case 'dialogue': return { x: 3.1, z: -1.8 };
@@ -194,19 +203,19 @@ export const vilCAt = (f) => {
 
 // ---------- hero / focus ----------
 const FOCUS = {
-  hook: () => [0.6, 1.4, -3.1],
+  hook: () => [0.85, 1.45, -2.95],
   claim: () => { const h = heroAt(190); return [h.x, 1.55, h.z]; },
-  coins: () => [1.85, 1.1, -3.2],
+  coins: () => [2.0, 1.2, -2.7],
   forbidden: () => [1.3, 1.5, -3.4],
   steady: () => [1.3, 1.45, -3.4],
   blow: () => [0.9, 1.35, -3.1],
   suspect: () => [-2.2, 1.5, -2.2],
   crawl: () => [0.9, 0.5, -3.2],
-  reveal: () => [1.28, 0.5, -3.4],
+  reveal: () => [1.27, 0.9, -3.4],
   oilflow: (f) => oilPtAt(f),
   truth: () => [1.15, 0.95, -3.55],
   moving: () => [-1.2, 1.0, -5.6],
-  snap: () => [1.4, 1.1, -3.35],
+  snap: () => [1.4, 1.12, -3.35],
   exposed: () => { const h = heroAt(1360); return [h.x, 1.52, h.z]; },
   tag: () => { const h = heroAt(1430); return [h.x, 1.52, h.z]; },
   dialogue: () => { const h = heroAt(1520); return [h.x, 1.52, h.z]; },
@@ -218,16 +227,21 @@ export const heroPosAt = (f) => FOCUS[shotAt(f).id](f);
 const heroPos = (f) => { const h = heroAt(f); return [h.x, h.y || 0, h.z]; };
 const srvPos = (f) => { const h = srvAt(f); return [h.x, h.y || 0, h.z]; };
 const RIG_BY_ID = {
-  // hook: opens ON the moneylender mid-action — one hand raised to the
-  // eternal flame, the other already holding a darshan coin.
-  hook: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 0, pos: [-1.15, 1.5, 1.6], look: [0.75, 1.35, -3.1], fov: 40 },
-    { f: 123, pos: [-0.7, 1.45, 0.7], look: [0.85, 1.4, -3.15], fov: 36, ease: 'surge' }] }) },
-  claim: { cut: 'hard', raw: pushInCam({ subject: heroPos, a: 124, b: 248, d0: 5.2, d1: 3.8, h0: 1.72, h1: 1.66, lookOff: [0, 1.55, 0], fov0: 40, fov1: 35,
+  // hook (R2): opens ON the moneylender BIG from frame 0 — low angle,
+  // head ~40%+ of frame width, one hand raised to the eternal flame at
+  // his right; the candle glows in frame beside him. Solo hero, like
+  // the Salted Mine opening (the devotee handoff gets its own close-up
+  // in 'coins').
+  hook: { cut: 'hard', raw: pushInCam({ subject: heroPos, a: 0, b: 123, d0: 3.55, d1: 2.9, h0: 1.3, h1: 1.38, lookOff: [0.32, 1.5, 0], fov0: 39, fov1: 35,
+    dir: () => [-0.5, 0.86] }) },
+  claim: { cut: 'hard', raw: pushInCam({ subject: heroPos, a: 124, b: 248, d0: 5.2, d1: 3.25, h0: 1.72, h1: 1.66, lookOff: [0, 1.55, 0], fov0: 40, fov1: 33,
     dir: () => [-0.3, 0.95] }) },
+  // coins (R2): front close-up of the handoff itself — the devotee's
+  // coin hand and the moneylender's receiving palm meet at frame
+  // centre, both faces big above.
   coins: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 249, pos: [3.6, 1.5, 0.2], look: [1.8, 1.02, -3.25], fov: 38 },
-    { f: 313, pos: [3.25, 1.4, -0.3], look: [1.85, 1.05, -3.3], fov: 35, ease: 'surge' }] }) },
+    { f: 249, pos: [2.12, 1.32, 0.85], look: [1.97, 1.18, -2.7], fov: 37 },
+    { f: 313, pos: [2.1, 1.28, 0.5], look: [1.99, 1.2, -2.72], fov: 34, ease: 'surge' }] }) },
   // forbidden: low angle UP at the candle on its tall table — the
   // moneylender steps into frame and bars the way.
   forbidden: { cut: 'hard', raw: keysCam({ keys: [
@@ -246,27 +260,39 @@ const RIG_BY_ID = {
   crawl: { cut: 'hard', raw: keysCam({ keys: [
     { f: 744, pos: [-1.7, 0.7, 0.6], look: [0.7, 0.45, -3.2], fov: 42 },
     { f: 822, pos: [-1.3, 0.62, 0.05], look: [0.9, 0.5, -3.25], fov: 39, ease: 'surge' }] }) },
-  // reveal INSERT: from the room's right, low — the pot, the thin tube
-  // climbing out of it, and the servant's lit face at the frame's edge.
+  // reveal INSERT (R2): PURE object insert, no cast — low three-
+  // quarter from the front-left, sliding UNDER the cloth drape's
+  // bottom edge (the drape hides the tube's top run — that is its
+  // job): the oil pot fills the lower frame and the tube climbs
+  // out of its mouth toward the tabletop. Candlelight rakes down
+  // (brightest at the source above).
   reveal: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 823, pos: [-0.35, 0.55, -1.15], look: [1.25, 0.52, -3.42], fov: 37 },
-    { f: 941, pos: [-0.15, 0.52, -1.4], look: [1.26, 0.54, -3.42], fov: 34, ease: 'surge' }] }) },
-  // oilflow: the camera climbs the tube with the glint, pot -> wick
+    { f: 823, pos: [-0.95, 0.5, -3.04], look: [1.28, 0.55, -3.4], fov: 33 },
+    { f: 941, pos: [-0.88, 0.56, -3.06], look: [1.29, 0.6, -3.4], fov: 30, ease: 'surge' }] }) },
+  // oilflow (R2): SIDE PROFILE from the table's left end — the one
+  // angle where the tube's whole run is honestly visible — rising
+  // with the glint's climb, pot -> wick, assembly filling the frame.
   oilflow: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 942, pos: [-0.3, 0.6, -1.2], look: [1.28, 0.52, -3.4], fov: 37 },
-    { f: 1029, pos: [0.15, 1.15, -1.75], look: [1.3, 1.13, -3.4], fov: 33, ease: 'surge' }] }) },
+    { f: 942, pos: [-1.15, 0.55, -3.02], look: [1.3, 0.62, -3.4], fov: 36 },
+    { f: 1029, pos: [-1.05, 1.15, -3.08], look: [1.3, 1.3, -3.4], fov: 32, ease: 'surge' }] }) },
   truth: { cut: 'hard', raw: keysCam({ keys: [
     { f: 1030, pos: [0.0, 1.1, 1.0], look: [1.2, 0.95, -3.6], fov: 40 },
     { f: 1122, pos: [0.25, 1.02, 0.5], look: [1.2, 0.98, -3.58], fov: 37, ease: 'surge' }] }) },
   moving: { cut: 'hard', raw: keysCam({ keys: [
     { f: 1123, pos: [-0.4, 1.7, 2.6], look: [-1.2, 1.0, -5.6], fov: 42 },
     { f: 1224, pos: [-0.1, 1.6, 2.0], look: [-1.0, 1.02, -5.5], fov: 39, ease: 'surge' }] }) },
-  // snap: both men have the table; the camera holds the candle as the
-  // table shifts, the tube tears and the flame dies in front of everyone.
+  // snap (R2 ACTION BEAT): front three-quarter CLOSE-UP on the table —
+  // both men stand at its front corners with their hands ON the front
+  // edge and drag WITH it (their anchors ride tableXAt); the candle
+  // fills the centre above, the tube joint tears below the top, and
+  // the flame sputters and dies in front of everyone. Camera is LOW
+  // and in FRONT — never behind the cards.
   snap: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1225, pos: [-1.3, 1.5, 1.7], look: [1.5, 1.05, -3.35], fov: 44 },
-    { f: 1313, pos: [-1.0, 1.45, 1.2], look: [1.55, 1.08, -3.35], fov: 41, ease: 'surge' }] }) },
-  exposed: { cut: 'hard', raw: pushInCam({ subject: heroPos, a: 1314, b: 1403, d0: 4.4, d1: 2.9, h0: 1.62, h1: 1.56, lookOff: [0, 1.52, 0], fov0: 38, fov1: 33,
+    { f: 1225, pos: [0.5, 1.3, 2.15], look: [1.8, 1.06, -2.95], fov: 45 },
+    { f: 1313, pos: [0.62, 1.26, 1.75], look: [1.82, 1.08, -2.98], fov: 43, ease: 'surge' }] }) },
+  // exposed (R2 REACTION): the push-in now lands at >=65% face width —
+  // the moneylender's horror as the secret hangs in the air.
+  exposed: { cut: 'hard', raw: pushInCam({ subject: heroPos, a: 1314, b: 1403, d0: 3.6, d1: 2.5, h0: 1.6, h1: 1.55, lookOff: [0, 1.52, 0], fov0: 36, fov1: 30,
     dir: () => [0.3, 0.95] }) },
   tag: { cut: 'hard', raw: keysCam({ keys: [
     { f: 1404, pos: [1.1, 1.6, 1.9], look: [1.1, 1.35, -2.5], fov: 39 },
@@ -275,9 +301,16 @@ const RIG_BY_ID = {
   // face; the camera HOLDS on the speaker.
   dialogue: { cut: 'hard', raw: pushInCam({ subject: heroPos, a: 1467, b: 1574, d0: 3.1, d1: 2.35, h0: 1.6, h1: 1.55, lookOff: [0, 1.52, 0], fov0: 33, fov1: 30,
     dir: () => [0.35, 0.94] }) },
+  // hookboard (R2 FINAL, fixed): character beat + board together,
+  // moonrent composition — the board rides high and wide (~84% of
+  // frame width, centred margins) while the moneylender stands in
+  // the FOREGROUND below it (head ~21% of frame width), pointing up
+  // at the hook text; his head stays fully below the board's bottom
+  // edge so no glyph is ever overlapped. Full opacity to the last
+  // frame.
   hookboard: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1575, pos: [0.4, 2.0, 3.4], look: [0, 1.9, -8.35], fov: 50 },
-    { f: 1651, pos: [0.3, 1.95, 2.2], look: [0, 1.95, -8.35], fov: 48, ease: 'surge' }] }) },
+    { f: 1575, pos: [0.0, 2.3, 2.9], look: [-0.05, 1.5, -8.3], fov: 49 },
+    { f: 1651, pos: [0.0, 2.5, 1.3], look: [0.0, 1.35, -8.3], fov: 47, ease: 'surge' }] }) },
 };
 const RIG = buildRig({
   total: TOTAL,
@@ -298,7 +331,7 @@ export const dofAt = (f) => {
   if (['hookboard'].includes(S.id)) cinf = 1.3;
   if (['steady', 'reveal', 'oilflow'].includes(S.id)) cinf = 3.4;
   if (['dialogue', 'tag', 'exposed', 'crawl'].includes(S.id)) cinf = 3.0;
-  if (['coins', 'blow', 'suspect', 'truth', 'snap', 'moving', 'forbidden'].includes(S.id)) cinf = 2.6;
+  if (['coins', 'blow', 'suspect', 'truth', 'snap', 'moving', 'forbidden', 'hook'].includes(S.id)) cinf = 2.6;
   const d = Math.hypot(C.pos[0] - hp[0], C.pos[1] - hp[1], C.pos[2] - hp[2]);
   return { focus: d, cinf };
 };
@@ -360,7 +393,7 @@ const emoTrack = (initial, events) => ({
 });
 const emoHero = emoTrack('smile', [
   [124, 'grin', 8], [314, 'smug', 8], [528, 'smug', 8], [1030, 'grin', 8], [1123, 'stern', 8],
-  [1225, 'smug', 8], [1314, 'nervous', 9], [1404, 'pained', 9], [1467, 'smile', 8], [1575, 'grin', 8],
+  [1225, 'smug', 8], [1282, 'shock', 6], [1340, 'nervous', 9], [1404, 'pained', 9], [1467, 'smile', 8], [1575, 'grin', 8],
 ]);
 const emoSrv = emoTrack('neutral', [
   [640, 'thinking', 9], [744, 'nervous', 8], [823, 'wonder', 9], [1030, 'relief', 9],
@@ -405,11 +438,10 @@ export const castAt = (f) => {
   const srvOpts = (o) => srvKneel ? { ...o, mode: P.mode, squash: P.squash } : o;
   switch (S.id) {
     case 'hook': {
-      // mid-action: one arm UP at the flame he "owns", a coin in hand
-      std('hero', OUTFITS.hero, { expr: 'smile', exprP: HP, mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: ['point', 0.85],
+      // R2 opening: the moneylender SOLO and BIG, mid-action — one arm
+      // UP at the flame he "owns", the candle glowing beside him.
+      std('hero', OUTFITS.hero, { expr: 'smile', exprP: HP, mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: ['point', 0.8],
         ...head(f, 31, -3, 0.35, -0.4, 0.35) }, h.x, h.z, { yaw: 0.35 });
-      std('vilA', OUTFITS.vilA, { expr: 'grin', exprP: AP, mode: 'stand', blink: blinkAt(f, 61), seed: 61,
-        ...head(f, 61, -2.5, -0.4, -0.3, -0.4) }, va.x, va.z, { yaw: -0.35 });
       break;
     }
     case 'claim': {
@@ -422,12 +454,12 @@ export const castAt = (f) => {
       break;
     }
     case 'coins': {
-      std('vilA', OUTFITS.vilA, { expr: 'grin', exprP: AP, mode: 'stand', blink: blinkAt(f, 61), seed: 61, prop: ['coin', 0.6],
-        ...head(f, 61, -1, -0.5, 0.3 + nodAt(f, 285), -0.5) }, va.x, va.z, { yaw: -0.45 });
-      std('hero', OUTFITS.hero, { expr: 'smile', exprP: HP, mode: 'stand', blink: blinkAt(f, 31), seed: 31,
+      // R2 handoff close-up: the devotee's coin hand reaches in from
+      // the right; the moneylender's palm opens to receive at centre.
+      std('vilA', OUTFITS.vilA, { expr: 'grin', exprP: AP, mode: 'stand', blink: blinkAt(f, 61), seed: 61, prop: ['coin', 0.8],
+        ...head(f, 61, -1, -0.5, 0.3 + nodAt(f, 285), -0.5) }, va.x, va.z, { yaw: -0.3, flip: true });
+      std('hero', OUTFITS.hero, { expr: 'smile', exprP: HP, mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: ['point', 0.92],
         ...head(f, 31, -1.5, 0.5, 0.25, 0.5) }, h.x, h.z, { yaw: 0.45 });
-      std('vilB', OUTFITS.vilB, { expr: 'smile', exprP: BP, mode: 'stand', blink: blinkAt(f, 81), seed: 81, prop: ['coin', 0.5],
-        ...head(f, 81, -1, -0.4, 0.2, -0.4) }, vb.x, vb.z, { yaw: -0.35 });
       break;
     }
     case 'forbidden': {
@@ -460,11 +492,16 @@ export const castAt = (f) => {
         ...head(f, 41, kf([[640, 0], [690, -3], [743, -3.5]], f), 0.6, -0.25, 0.6) }, sv.x, sv.z, { yaw: 0.55 });
       break;
     }
-    case 'crawl': case 'reveal': case 'oilflow': {
-      // on his knees under the table; in the reveal his face catches the
-      // candle-glow from above as he finds the tube
+    case 'crawl': {
+      // on his knees, slipping under the table in the dark
       std('srv', OUTFITS.srv, srvOpts({ expr: 'neutral', exprP: SP, blink: blinkAt(f, 41), seed: 41,
-        ...head(f, 41, S.id === 'crawl' ? 2.5 : -4, 0.3, S.id === 'oilflow' ? kf([[942, 0.3], [990, -0.1], [1029, -0.5]], f) : -0.3, 0.3) }), sv.x, sv.z, { yaw: 0.3 });
+        ...head(f, 41, 2.5, 0.3, -0.3, 0.3) }), sv.x, sv.z, { yaw: 0.3 });
+      break;
+    }
+    case 'reveal': case 'oilflow': {
+      // R2: PURE object inserts — the pot, the tube, the climbing
+      // glint. No cast in frame at all (the servant's discovery is
+      // told by the crawl before and the truth shot after).
       break;
     }
     case 'truth': {
@@ -488,19 +525,16 @@ export const castAt = (f) => {
       break;
     }
     case 'snap': {
-      // both men lean on the table as it shifts; every head snaps to the
-      // candle the moment the flame dies
+      // R2 ACTION: vilA and the moneylender grip the table's front
+      // edge side by side (hands forward-down on the edge, bodies
+      // leaning in, the candle rising between them) and drag WITH
+      // it as it slides. Every head snaps UP to the candle the
+      // moment the flame dies (f1285).
       const dead = flameOutAt(f);
-      std('vilA', OUTFITS.vilA, { expr: 'grin', exprP: AP, mode: 'stand', blink: blinkAt(f, 61), seed: 61,
-        ...head(f, 61, kf([[1225, 2], [1258, 2.5], [1285, -3.5], [1313, -3.5]], f), -0.4, 0.3 - 0.7 * dead, -0.4) }, va.x, va.z, { yaw: -0.35 });
-      std('vilB', OUTFITS.vilB, { expr: 'smile', exprP: BP, mode: 'stand', blink: blinkAt(f, 81), seed: 81,
-        ...head(f, 81, kf([[1225, 2], [1258, 2.5], [1285, -3.5], [1313, -3.5]], f), 0.4, 0.3 - 0.7 * dead, 0.4) }, vb.x, vb.z, { yaw: 0.35 });
-      std('hero', OUTFITS.hero, { expr: 'smile', exprP: HP, mode: 'stand', blink: blinkAt(f, 31), seed: 31,
-        ...head(f, 31, -3, -0.5, -0.4, -0.5) }, h.x, h.z, { yaw: -0.45 });
-      std('srv', OUTFITS.srv, { expr: 'neutral', exprP: SP, mode: 'stand', blink: blinkAt(f, 41), seed: 41,
-        ...head(f, 41, -3, 0.5, -0.4, 0.5) }, sv.x, sv.z, { yaw: 0.45 });
-      std('vilC', OUTFITS.vilC, { expr: 'neutral', exprP: CP, mode: 'stand', blink: blinkAt(f, 91), seed: 91,
-        ...head(f, 91, -3, 0.45, -0.4, 0.45) }, vc.x, vc.z, { yaw: 0.4 });
+      std('vilA', OUTFITS.vilA, { expr: 'grin', exprP: AP, mode: 'stand', blink: blinkAt(f, 61), seed: 61, prop: ['point', 0.95],
+        ...head(f, 61, kf([[1225, 3], [1258, 3.5], [1285, -3.5], [1313, -3.5]], f), -0.4, 0.35 - 0.75 * dead, -0.4) }, va.x, va.z, { yaw: -0.4 });
+      std('hero', OUTFITS.hero, { expr: 'smile', exprP: HP, mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: ['point', 0.95],
+        ...head(f, 31, kf([[1225, 3], [1258, 3.5], [1285, -3], [1313, -3]], f), 0.4, 0.35 - 0.75 * dead, 0.4) }, h.x, h.z, { yaw: 0.4, flip: true });
       break;
     }
     case 'exposed': {
@@ -553,10 +587,12 @@ export const castAt = (f) => {
       break;
     }
     case 'hookboard': {
-      std('hero', OUTFITS.hero, { expr: 'grin', exprP: HP, mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: ['point', 0.8],
+      // R2 final: the moneylender alone in the foreground below the
+      // board, grinning and pointing UP at the hook text — character
+      // beat and board in one frame, his silhouette fully below the
+      // board's bottom edge so the text stays clear.
+      std('hero', OUTFITS.hero, { expr: 'grin', exprP: HP, mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: ['point', 0.85],
         ...head(f, 31, -2, 0.5, -0.05, 0.5) }, h.x, h.z, { yaw: 0.45 });
-      std('srv', OUTFITS.srv, { expr: 'neutral', exprP: SP, mode: 'stand', blink: blinkAt(f, 41), seed: 41,
-        ...head(f, 41, -1, -0.45, 0, -0.45) }, sv.x, sv.z, { yaw: -0.4 });
       break;
     }
   }
