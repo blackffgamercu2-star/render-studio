@@ -29,6 +29,16 @@
 // sun direction, contact shadows; the gold/stick/dialogue beats warm into
 // a golden dusk of the same family. Boards/text NEVER graded. Grade
 // changes ONLY on clause boundaries.
+// R2 RESTAGE (2026-11-17, moonrent R2 standard — approved proof grammar):
+// hero BIG from f0 (head ~50%+ of frame width, low angle, push-in); the
+// tally-stick INSERT fills the frame (low raking track up the notches,
+// camera roll, NO faces anywhere in it); the ACTION beat is gate-level
+// front close — sheep squeeze through the split gate toward camera, the
+// swing is the action (camera NEVER behind the cards); the REACTION is
+// the merchant's amazed face at ~80% width closing the tally shot (drone
+// wide dives to him inside the same clause); dialogue performed at ~60%;
+// the FINAL is a character beat — the shepherd stands before the hook
+// board, grinning and pointing up at it, board fully readable alongside.
 import { M, blinkAt, q, clamp, lerp, ramp, kf } from './motion.js';
 import { buildRig, keysCam } from './camrig.js';
 import { poseWindows, winkTrack } from './body.js';
@@ -206,69 +216,95 @@ const head = (f, seed, tilt, look, lookY, facing = 0, squash = 0) => ({
 const FOCUS = {
   open: () => [ROCK.x, 1.9, ROCK.z],
   announce: () => [0.8, 1.4, 8.2],
-  merchants: () => [-1.35, 1.3, 4.6],
+  merchants: () => [-1.42, 1.35, 4.95],
   rivals: () => [-2.05, 1.2, -7.4],
   sit: () => [ROCK.x, 1.25, ROCK.z],
   hide: () => [-2.0, 1.0, 4.7],
   drone: () => [0, 0.5, -4],
-  gate: () => [0, 0.8, 0],
+  gate: () => [1.7, 1.05, 1.0],
   gold: () => [0.3, 1.4, 7.7],
   stick: () => [STICK3D.x, 1.15, STICK3D.z],
   dialogue: () => [1.3, 1.5, 3.0],
-  split: () => [0, 0.7, 0],
-  tally: () => [0, 0.5, -3],
-  last: () => [1.4, 1.0, 0.9],
+  split: () => [0, 0.6, 1.2],
+  tally: (f) => f < 1584 ? [0, 0.5, -2] : [1.35, 1.5, 4.35],
+  last: () => [2.2, 1.2, 1.3],
   hook: () => BOARD_POS,
 };
-export const heroPosAt = (f) => FOCUS[shotAt(f).id]();
+export const heroPosAt = (f) => FOCUS[shotAt(f).id](f);
 
 // ---------- cameras: EVERY shot is a camrig track on a subject ----------
 const RIG_BY_ID = {
+  // R2 OPENING: on the gate-ray south-east of the rock — hero BIG from f0
+  // (head ~52% of frame width), low angle, the split gate dead centre
+  // behind him with the flock streaming through it; push-in to ~66%.
   open: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('open'), pos: [4.55, 1.75, 6.6], look: [0.75, 1.05, -1.0], fov: 42 },
-    { f: E('open'), pos: [4.3, 1.68, 6.2], look: [0.8, 1.08, -0.9], fov: 38, ease: 'io' }] }) },
+    { f: B('open'), pos: [4.95, 1.47, 4.25], look: [2.3, 1.5, 1.3], fov: 40 },
+    { f: E('open'), pos: [4.55, 1.42, 3.85], look: [2.45, 1.58, 1.4], fov: 37.5, ease: 'io' }] }) },
   announce: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('announce'), pos: [2.6, 1.7, 14.5], look: [0.6, 1.25, 8.6], fov: 38 },
-    { f: E('announce'), pos: [2.4, 1.65, 14.0], look: [0.65, 1.28, 8.5], fov: 34, ease: 'io' }] }) },
+    { f: B('announce'), pos: [2.35, 1.62, 11.9], look: [0.82, 1.45, 8.2], fov: 38 },
+    { f: E('announce'), pos: [2.05, 1.55, 11.15], look: [0.84, 1.47, 8.2], fov: 34, ease: 'io' }] }) },
+  // R2: the two merchants fill the frame (shepherd out of shot — no more
+  // half-hidden face at the edge); heads ~37-46% with a push-in.
   merchants: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('merchants'), pos: [-2.9, 1.6, 10.2], look: [-0.35, 1.2, 4.2], fov: 40 },
-    { f: E('merchants'), pos: [-2.75, 1.58, 9.9], look: [-0.32, 1.22, 4.15], fov: 36, ease: 'io' }] }) },
+    { f: B('merchants'), pos: [-1.02, 1.52, 9.4], look: [-0.95, 1.35, 5.05], fov: 39 },
+    { f: E('merchants'), pos: [-1.0, 1.49, 9.1], look: [-0.93, 1.37, 5.08], fov: 37.5, ease: 'io' }] }) },
+  // R2: both rivals in one frame, peeking over their rocks (rival2 moved
+  // in beside rival1 — the 9:16 hfov cannot hold the old 4 m spread).
   rivals: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('rivals'), pos: [0.3, 1.7, 3.4], look: [-0.2, 1.05, -7.6], fov: 44 },
-    { f: E('rivals'), pos: [0.22, 1.68, 3.1], look: [-0.18, 1.07, -7.5], fov: 40, ease: 'io' }] }) },
+    { f: B('rivals'), pos: [-0.9, 1.56, -3.05], look: [-1.55, 1.22, -7.9], fov: 40 },
+    { f: E('rivals'), pos: [-1.0, 1.52, -3.45], look: [-1.56, 1.24, -7.9], fov: 37, ease: 'io' }] }) },
+  // R2 sit: framed head-to-boot so the tapping stick on his boot stays in
+  // frame (look low, frame height ~2.05 m at the subject).
   sit: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('sit'), pos: [4.7, 1.45, 5.4], look: [2.85, 1.35, 1.7], fov: 36 },
-    { f: E('sit'), pos: [4.5, 1.42, 5.15], look: [2.87, 1.36, 1.7], fov: 33, ease: 'io' }] }) },
+    { f: B('sit'), pos: [5.7, 1.3, 3.82], look: [2.92, 1.38, 1.72], fov: 38 },
+    { f: E('sit'), pos: [5.42, 1.27, 3.56], look: [2.92, 1.4, 1.72], fov: 36, ease: 'io' }] }) },
   hide: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('hide'), pos: [-5.4, 1.5, 9.8], look: [-2.5, 0.95, 4.5], fov: 38 },
-    { f: E('hide'), pos: [-5.2, 1.48, 9.5], look: [-2.45, 0.97, 4.45], fov: 34, ease: 'io' }] }) },
+    { f: B('hide'), pos: [-5.5, 1.32, 8.35], look: [-2.15, 1.02, 4.62], fov: 37 },
+    { f: E('hide'), pos: [-5.24, 1.29, 7.98], look: [-2.13, 1.04, 4.62], fov: 34, ease: 'io' }] }) },
   drone: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('drone'), pos: [8.5, 14.5, 12.5], look: [0, 0, -6.5], fov: 46 },
-    { f: E('drone'), pos: [8.1, 14.1, 12.1], look: [0.1, 0.05, -6.3], fov: 43, ease: 'io' }] }) },
+    { f: B('drone'), pos: [7.4, 11.8, 10.8], look: [0, 0.2, -3.6], fov: 45 },
+    { f: E('drone'), pos: [6.5, 10.4, 9.4], look: [0.1, 0.25, -3.4], fov: 42, ease: 'io' }] }) },
+  // R2 gate: shepherd right (head ~42%), the gate + crossing sheep left —
+  // the tap and the swing read as one event in one frame.
   gate: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('gate'), pos: [5.2, 1.55, 8.2], look: [1.3, 0.95, 0.4], fov: 40 },
-    { f: E('gate'), pos: [5.0, 1.52, 7.9], look: [1.32, 0.97, 0.4], fov: 37, ease: 'io' }] }) },
+    { f: B('gate'), pos: [5.6, 1.5, 4.6], look: [1.7, 1.28, 0.95], fov: 39 },
+    { f: E('gate'), pos: [5.35, 1.46, 4.3], look: [1.72, 1.3, 0.95], fov: 36, ease: 'io' }] }) },
   gold: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('gold'), pos: [2.2, 1.6, 13.6], look: [-0.3, 1.25, 8.0], fov: 38 },
-    { f: E('gold'), pos: [2.05, 1.58, 13.2], look: [-0.27, 1.27, 7.95], fov: 34, ease: 'io' }] }) },
+    { f: B('gold'), pos: [1.75, 1.56, 11.6], look: [-0.25, 1.35, 7.95], fov: 37 },
+    { f: E('gold'), pos: [1.6, 1.52, 11.15], look: [-0.23, 1.37, 7.95], fov: 34, ease: 'io' }] }) },
+  // R2 INSERT: pure object shot — camera low at the stick's base, raking
+  // up the notches to the knob, roll -22 so the stick runs diagonal and
+  // fills the frame; the shepherd is geometrically out of frame.
   stick: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('stick'), pos: [5.1, 1.6, 6.3], look: [2.55, 1.02, 2.0], fov: 34 },
-    { f: E('stick'), pos: [4.85, 1.56, 6.0], look: [2.52, 1.05, 2.02], fov: 30, ease: 'io' }] }) },
+    { f: B('stick'), pos: [3.18, 0.52, 3.32], look: [2.31, 0.92, 2.17], fov: 37, roll: -22 },
+    { f: E('stick'), pos: [3.02, 0.88, 3.16], look: [2.25, 1.28, 2.13], fov: 34, roll: -22, ease: 'io' }] }) },
   dialogue: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('dialogue'), pos: [2.5, 1.62, 6.6], look: [1.32, 1.45, 3.02], fov: 30 },
-    { f: E('dialogue'), pos: [2.38, 1.6, 6.35], look: [1.33, 1.46, 3.01], fov: 27, ease: 'io' }] }) },
+    { f: B('dialogue'), pos: [2.5, 1.58, 6.6], look: [1.31, 1.5, 3.0], fov: 31 },
+    { f: E('dialogue'), pos: [2.35, 1.55, 6.25], look: [1.31, 1.51, 3.0], fov: 29, ease: 'io' }] }) },
+  // R2 ACTION BEAT: gate level (y 0.8), front three-quarter from the
+  // south — sheep squeeze through the split gate TOWARD camera, exactly
+  // four abreast in the gap, exiting sheep big in the foreground; the
+  // leaves' swing is the action. Camera never behind the flock.
   split: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('split'), pos: [0.3, 1.0, 6.4], look: [0, 0.8, -0.5], fov: 40 },
-    { f: E('split'), pos: [0.28, 0.97, 6.1], look: [0, 0.82, -0.45], fov: 37, ease: 'io' }] }) },
+    { f: B('split'), pos: [0.7, 1.5, 6.3], look: [-0.1, 0.45, -0.9], fov: 42 },
+    { f: E('split'), pos: [0.65, 1.44, 5.85], look: [-0.08, 0.46, -0.85], fov: 40, ease: 'io' }] }) },
+  // R2 tally: ONE clause, two phases — high wide on the streaming flock
+  // (the count visual), then a long smooth dive down to the merchant's
+  // amazed face (~79% of frame width) for "simple multiplication".
   tally: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('tally'), pos: [-9.2, 14.8, 14.3], look: [0.4, 0, -4.2], fov: 49 },
-    { f: E('tally'), pos: [-8.8, 14.4, 13.9], look: [0.45, 0.05, -4.0], fov: 46, ease: 'io' }] }) },
+    { f: B('tally'), pos: [-6.6, 9.6, 11.8], look: [0.2, 0, -2.2], fov: 47 },
+    { f: B('tally') + 41, pos: [-4.6, 6.0, 9.9], look: [0.5, 0.5, 0.2], fov: 43, ease: 'io' },
+    { f: B('tally') + 77, pos: [2.5, 1.8, 7.7], look: [1.35, 1.42, 4.35], fov: 34, ease: 'io' },
+    { f: E('tally'), pos: [2.2, 1.55, 7.0], look: [1.36, 1.45, 4.35], fov: 30, ease: 'io' }] }) },
   last: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('last'), pos: [5.2, 1.55, 8.2], look: [1.3, 0.95, 0.4], fov: 40 },
-    { f: E('last'), pos: [5.0, 1.52, 7.9], look: [1.32, 0.97, 0.4], fov: 37, ease: 'io' }] }) },
+    { f: B('last'), pos: [5.35, 1.48, 5.15], look: [2.35, 1.33, 1.15], fov: 38 },
+    { f: E('last'), pos: [5.05, 1.44, 4.8], look: [2.37, 1.35, 1.15], fov: 35, ease: 'io' }] }) },
+  // R2 FINAL: character beat + board — camera higher, board centred in
+  // the upper frame; the shepherd stands in the lower foreground
+  // (added to the cast for this shot), grinning and pointing up at it.
   hook: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('hook'), pos: [4.8, 3.7, 29.8], look: [0, 2.95, 16], fov: 39 },
-    { f: E('hook'), pos: [4.6, 3.66, 29.3], look: [0.02, 2.96, 16], fov: 37, ease: 'io' }] }) },
+    { f: B('hook'), pos: [3.45, 2.4, 29.3], look: [-0.15, 2.95, 16], fov: 38 },
+    { f: E('hook'), pos: [3.3, 2.33, 28.9], look: [-0.15, 2.95, 16], fov: 37.5, ease: 'io' }] }) },
 };
 const RIG = buildRig({
   total: TOTAL,
@@ -286,9 +322,13 @@ export const RIG_META = {
 export const dofAt = (f) => {
   const S = shotAt(f), C = camAt(f), hp = heroPosAt(f);
   let cinf = 2.0;
-  if (['drone', 'tally', 'rivals', 'announce'].includes(S.id)) cinf = 1.2;
-  if (['sit', 'dialogue', 'stick', 'gate'].includes(S.id)) cinf = 3.4;
-  if (S.id === 'hook') cinf = 2.6;
+  if (S.id === 'open') cinf = 1.1;   // hero sharp AND the flock streaming behind him stays readable
+  if (['drone', 'rivals', 'announce'].includes(S.id)) cinf = 1.2;
+  if (S.id === 'tally') cinf = f < 1584 ? 1.2 : 2.6;
+  if (['sit', 'dialogue', 'stick'].includes(S.id)) cinf = 3.4;
+  if (S.id === 'gate') cinf = 2.8;
+  if (S.id === 'split') cinf = 1.1;  // gate group and foreground sheep both sharp — the count must read
+  if (S.id === 'hook') cinf = 0.45;  // board text crisp AND the foreground shepherd readable
   const d = Math.hypot(C.pos[0] - hp[0], C.pos[1] - hp[1], C.pos[2] - hp[2]);
   return { focus: d, cinf };
 };
@@ -356,9 +396,9 @@ export const castAt = (f) => {
     }
     case 'merchants': {
       std('merchantA', OUTFITS.merchantA, { expr: 'nervous', mode: 'stand', blink: blinkAt(f, 61), seed: 61, prop: ['point', 0.55],
-        ...head(f, 61, 0, 0.4, 0.05, 0.3) }, -1.35, 4.6, { yaw: 0.4 });
+        ...head(f, 61, 0, 0.4, 0.05, 0.3) }, -1.42, 4.95, { yaw: 0.4 });
       std('merchantB', OUTFITS.merchantB, { expr: 'shock', mode: 'stand', blink: blinkAt(f, 62), seed: 62,
-        ...head(f, 62, -1, 0.35, 0.1, 0.25) }, -0.35, 5.15, { yaw: 0.35 });
+        ...head(f, 62, -1, 0.35, 0.1, 0.25) }, -0.75, 5.35, { yaw: 0.35 });
       std('shepherd', OUTFITS.shepherd, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 31), seed: 31,
         ...head(f, 31, -1, -0.3, 0.05, -0.2) }, 1.35, 2.5, { yaw: -0.35 });
       break;
@@ -367,7 +407,7 @@ export const castAt = (f) => {
       std('rival1', OUTFITS.rival1, { expr: 'stern', mode: 'stand', blink: blinkAt(f, 71), seed: 71,
         ...head(f, 71, -2, kf([[405, 0.1], [470, 0.45], [552, 0.2]], f), 0.18, 0.1) }, -2.05, -7.4, { yaw: 0.25 });
       std('rival2', OUTFITS.rival2, { expr: 'nervous', mode: 'stand', blink: blinkAt(f, 72), seed: 72,
-        ...head(f, 72, -1.5, kf([[405, -0.2], [490, 0.15], [552, -0.1]], f), 0.15, -0.05) }, 1.9, -8.3, { yaw: -0.2 });
+        ...head(f, 72, -1.5, kf([[405, -0.2], [490, 0.15], [552, -0.1]], f), 0.15, -0.05) }, -1.15, -8.4, { yaw: -0.2 });
       break;
     }
     case 'sit': {
@@ -424,7 +464,7 @@ export const castAt = (f) => {
       shepherdSeated({ expr: 'smile', blink: blinkAt(f, 31), seed: 31,
         ...head(f, 31, -1 - 1.2 * tapK, -0.3, 0.1, 0.1) }, { yaw: -0.3 });
       std('merchant', OUTFITS.merchant, { expr: 'shock', mode: 'stand', blink: blinkAt(f, 81), seed: 81,
-        ...head(f, 81, -2, 0.3, 0.2, 0.2) }, 1.1, 3.6, { yaw: 0.35 });
+        ...head(f, 81, -2, 0.3, 0.2, 0.2) }, 1.35, 4.35, { yaw: 0.35 });
       break;
     }
     case 'last': {
@@ -436,7 +476,14 @@ export const castAt = (f) => {
         ...head(f, 31, -1 - 1.2 * tapK, -0.25, 0.1, 0.08) }, { yaw: -0.3 });
       break;
     }
-    case 'hook': break;   // the board shot — no cast
+    case 'hook': {
+      // R2 FINAL: the shepherd stands before his board in the lower
+      // foreground, grinning up and pointing at tomorrow's tease — the
+      // character beat and the readable board share the frame.
+      std('shepherd', OUTFITS.shepherd, { expr: 'grin', mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: ['point', 0.8],
+        ...head(f, 31, -1.5, 0.15, -0.35, -0.1) }, 2.5, 24.2, { yaw: -0.15 });
+      break;
+    }
   }
   return out;
 };
