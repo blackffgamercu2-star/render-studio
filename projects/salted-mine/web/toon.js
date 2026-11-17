@@ -1185,7 +1185,7 @@ export const bodyFront = (p, o, opts)=>{
     const brE = breath == null ? 0 : (0.5 + 0.5 * Math.sin((breath + seed * 23) * 0.0582 - Math.PI / 2)), brY = -2.2 * brE * brE * (3 - 2 * brE); // v2: idle breathing head settle
     const tall = (1 + Bd.torso + Bd.legs) * HH, sole = 975 - (airY || 0);
     const bob = mode === "march" ? 0.025 * tall * Math.cos(2 * two * phase) : mode === "stroll" ? 0.015 * tall * Math.cos(2 * two * phase) : 0;
-    const torsoBot = mode === "sit" ? sole - 0.2 * HH : sole - Bd.legs * HH * vS + bob;
+    const torsoBot = mode === "sit" ? sole - 0.2 * HH : mode === "kneel" || mode === "kneel1" ? sole - 0.52 * Bd.legs * HH * vS + bob : sole - Bd.legs * HH * vS + bob;
     const chin = torsoBot - Bd.torso * HH * vS, hc = chin - H.b + brY, crown = hc - H.b, hipY = torsoBot - 0.12 * HH;
     const thick = thickAngle(light), ow = 5 * u;
     const legCol = mix(o.pants, INK, 0.55), armCol = mix(o.jacket, INK, 0.5), footCol = o.boots;
@@ -1214,6 +1214,62 @@ export const bodyFront = (p, o, opts)=>{
                 f[0] + side * 12 * u,
                 f[1] - 5 * u
             ], footW, footCol);
+        }
+    } else if (mode === "kneel" || mode === "kneel1") {
+        // BODY-ACTION v5: kneeling — thighs drop from the lowered hip to knees
+        // planted ON the ground line; shins fold back along the floor, feet
+        // trailing behind the knees. kneel1: only the +1 side kneels; the -1
+        // leg stays planted forward (an inspector's crouch). Knees and shin
+        // tops touch sole, so ground contact still reads y = ground.
+        for (const side of [
+            -1,
+            1
+        ]){
+            const h = [
+                300 + side * 15 * u,
+                hipY
+            ];
+            if (mode === "kneel1" && side < 0) {
+                const k = [
+                    300 + side * 34 * u,
+                    hipY + 0.55 * (sole - hipY)
+                ], f = [
+                    300 + side * 38 * u,
+                    sole - 4 * u
+                ];
+                p.stroke(curve(h, k, f), legW, legCol);
+                footStroke(p, [
+                    f[0] - side * 3 * u,
+                    f[1]
+                ], [
+                    f[0] + side * 13 * u,
+                    f[1] + 0.5 * u
+                ], footW, footCol);
+            } else {
+                const k = [
+                    300 + side * 19 * u,
+                    sole - 6 * u
+                ], f = [
+                    300 + side * 43 * u,
+                    sole - 5 * u
+                ];
+                p.stroke(curve(h, [
+                    300 + side * 17 * u,
+                    (hipY + sole) / 2
+                ], k), legW, legCol);
+                p.stroke([
+                    k,
+                    [
+                        300 + side * 32 * u,
+                        sole - 3.5 * u
+                    ],
+                    f
+                ], legW * 0.92, legCol);
+                footStroke(p, f, [
+                    f[0] + side * 12 * u,
+                    f[1] - 3 * u
+                ], footW, footCol);
+            }
         }
     } else if (mode === "fall") {
         const legs = [
@@ -1350,6 +1406,20 @@ export const bodyFront = (p, o, opts)=>{
             ]
         ];
     };
+    const kneelArm = (side)=>{ // BODY-ACTION v5: hands reach down-forward toward the knees / the work
+        const S = sh(side);
+        return [
+            S,
+            [
+                tcx + side * (1.1 * T.a + 6 * u),
+                S[1] + 0.42 * HH
+            ],
+            [
+                tcx + side * (0.92 * T.a + 4 * u),
+                torsoBot + 0.36 * HH
+            ]
+        ];
+    };
     const sw = mode === "march" || mode === "stroll" ? Math.sin(two * phase) : 0;
     const R0 = [
         300 + 47 * u,
@@ -1396,7 +1466,7 @@ export const bodyFront = (p, o, opts)=>{
     });
     else {
         arms.push({
-            pts: prop === "shako" ? hang(-1, 0) : hang(-1, -sw),
+            pts: prop === "shako" ? hang(-1, 0) : (mode === "kneel" || mode === "kneel1") && !prop ? kneelArm(-1) : hang(-1, -sw),
             front: false
         });
         if (rifle) {
@@ -1469,7 +1539,7 @@ export const bodyFront = (p, o, opts)=>{
                 front: true
             });
         } else arms.push({
-            pts: hang(1, sw),
+            pts: (mode === "kneel" || mode === "kneel1") ? kneelArm(1) : hang(1, sw),
             front: false
         });
     }

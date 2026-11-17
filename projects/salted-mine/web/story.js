@@ -21,6 +21,7 @@
 // -> recover) + dust, the crack-open gold vein with glints and glow.
 import { M, blinkAt, q, clamp, lerp, ramp, kf } from './motion.js';
 import { buildRig, pushInCam, staticTrackCam, keysCam } from './camrig.js';
+import { poseWindows, turnTrack, winkTrack } from './body.js';
 import * as SOL from './solid.js';
 import * as T from './toon.js';
 
@@ -28,10 +29,18 @@ export const FPS = 30, TOTAL = 1544, DECK = 0;
 // FIX ROUND 2 (Abid's staging notes + COVERAGE_MAP.md): phrases are now covered
 // by sub-shots — a loading INSERT, close firing coverage with push-ins on the
 // impact, face close-ups with living heads — instead of one wide per phrase.
+// FIX ROUND 3 (Abid, 2026-11-17): NO hard cuts anywhere — the whole salting
+// sequence (load -> insert -> loadgun -> fire1/2/3 -> glitter) rides ONE
+// continuous tracking camera (SALT_CAM) and every later boundary is a whip
+// blend; the shells are now LOADED INTO THE OPEN GUN on camera (new
+// `loadgun` beat f55-76: miner kneels, breech opens, both filled shells
+// slide in, barrel snaps shut, gun raises into the fire1 aim); body actions
+// from the new library body.js (kneel / sit / turn / gaze / wink).
 export const SHOTS = [
   { id: 'load', a: 0, b: 18, light: 'mine' },
-  { id: 'insert', a: 19, b: 73, light: 'mine' },
-  { id: 'fire1', a: 74, b: 130, light: 'mine' },
+  { id: 'insert', a: 19, b: 54, light: 'mine' },
+  { id: 'loadgun', a: 55, b: 76, light: 'mine' },
+  { id: 'fire1', a: 77, b: 130, light: 'mine' },
   { id: 'fire2', a: 131, b: 153, light: 'mine' },
   { id: 'fire3', a: 154, b: 186, light: 'mine' },
   { id: 'glitter', a: 187, b: 261, light: 'mine' },
@@ -131,7 +140,7 @@ export const sackAt = (f) => {
 export const minerAt = (f) => {
   const S = shotAt(f);
   switch (S.id) {
-    case 'load': case 'insert': case 'fire1': return { x: 1.02, z: 1.88 };
+    case 'load': case 'insert': case 'loadgun': case 'fire1': return { x: 1.02, z: 1.88 };
     case 'fire2': return { x: -1.6, z: -1.5 };
     case 'fire3': case 'glitter': return { x: 1.6, z: -4.2 };
     case 'town': return { x: -1.6, z: 9.6 };
@@ -148,7 +157,7 @@ export const minerAt = (f) => {
 export const buddyAt = (f) => {
   const S = shotAt(f);
   switch (S.id) {
-    case 'load': case 'insert': case 'fire1': return { x: -1.8, z: 2.6 };
+    case 'load': case 'insert': case 'loadgun': case 'fire1': return { x: -1.8, z: 2.6 };
     case 'fire2': case 'fire3': case 'glitter': return { x: -2.4, z: -6.5 };
     case 'town': { const u = smooth(ramp(f, 268, 330)); return { x: lerp(-0.8, 1.3, u), z: lerp(9.8, 15.6, u) }; }
     case 'offer': return { x: -2.9, z: 12.4 };
@@ -183,22 +192,29 @@ export const expertAt = (f) => {
     default: return { x: 9, z: 21 };
   }
 };
-// the shotgun: held low in `load`, on the crate rig during `insert` (gunAt
-// hides — main.js shows the break-action insert rig), then raised and fired
-// in the three close firing shots. Poses sit at the miner's chest so his
-// raised card arm meets the stock — the gun never floats free of the body.
+// the shotgun: held low in `load`; during `insert` the camera is on the
+// crate rig (gunAt hides — main.js shows the shells being filled); in
+// `loadgun` the miner KNEELS with the gun held low, breech open (worldAt
+// gunOpenK), both filled shells slide in (shellAT/shellBT), the barrel
+// snaps shut f70-73 and the gun raises into the fire1 aim f74-76 — so the
+// fire reads as one continuous action. Poses sit at the miner's chest so
+// his raised card arm meets the stock — the gun never floats free.
 export const gunAt = (f) => {
   const S = shotAt(f);
   const m = minerAt(f);
   const recoil = Math.max(...FIRE.map((ff) => (f >= ff && f <= ff + 5 ? Math.sin((f - ff) / 5 * Math.PI) * 0.14 : 0)), 0);
   const low = { x: m.x + 0.30, y: 1.04, z: m.z + 0.30, ry: 0.55, rx: 0.42 };
+  const aim = { x: m.x + 0.30, y: 1.17, z: m.z + 0.10, ry: 1.22, rx: -0.04 };
   if (S.id === 'load') return { k: 1, ...low, rz: 0 };
-  if (S.id === 'fire1') {
-    const aim = { x: m.x + 0.30, y: 1.17, z: m.z + 0.10, ry: 1.22, rx: -0.04 };
-    const u = smooth(ramp(f, 74, 78));
-    return { k: 1, x: lerp(low.x, aim.x, u), y: lerp(low.y, aim.y, u), z: lerp(low.z, aim.z, u),
-      ry: lerp(low.ry, aim.ry, u), rx: lerp(low.rx, aim.rx, u), rz: -recoil };
+  if (S.id === 'loadgun') {
+    // held low in front of the kneeling miner, breech tipped toward camera;
+    // f74-76 it rises into the exact fire1 aim pose (no cut, no jump)
+    const held = { x: m.x + 0.42, y: 0.80, z: m.z + 0.33, ry: 0.95, rx: 0.18 };
+    const u = smooth(ramp(f, 74, 76));
+    return { k: 1, x: lerp(held.x, aim.x, u), y: lerp(held.y, aim.y, u), z: lerp(held.z, aim.z, u),
+      ry: lerp(held.ry, aim.ry, u), rx: lerp(held.rx, aim.rx, u), rz: 0 };
   }
+  if (S.id === 'fire1') return { k: 1, ...aim, rz: -recoil };
   if (S.id === 'fire2') return { k: 1, x: m.x - 0.30, y: 1.17, z: m.z + 0.05, ry: -1.22, rx: -0.04, rz: recoil };
   if (S.id === 'fire3') return { k: 1, x: m.x + 0.30, y: 1.17, z: m.z + 0.08, ry: 1.78, rx: -0.02, rz: -recoil };
   return { k: 0, x: 0, y: 0, z: 0 };
@@ -208,6 +224,7 @@ export const gunAt = (f) => {
 const FOCUS = {
   load: () => { const m = minerAt(9); return [m.x, 1.45, m.z]; },
   insert: () => [1.96, 0.88, 2.47],
+  loadgun: () => [1.45, 0.9, 2.2],
   fire1: () => [3.3, 1.75, 0.65],
   fire2: () => { const m = minerAt(140); return [m.x, 1.6, m.z]; },
   fire3: () => [2.2, 1.6, -4.7],
@@ -236,85 +253,95 @@ const minerPos = (f) => { const m = minerAt(f); return [m.x, 0, m.z]; };
 const buddyPos = (f) => { const b = buddyAt(f); return [b.x, 0, b.z]; };
 const bankerPos = (f) => { const b = bankerAt(f); return [b.x, 0, b.z]; };
 const expertPos = (f) => { const e = expertAt(f); return [e.x, 0, e.z]; };
+// ROUND 3: ONE continuous tracking camera for the whole salting sequence
+// (load -> insert -> loadgun -> fire1/2/3 -> glitter, f0-261). The camera
+// TRAVELS between subjects inside a single unbroken move — swings down to
+// the crate for the pour, across to the kneeling miner for the load-into-
+// gun, swings behind him for the aim, pushes to each crater, then rides
+// down the tunnel to the buddy. Travel keys use easeInOut (fast middle);
+// push keys surge. All seven sections share this raw, so their boundaries
+// need no blend at all — the move itself is the transition.
+const SALT_CAM = keysCam({ keys: [
+  { f: 0, pos: [2.9, 1.5, 6.1], look: [1.0, 1.33, 1.9], fov: 40 },
+  { f: 18, pos: [2.75, 1.46, 5.85], look: [1.02, 1.32, 1.9], fov: 37 },
+  { f: 30, pos: [2.6, 1.35, 4.15], look: [1.95, 0.92, 2.45], fov: 32, ease: 'smooth' },
+  { f: 48, pos: [2.3, 1.4, 3.55], look: [1.96, 0.88, 2.45], fov: 31 },
+  { f: 58, pos: [-0.3, 1.6, 5.9], look: [1.15, 0.95, 2.2], fov: 40, ease: 'smooth' },
+  { f: 70, pos: [-0.42, 1.55, 5.7], look: [1.18, 0.93, 2.2], fov: 39 },
+  { f: 77, pos: [0.1, 1.6, 4.1], look: [1.55, 1.3, 1.75], fov: 36, ease: 'smooth' },
+  { f: 94, pos: [0.9, 1.62, 3.6], look: [2.9, 1.6, 0.85], fov: 34 },
+  { f: 130, pos: [1.55, 1.6, 2.75], look: [3.35, 1.72, 0.62], fov: 32, ease: 'surge' },
+  { f: 135, pos: [1.3, 1.68, 1.9], look: [-0.2, 1.55, -0.6], fov: 36, ease: 'smooth' },
+  { f: 140, pos: [1.05, 1.72, 1.15], look: [-1.7, 1.45, -1.7], fov: 38, ease: 'smooth' },
+  { f: 153, pos: [0.55, 1.66, 0.35], look: [-2.6, 1.62, -2.45], fov: 34, ease: 'surge' },
+  { f: 168, pos: [-1.0, 1.72, -2.1], look: [1.2, 1.38, -4.9], fov: 36, ease: 'smooth' },
+  { f: 186, pos: [0.55, 1.64, -3.3], look: [3.4, 1.58, -4.95], fov: 33, ease: 'surge' },
+  { f: 226, pos: [0.7, 1.65, -2.3], look: [-1.6, 1.45, -5.6], fov: 37, ease: 'smooth' },
+  { f: 261, pos: [-2.2, 1.5, -3.6], look: [-2.45, 1.3, -6.5], fov: 34, ease: 'surge' }] });
 const RIG_BY_ID = {
-  // load: medium on the miner at the work crate, gun low in his hands
-  load: { cut: 'hard', raw: pushInCam({ subject: minerPos, a: 0, b: 18, d0: 4.9, d1: 4.35, h0: 1.5, h1: 1.42, lookOff: [0, 1.32, 0], fov0: 40, fov1: 37,
-    dir: () => [0.55, 0.83] }) },
-  // insert: EXTREME close-up on the crate top — open breech, gold pour, snap shut
-  insert: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 19, pos: [2.32, 1.48, 3.55], look: [1.98, 0.89, 2.40], fov: 33 },
-    { f: 46, pos: [2.23, 1.41, 3.45], look: [1.97, 0.89, 2.43], fov: 31 },
-    { f: 73, pos: [2.19, 1.39, 3.42], look: [1.96, 0.88, 2.47], fov: 31, ease: 'surge' }] }) },
-  // fire1: back-left 3/4 close on the raise + shot, then push PAST him to the wall
-  fire1: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 74, pos: [-0.7, 1.7, 3.85], look: [1.2, 1.42, 1.8], fov: 37 },
-    { f: 94, pos: [0.9, 1.62, 3.6], look: [2.9, 1.6, 0.85], fov: 34 },
-    { f: 130, pos: [1.55, 1.6, 2.75], look: [3.35, 1.72, 0.62], fov: 32, ease: 'surge' }] }) },
-  // fire2: front-right diagonal — miner AND his left-wall target share the
-  // frame axis, so the shot plays in one framing with a gentle push
-  fire2: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 131, pos: [1.05, 1.72, 1.15], look: [-1.7, 1.45, -1.7], fov: 38 },
-    { f: 153, pos: [0.55, 1.66, 0.35], look: [-2.6, 1.62, -2.45], fov: 34, ease: 'surge' }] }) },
-  // fire3: over-shoulder deep, third shot into the right wall, push-in to the impact
-  fire3: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 154, pos: [-1.0, 1.72, -2.1], look: [1.2, 1.38, -4.9], fov: 36 },
-    { f: 186, pos: [0.55, 1.64, -3.3], look: [3.4, 1.58, -4.95], fov: 33, ease: 'surge' }] }) },
-  // glitter: ride down the tracks past both sparkling walls, ending close on the buddy
-  glitter: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 187, pos: [1.55, 1.72, 0.7], look: [-0.5, 1.42, -4.2], fov: 40 },
-    { f: 226, pos: [0.7, 1.65, -2.3], look: [-1.6, 1.45, -5.6], fov: 37 },
-    { f: 261, pos: [-0.55, 1.6, -4.6], look: [-2.35, 1.5, -6.45], fov: 34, ease: 'surge' }] }) },
-  town: { cut: 'hard', raw: pushInCam({ subject: buddyPos, a: 262, b: 374, d0: 6.4, d1: 4.6, h0: 1.7, h1: 1.5, lookOff: [0, 1.3, 0], fov0: 40, fov1: 35,
+  load: { cut: 'blend', blend: 6, raw: SALT_CAM },
+  insert: { cut: 'blend', blend: 6, raw: SALT_CAM },
+  loadgun: { cut: 'blend', blend: 6, raw: SALT_CAM },
+  fire1: { cut: 'blend', blend: 6, raw: SALT_CAM },
+  fire2: { cut: 'blend', blend: 6, raw: SALT_CAM },
+  fire3: { cut: 'blend', blend: 6, raw: SALT_CAM },
+  glitter: { cut: 'blend', blend: 6, raw: SALT_CAM },
+  town: { cut: 'whip', blend: 24, raw: pushInCam({ subject: buddyPos, a: 262, b: 374, d0: 6.4, d1: 4.6, h0: 1.7, h1: 1.5, lookOff: [0, 1.3, 0], fov0: 40, fov1: 35,
     dir: () => [-0.3, 0.95] }) },
-  offer: { cut: 'hard', raw: pushInCam({ subject: bankerPos, a: 375, b: 483, d0: 7.2, d1: 4.9, h0: 1.8, h1: 1.55, lookOff: [0, 1.85, 0], fov0: 44, fov1: 36,
+  offer: { cut: 'whip', blend: 18, raw: pushInCam({ subject: bankerPos, a: 375, b: 483, d0: 7.2, d1: 4.9, h0: 1.8, h1: 1.55, lookOff: [0, 1.85, 0], fov0: 44, fov1: 36,
     dir: () => [0.25, 0.97] }) },
   // sparkle: medium-close — the banker's head turns, scanning the glittering walls
-  sparkle: { cut: 'hard', raw: pushInCam({ subject: bankerPos, a: 484, b: 545, d0: 4.3, d1: 3.55, h0: 1.58, h1: 1.52, lookOff: [0, 1.48, 0], fov0: 37, fov1: 33,
+  sparkle: { cut: 'whip', blend: 18, raw: pushInCam({ subject: bankerPos, a: 484, b: 545, d0: 4.3, d1: 3.55, h0: 1.58, h1: 1.52, lookOff: [0, 1.48, 0], fov0: 37, fov1: 33,
     dir: () => [0.5, 0.86] }) },
   // dance: closer — laugh, dance, begging all play on the face
-  dance: { cut: 'hard', raw: pushInCam({ subject: bankerPos, a: 546, b: 631, d0: 3.5, d1: 2.85, h0: 1.55, h1: 1.52, lookOff: [0, 1.55, 0], fov0: 33, fov1: 30,
+  dance: { cut: 'whip', blend: 18, raw: pushInCam({ subject: bankerPos, a: 546, b: 631, d0: 3.5, d1: 2.85, h0: 1.55, h1: 1.52, lookOff: [0, 1.55, 0], fov0: 33, fov1: 30,
     dir: () => [0.5, 0.86] }) },
-  test: { cut: 'hard', raw: keysCam({ keys: [
+  test: { cut: 'whip', blend: 18, raw: keysCam({ keys: [
     { f: 632, pos: [2.4, 1.85, -21.2], look: [-0.6, 1.15, -26.6], fov: 42 },
     { f: 724, pos: [1.9, 1.68, -22.9], look: [-0.9, 1.25, -26.8], fov: 36, ease: 'surge' }] }) },
   // dyn: push-in INSERT on the dynamite crate — sticks + burning fuse fill the frame
-  dyn: { cut: 'hard', raw: keysCam({ keys: [
+  dyn: { cut: 'whip', blend: 18, raw: keysCam({ keys: [
     { f: 725, pos: [1.72, 1.38, -27.2], look: [2.8, 0.78, -30.4], fov: 36 },
     { f: 788, pos: [1.98, 1.16, -28.35], look: [2.93, 0.82, -30.55], fov: 32, ease: 'surge' }] }) },
-  blast: { cut: 'hard', raw: keysCam({ keys: [
+  blast: { cut: 'whip', blend: 18, raw: keysCam({ keys: [
     { f: 789, pos: [1.3, 1.8, -24.2], look: [0.1, 1.9, -31], fov: 40 },
     { f: 838, pos: [1.15, 1.72, -25.2], look: [0.1, 2.0, -31.2], fov: 37, ease: 'surge' }] }) },
   // vein: push-in on the opening gold river, the banker big in frame reacting
-  vein: { cut: 'hard', raw: keysCam({ keys: [
+  vein: { cut: 'whip', blend: 18, raw: keysCam({ keys: [
     { f: 839, pos: [0.95, 1.68, -25.5], look: [0.3, 1.82, -30.6], fov: 36 },
     { f: 920, pos: [0.8, 1.62, -26.5], look: [0.32, 1.78, -30.3], fov: 33, ease: 'surge' }] }) },
   // paid: push-in on the table — the sack handover plays centre-frame
-  paid: { cut: 'hard', raw: pushInCam({ subject: () => [1.75, 0, 12.55], a: 921, b: 1043, d0: 6.4, d1: 4.9, h0: 2.0, h1: 1.7, lookOff: [0, 1.05, 0], fov0: 40, fov1: 35,
+  paid: { cut: 'whip', blend: 24, raw: pushInCam({ subject: () => [1.75, 0, 12.55], a: 921, b: 1043, d0: 6.4, d1: 4.9, h0: 2.0, h1: 1.7, lookOff: [0, 1.05, 0], fov0: 40, fov1: 35,
     dir: () => [0.35, 0.94] }) },
-  chip: { cut: 'hard', raw: pushInCam({ subject: expertPos, a: 1044, b: 1089, d0: 3.9, d1: 3.5, h0: 1.55, h1: 1.52, lookOff: [0, 1.42, 0], fov0: 36, fov1: 33,
+  chip: { cut: 'whip', blend: 20, raw: pushInCam({ subject: expertPos, a: 1044, b: 1089, d0: 3.9, d1: 3.5, h0: 1.55, h1: 1.52, lookOff: [0, 1.42, 0], fov0: 36, fov1: 33,
     dir: () => [0.55, 0.83] }) },
   // chipx: INSERT at the vein base — chisel arm big at frame left, lump + vein behind
-  chipx: { cut: 'hard', raw: keysCam({ keys: [
+  chipx: { cut: 'whip', blend: 18, raw: keysCam({ keys: [
     { f: 1090, pos: [1.72, 1.32, -28.15], look: [0.42, 1.12, -31.7], fov: 31 },
     { f: 1145, pos: [1.55, 1.24, -28.6], look: [0.45, 1.15, -31.75], fov: 29, ease: 'surge' }] }) },
-  chip2: { cut: 'hard', raw: pushInCam({ subject: expertPos, a: 1146, b: 1175, d0: 3.3, d1: 2.9, h0: 1.52, h1: 1.5, lookOff: [0, 1.44, 0], fov0: 33, fov1: 30,
+  chip2: { cut: 'whip', blend: 18, raw: pushInCam({ subject: expertPos, a: 1146, b: 1175, d0: 3.3, d1: 2.9, h0: 1.52, h1: 1.5, lookOff: [0, 1.44, 0], fov0: 33, fov1: 30,
     dir: () => [0.55, 0.83] }) },
-  skindeep: { cut: 'hard', raw: keysCam({ keys: [
+  skindeep: { cut: 'whip', blend: 18, raw: keysCam({ keys: [
     { f: 1176, pos: [2.8, 1.85, -24.5], look: [1.55, 1.6, -28.9], fov: 37 },
     { f: 1255, pos: [2.6, 1.78, -25.15], look: [1.72, 1.58, -28.85], fov: 34, ease: 'surge' }] }) },
   // shock: the banker's face fills the frame for the reveal snap + shake
-  shock: { cut: 'hard', raw: pushInCam({ subject: bankerPos, a: 1256, b: 1327, d0: 3.4, d1: 2.7, h0: 1.6, h1: 1.56, lookOff: [0, 1.58, 0], fov0: 34, fov1: 30,
+  shock: { cut: 'whip', blend: 18, raw: pushInCam({ subject: bankerPos, a: 1256, b: 1327, d0: 3.4, d1: 2.7, h0: 1.6, h1: 1.56, lookOff: [0, 1.58, 0], fov0: 34, fov1: 30,
     dir: () => [0.55, 0.83] }) },
-  gone: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1328, pos: [7.6, 3.2, 22.0], look: [0, 3.05, 10.4], fov: 46 },
+  // gone: the whip out of `shock` starts INSIDE the tunnel mouth and the
+  // camera flies out through the entrance (opening x -3.7..3.7, y<6.2 at
+  // z=8.7) before settling on the yard wide — a straight line from the old
+  // yard start would have clipped the rock face beside the opening.
+  gone: { cut: 'whip', blend: 26, raw: keysCam({ keys: [
+    { f: 1328, pos: [1.2, 2.3, -2.0], look: [0, 2.8, 10.4], fov: 44 },
+    { f: 1368, pos: [4.6, 2.9, 10.5], look: [0, 3.0, 10.4], fov: 45, ease: 'smooth' },
     { f: 1442, pos: [7.1, 3.15, 21.2], look: [-0.3, 3.0, 10.4], fov: 44, ease: 'surge' }] }) },
-  silent: { cut: 'hard', raw: pushInCam({ subject: bankerPos, a: 1443, b: 1543, d0: 5.2, d1: 3.6, h0: 1.7, h1: 1.55, lookOff: [0, 1.35, 0], fov0: 38, fov1: 33,
+  silent: { cut: 'whip', blend: 18, raw: pushInCam({ subject: bankerPos, a: 1443, b: 1543, d0: 5.2, d1: 3.6, h0: 1.7, h1: 1.55, lookOff: [0, 1.35, 0], fov0: 38, fov1: 33,
     dir: () => [0.3, 0.95] }) },
 };
 const RIG = buildRig({
   total: TOTAL,
   shots: SHOTS.map((s) => ({ a: s.a, b: s.b, ...RIG_BY_ID[s.id] })),
-  kicks: [{ f: 77, a: 0.05 }, { f: 140, a: 0.05 }, { f: 168, a: 0.05 }, { f: BLAST_F, a: 0.09 }],
+  kicks: [{ f: 77, a: 0.05 }, { f: 140, a: 0.05 }, { f: 168, a: 0.04 }, { f: BLAST_F, a: 0.09 }],
   sigma: 2.3, fovSigma: 1.6,
 });
 // exposure flash: muzzle pops + the blast (builds ~6f, recovers ~10f)
@@ -339,7 +366,7 @@ export const dofAt = (f) => {
   if (['glitter', 'gone'].includes(S.id)) cinf = 1.4;
   if (S.id === 'load') cinf = 2.8;
   if (S.id === 'sparkle') cinf = 3.2;
-  if (['insert', 'fire2', 'fire3', 'dance', 'dyn', 'chip', 'chipx', 'chip2', 'skindeep', 'shock', 'blast', 'vein'].includes(S.id)) cinf = 3.6;
+  if (['insert', 'loadgun', 'fire2', 'fire3', 'dance', 'dyn', 'chip', 'chipx', 'chip2', 'skindeep', 'shock', 'blast', 'vein'].includes(S.id)) cinf = 3.6;
   if (S.id === 'fire1') cinf = 2.4;
   const d = Math.hypot(C.pos[0] - hp[0], C.pos[1] - hp[1], C.pos[2] - hp[2]);
   return { focus: d, cinf };
@@ -355,21 +382,33 @@ export const worldAt = (f) => {
   else if (f >= 187 && f < 632) { bx = 3.3; by = 1.6; bz = -6; }
   if (S.id === 'blast' || S.id === 'vein' || S.id === 'test' || S.id === 'dyn') { bx = 0; by = 2.1; bz = -31; }
   if (S.id === 'chipx') { bx = 0.5; by = 1.2; bz = -31.8; }
-  const ins = S.id === 'insert';
+  const ins = S.id === 'insert', lg = S.id === 'loadgun';
   return {
     always: 1,
-    signK: S.id === 'offer' ? 1 - smooth(ramp(f, 400, 408)) : 1,
+    signK: S.id === 'town' ? 1 - smooth(ramp(f, 362, 374))
+      : S.id === 'offer' ? 0
+      : S.id === 'shock' ? 1 - smooth(ramp(f, 1318, 1328))
+      : S.id === 'gone' ? smooth(ramp(f, 1418, 1428)) * (1 - smooth(ramp(f, 1431, 1439)))
+      : S.id === 'silent' ? smooth(ramp(f, 1452, 1462))
+      : 1,
     lampK: S.light === 'day' || S.light === 'dusk' ? 0.25 : 1,
-    coneK: S.id === 'load' ? 1 : S.id === 'insert' ? 0.35 : S.id === 'fire1' ? 0.5 : S.id === 'glitter' ? 0.3 : 0,
+    coneK: S.id === 'load' ? 1 : S.id === 'insert' ? 0.35 : S.id === 'loadgun' ? 0.4 : S.id === 'fire1' ? 0.5 : S.id === 'glitter' ? 0.3 : 0,
     veinK: veinAt(f), saltK: saltAt(f), saltP: saltParts(f), muzzleK: muzzleAt(f), fuseK: fuseAt(f),
-    // the loading-insert rig (main.js): visible only in `insert`; gold pours
-    // f44-62 (ahead of the word "gold" f49), the nugget drops f50-58, the
-    // chambers read gold-filled from f54, the breech snaps shut f66-71.
-    loadK: ins ? 1 : 0,
-    pourK: ins ? smooth(ramp(f, 44, 50)) * (1 - smooth(ramp(f, 60, 66))) : 0,
-    fillK: ins ? smooth(ramp(f, 54, 68)) : 0,
-    breechK: ins ? smooth(ramp(f, 66, 71)) : 0,
-    nugT: ins && f >= 50 && f <= 62 ? (f - 50) / 12 : -1,
+    // ROUND 3 action chain, all in continuous coverage: the crate rig shows
+    // the gold POUR into the shells (insert: pour f30-48 around the word
+    // "gold" f49, nugget drops f42-52, shells read filled by f54); then in
+    // `loadgun` the filled shells are picked up (crateA/B hide at pickup)
+    // and LOADED INTO THE OPEN GUN — shell A slides in f58-65, shell B
+    // f64-69, the breech snaps shut f70-73 (gunOpenK 1->0).
+    loadK: ins || lg ? 1 : 0,
+    pourK: ins ? smooth(ramp(f, 30, 36)) * (1 - smooth(ramp(f, 46, 52))) : 0,
+    fillK: ins ? smooth(ramp(f, 40, 54)) : 0,
+    nugT: ins && f >= 42 && f <= 54 ? (f - 42) / 12 : -1,
+    gunOpenK: lg ? (f < 70 ? smooth(ramp(f, 56, 59)) : 1 - smooth(ramp(f, 70, 73))) : 0,
+    shellAT: f < 58 ? 0 : f > 65 ? 1 : smooth(ramp(f, 58, 65)),
+    shellBT: f < 64 ? 0 : f > 69 ? 1 : smooth(ramp(f, 64, 69)),
+    crateA: f < 58 ? 1 : 0,
+    crateB: f < 64 ? 1 : 0,
     sackX: sk.x, sackY: sk.y, sackZ: sk.z, sackK: sk.k,
     blastX: bx, blastY: by, blastZ: bz,
   };
@@ -392,7 +431,11 @@ export const OUTFITS = {
   miner: { jacket: '#b3372a', pants: '#3a3230', boots: '#2a1c10', hat: 'miner', hatCol: '#7a5a30', suspenders: '#c9a15a', skin: '#fbf7ef' },
   buddy: { jacket: '#1f7a6a', pants: '#3a3a42', boots: '#241a12', hat: 'cap', cap: '#f2c230', skin: '#fbf7ef' },
   banker: { jacket: '#c9ccd2', pants: '#3c3a40', boots: '#1c1712', hat: 'tophat', hatCol: '#eceae4', hatBand: '#232028', shirtFront: '#f7f3e8', doubleButtons: true, buttons: '#26221f', bowtie: '#26221f', watch: true, skin: '#fbf7ef', moustache: '#2a201a', bigMoustache: true },
-  expert: { jacket: '#5e2a4a', pants: '#33302c', boots: '#1c1712', hat: 'bowler', hatCol: '#211e24', knife: true, skin: '#fbf7ef', moustache: '#2a201a' },
+  // costume audit (round 3): the expert's chest knife is REMOVED — he wears
+  // a professional plum jacket + bowler in town AND at the inspection; the
+  // chisel in his hand (the 'carve' prop) is his mine tool, a knife on his
+  // chest in the town offer scene read wrong for the role.
+  expert: { jacket: '#5e2a4a', pants: '#33302c', boots: '#1c1712', hat: 'bowler', hatCol: '#211e24', knife: false, skin: '#fbf7ef', moustache: '#2a201a' },
 };
 // the expert's round glasses, drawn over the face card (card space 600x1000;
 // head centre from T.headCenter(seed), eyes ~ +/-46 around cx=300)
@@ -446,6 +489,17 @@ const emoBanker = emoTrack('smile', [
 const emoExpert = emoTrack('neutral', [
   [438, 'thinking', 12], [630, 'neutral', 8], [1146, 'thinking', 9], [1180, 'stern', 10],
 ]);
+// ---------- BODY ACTIONS (round 3, library body.js) ----------
+// miner KNEELS to load the gun (f55-76); buddy SITS on the tunnel floor
+// while the walls glitter (f228-261) and TURNS AROUND in town to point
+// back at the mine (f334-346); the expert drops to a one-knee crouch to
+// chip the vein base (f1090-1145); the miner WINKS on his plan beats —
+// after the third shot lands (f178-188) and on "one last test" (f640-650).
+const minerPose = poseWindows([{ a: 55, b: 76, mode: 'kneel', inF: 5, outF: 4 }]);
+const buddyPose = poseWindows([{ a: 228, b: 261, mode: 'sit', inF: 7, outF: 5 }]);
+const expertPose = poseWindows([{ a: 1090, b: 1145, mode: 'kneel1', inF: 6, outF: 6 }]);
+const buddyTurn = turnTrack([{ f0: 334, dur: 12, dir: 1 }]);
+const minerWink = winkTrack([{ a: 9, b: 17 }, { a: 640, b: 650 }]);
 const micro = (f, seed) => 1.1 * Math.sin((f + seed * 5) * 0.037 + 1);
 const nodAt = (f, f0, n = 9, depth = 0.34) => (f >= f0 && f <= f0 + n ? Math.sin((f - f0) / n * Math.PI) * depth : 0);
 const head = (f, seed, tilt, look, lookY, facing = 0, squash = 0) => ({
@@ -459,7 +513,10 @@ export const castAt = (f) => {
       draw: (p) => { T.bodyFront(p, o, opts); if (extra.overlay) extra.overlay(p); },
       x, y: extra.y || 0, z, ground: 0, tint, ...extra }) });
   const m = minerAt(f), b = buddyAt(f), bk = bankerAt(f), ex = expertAt(f);
-  const MP = emoMiner.at(f), BP = emoBuddy.at(f), KP = emoBanker.at(f), EP = emoExpert.at(f);
+  let MP = emoMiner.at(f);
+  const BP = emoBuddy.at(f), KP = emoBanker.at(f), EP = emoExpert.at(f);
+  const winkK = minerWink(f);
+  if (winkK > 0) MP = T.blendFaceP(MP, T.faceP('wink', 31), winkK);
   switch (S.id) {
     case 'load': {
       std('miner', OUTFITS.miner, { expr: 'smile', exprP: MP, mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: ['point', 0.55],
@@ -470,15 +527,26 @@ export const castAt = (f) => {
     }
     case 'insert': {
       std('miner', OUTFITS.miner, { expr: 'smile', exprP: MP, mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: ['point', 0.35],
-        ...head(f, 31, -4 + nodAt(f, 35, 9, -1.6) + nodAt(f, 52, 9, -1.6), 0.3, 0.6 + nodAt(f, 35) + nodAt(f, 52), 0.35) }, m.x, m.z, { yaw: 0.3 });
+        ...head(f, 31, -4 + nodAt(f, 35, 9, -1.6) + nodAt(f, 44, 9, -1.6), 0.3, 0.6 + nodAt(f, 35) + nodAt(f, 44), 0.35) }, m.x, m.z, { yaw: 0.3 });
       std('buddy', OUTFITS.buddy, { expr: 'grin', exprP: BP, mode: 'stand', blink: blinkAt(f, 41), seed: 41,
         ...head(f, 41, -1.5, 0.6, 0.3, 0.55) }, b.x, b.z, { yaw: -0.3 });
       break;
     }
+    case 'loadgun': {
+      // the miner KNEELS at the gun (body.js pose), head DOWN at the open
+      // breech while both shells slide in; the buddy watches the gun, gaze
+      // locked on it — the load must read on faces as well as on the gun.
+      const P = minerPose(f);
+      std('miner', OUTFITS.miner, { expr: 'smile', exprP: MP, mode: P.mode, squash: P.squash, blink: blinkAt(f, 31), seed: 31, prop: ['point', 0.3],
+        ...head(f, 31, -6, 0.35, 0.65, 0.3) }, m.x, m.z, { yaw: 0.35 });
+      std('buddy', OUTFITS.buddy, { expr: 'grin', exprP: BP, mode: 'stand', blink: blinkAt(f, 41), seed: 41,
+        ...head(f, 41, -2, 0.6, 0.3, 0.55) }, b.x, b.z, { yaw: -0.3 });
+      break;
+    }
     case 'fire1': {
       std('miner', OUTFITS.miner, { expr: 'smile', exprP: MP, mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: ['point', 0.8],
-        ...head(f, 31, kf([[74, -2], [78, -2], [84, 3.5], [92, 3.5], [100, -3], [130, -3]], f),
-          kf([[74, 0.2], [84, 0.75], [130, 0.8]], f), 0.1, kf([[74, 0.2], [90, 0.65], [130, 0.65]], f)) }, m.x, m.z, { yaw: 0.55 });
+        ...head(f, 31, kf([[77, -2], [81, -2], [87, 3.5], [95, 3.5], [103, -3], [130, -3]], f),
+          kf([[77, 0.2], [87, 0.75], [130, 0.8]], f), 0.1, kf([[77, 0.2], [93, 0.65], [130, 0.65]], f)) }, m.x, m.z, { yaw: 0.55 });
       std('buddy', OUTFITS.buddy, { expr: 'grin', exprP: BP, mode: 'stand', blink: blinkAt(f, 41), seed: 41,
         ...head(f, 41, -1, 0.6, 0.15, 0.55) }, b.x, b.z, { yaw: -0.3 });
       break;
@@ -498,7 +566,10 @@ export const castAt = (f) => {
       break;
     }
     case 'glitter': {
-      std('buddy', OUTFITS.buddy, { expr: 'grin', exprP: BP, mode: 'stand', blink: blinkAt(f, 41), seed: 41,
+      // the buddy SITS on the tunnel floor from f228 (body.js pose) while
+      // his head keeps scanning the sparkling walls left and right
+      const P = buddyPose(f);
+      std('buddy', OUTFITS.buddy, { expr: 'grin', exprP: BP, mode: P.mode, squash: P.squash, blink: blinkAt(f, 41), seed: 41,
         ...head(f, 41, kf([[187, 0], [204, -3], [221, -4.5], [236, 3], [261, 3.5]], f),
           kf([[187, 0.4], [215, 0.7], [245, 0.3], [261, 0.3]], f), -0.1 + nodAt(f, 219, 9, 0.25),
           kf([[187, 0.3], [210, 0.55], [240, 0.2], [261, 0.2]], f)) }, b.x, b.z, { yaw: -0.2 });
@@ -508,8 +579,11 @@ export const castAt = (f) => {
     }
     case 'town': {
       const running = f >= 268 && f <= 330;
-      std('buddy', OUTFITS.buddy, { expr: 'grin', exprP: BP, mode: running ? 'march' : 'stand', phase: q((f * 0.014) % 1, 2), blink: blinkAt(f, 41), seed: 41, prop: f > 330 ? ['point', 0.85] : null,
-        ...head(f, 41, running ? 2.2 * Math.sin(f * 0.3) : 0, 0.2, nodAt(f, 337) + nodAt(f, 345), 0.2) }, b.x, b.z, { yaw: 0.2 });
+      // arrived in town, the buddy TURNS AROUND (f334-346, body.js turn
+      // track: yaw + step hops) and only then points back at the mine
+      const Tn = buddyTurn(f);
+      std('buddy', OUTFITS.buddy, { expr: 'grin', exprP: BP, mode: running ? 'march' : 'stand', phase: q((f * 0.014) % 1, 2), squash: Tn.squash, blink: blinkAt(f, 41), seed: 41, prop: f >= 346 ? ['point', 0.85] : null,
+        ...head(f, 41, running ? 2.2 * Math.sin(f * 0.3) : 0, 0.2, nodAt(f, 350) + nodAt(f, 358), 0.2) }, b.x, b.z, { yaw: 0.2 + Tn.yaw, y: Tn.hop });
       std('miner', OUTFITS.miner, { expr: 'smile', exprP: MP, mode: 'stand', blink: blinkAt(f, 31), seed: 31,
         ...head(f, 31, 0, -0.4, 0.05, -0.45) }, m.x, m.z, { yaw: -0.4 });
       break;
@@ -596,7 +670,10 @@ export const castAt = (f) => {
             ...head(f, 71, kf([[1146, -3], [1162, -4.5], [1175, -5.5]], f),
               kf([[1146, 0.1], [1170, 0.45], [1175, 0.45]], f), kf([[1146, 0.55], [1168, 0.1], [1175, 0.1]], f),
               kf([[1146, 0.15], [1172, 0.4], [1175, 0.4]], f)) };
-      std('expert', OUTFITS.expert, { expr: 'neutral', exprP: EP, mode: 'stand', blink: blinkAt(f, 71), seed: 71, ...expertOpts }, ex.x, ex.z, { yaw: 0.25, overlay: drawGlasses });
+      // in chipx the expert drops to a ONE-KNEE crouch at the vein base
+      // (body.js pose) — close inspection reads in the body, not just the arm
+      const eP = expertPose(f);
+      std('expert', OUTFITS.expert, { expr: 'neutral', exprP: EP, mode: eP.mode, squash: eP.squash, blink: blinkAt(f, 71), seed: 71, ...expertOpts }, ex.x, ex.z, { yaw: 0.25, overlay: drawGlasses });
       std('banker', OUTFITS.banker, { expr: 'smile', exprP: KP, mode: 'stand', blink: blinkAt(f, 51), seed: 51,
         ...head(f, 51, -1, 0.4, 0.1, 0.4) }, bk.x, bk.z, { yaw: 0.4 });
       std('miner', OUTFITS.miner, { expr: 'smile', exprP: MP, mode: 'stand', blink: blinkAt(f, 31), seed: 31,

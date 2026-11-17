@@ -500,11 +500,12 @@ const loadParts = { fills: [] };
     }
     return sg;
   };
-  mkShell(-0.02, 0.20, false);
-  mkShell(0.13, 0.24, false);
+  loadParts.shellA = mkShell(-0.02, 0.20, false);
+  loadParts.shellB = mkShell(0.13, 0.24, false);
   mkShell(0.235, 0.10, true);
-  // (no gun in the insert: the `load` shot before it and the firing shots
-  // after it carry the gun — the insert stays tight on shells + gold)
+  // (the insert stays tight on shells + gold; in `loadgun` shells A and B
+  // are picked up from this crate — crateA/crateB hide them at the pickup
+  // frames — and travel into the open gun, see travShells below)
   // the gold pouch rests on a low wooden block, neck tipped over shell A —
   // a CLOTH SACK: lumpy woven body, gathered fold neck, rope tie (not a rock)
   add(tbox(0.24, 0.16, 0.26, 2), MAT.wood, -0.06, 0.08, -0.02, g, { cast: false });
@@ -548,13 +549,51 @@ const loadParts = { fills: [] };
 }
 
 // ---------- the shotgun (3D prop, posed by story gunAt) ----------
+// ROUND 3: a real BREAK-ACTION — barrel + forend pivot on a hinge group at
+// z=0.10, so in `loadgun` the breech visibly OPENS (worldAt gunOpenK), the
+// two filled shells slide into the chambers, and the barrel SNAPS shut.
 const gunG = new THREE.Group(); world.add(gunG);
+const gunParts = {};
 {
   const stock = add(tbox(0.08, 0.11, 0.62, 2), MAT.gunWood, 0, -0.03, -0.28, gunG, { cast: false });
   stock.rotation.x = 0.1;
-  const barrel = add(new THREE.CylinderGeometry(0.028, 0.028, 0.78, 8), MAT.ironDk, 0, 0.05, 0.42, gunG, { cast: false });
+  const bg = new THREE.Group(); bg.position.set(0, 0.03, 0.10); gunG.add(bg); gunParts.barrelG = bg;
+  const barrel = add(new THREE.CylinderGeometry(0.028, 0.028, 0.78, 8), MAT.ironDk, 0, 0.02, 0.32, bg, { cast: false });
   barrel.rotation.x = Math.PI / 2;
-  add(tbox(0.05, 0.07, 0.3, 2), MAT.gunWood, 0, 0.0, 0.18, gunG, { cast: false });
+  add(tbox(0.05, 0.07, 0.3, 2), MAT.gunWood, 0, -0.03, 0.08, bg, { cast: false });
+  const pin = add(new THREE.CylinderGeometry(0.02, 0.02, 0.1, 8), MAT.ironDk, 0, 0, 0, bg, { cast: false });
+  pin.rotation.z = Math.PI / 2;
+  add(tbox(0.07, 0.09, 0.03, 1), MAT.ironDk, 0, 0.02, -0.02, bg, { cast: false });
+  // the loaded shells seated in the chambers: brass rim at the breech face,
+  // red tube forward into the barrel — visible while the breech is open
+  const mkChamber = (dx) => {
+    const cg = new THREE.Group(); cg.position.set(dx, 0.05, 0.115); gunG.add(cg);
+    const base = add(new THREE.CylinderGeometry(0.026, 0.026, 0.02, 10), MAT.goldDk, 0, 0, -0.05, cg, { cast: false });
+    base.rotation.x = Math.PI / 2;
+    const tube = add(new THREE.CylinderGeometry(0.024, 0.024, 0.09, 10), MAT.red, 0, 0, 0, cg, { cast: false });
+    tube.rotation.x = Math.PI / 2;
+    cg.visible = false;
+    return cg;
+  };
+  gunParts.chamA = mkChamber(-0.016);
+  gunParts.chamB = mkChamber(0.016);
+}
+// the two filled shells IN FLIGHT: crate top -> open chamber (loadgun).
+// Same build as the crate shells (brass base, red tube, domed gold fill).
+const travShells = {};
+{
+  const mkTrav = () => {
+    const sg = new THREE.Group(); world.add(sg);
+    add(new THREE.CylinderGeometry(0.03, 0.03, 0.022, 10), MAT.goldDk, 0, -0.035, 0, sg, { cast: false });
+    add(new THREE.CylinderGeometry(0.028, 0.028, 0.06, 10), MAT.red, 0, 0.005, 0, sg, { cast: false });
+    const fillMat = MAT.gold.clone(); fillMat.transparent = true; fillMat.opacity = 0.95;
+    const fill = new THREE.Mesh(new THREE.SphereGeometry(0.0235, 10, 6), fillMat);
+    fill.scale.y = 0.38; fill.position.set(0, 0.037, 0); fill.userData.ndSkip = true; sg.add(fill);
+    sg.visible = false;
+    return sg;
+  };
+  travShells.A = mkTrav();
+  travShells.B = mkTrav();
 }
 const muzzle = softGlow(0.9, '#ffdf9e', 0); world.add(muzzle);
 
@@ -715,6 +754,8 @@ function worldState(Ws, f) {
   if (gunG.visible) {
     gunG.position.set(G.x, G.y, G.z);
     gunG.rotation.set(G.rx || 0, G.ry || 0, G.rz || 0);
+    // break-action: the barrel group tips DOWN-forward as the breech opens
+    gunParts.barrelG.rotation.x = (Ws.gunOpenK || 0) * 0.52;
     const tip = new THREE.Vector3(0, 0.05, 0.85).applyEuler(gunG.rotation).add(gunG.position);
     muzzle.position.copy(tip);
     muzzle.material.opacity = (Ws.muzzleK || 0) * 0.55;
@@ -734,6 +775,29 @@ function worldState(Ws, f) {
     loadParts.nugget.visible = nt >= 0;
     if (nt >= 0) loadParts.nugget.position.set(-0.02 + 0.15 * nt, 0.36 - 0.265 * nt * nt, 0.06 + 0.18 * nt);
     loadParts.glint.material.opacity = (Ws.fillK || 0) * (0.14 + 0.18 * Math.abs(Math.sin(f * 0.3)));
+    // shells leave the crate as the miner picks them up for the gun
+    loadParts.shellA.visible = (Ws.crateA ?? 1) > 0.5;
+    loadParts.shellB.visible = (Ws.crateB ?? 1) > 0.5;
+  }
+  // shells in flight into the open gun + seated chambers (loadgun beat)
+  {
+    const open = Ws.gunOpenK || 0;
+    gunG.updateMatrixWorld();
+    const fly = (sg, t, from, dx) => {
+      const on = t > 0.001 && t < 0.999 && gunG.visible;
+      sg.visible = on;
+      if (!on) return;
+      const tgt = gunG.localToWorld(new THREE.Vector3(dx, 0.05, 0.17));
+      sg.position.set(
+        from[0] + (tgt.x - from[0]) * t,
+        from[1] + (tgt.y - from[1]) * t + Math.sin(t * Math.PI) * 0.34,
+        from[2] + (tgt.z - from[2]) * t);
+      sg.rotation.set(t * 1.25, t * 0.95, 0);
+    };
+    fly(travShells.A, Ws.shellAT || 0, [1.91, 0.90, 2.49], -0.016);
+    fly(travShells.B, Ws.shellBT || 0, [2.02, 0.90, 2.59], 0.016);
+    gunParts.chamA.visible = gunG.visible && (Ws.shellAT || 0) >= 1 && open > 0.02;
+    gunParts.chamB.visible = gunG.visible && (Ws.shellBT || 0) >= 1 && open > 0.02;
   }
 }
 function drawActors(list, cam) {
