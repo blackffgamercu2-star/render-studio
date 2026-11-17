@@ -1,6 +1,21 @@
 // Shot plan for "The Man Who Sold the Same Horse Seven Times" — horse
 // (LIBRARY v4 + Salted Mine V3 style lock: painted world, card characters,
 // word-by-word captions, body actions, performed dialogue).
+// R2 REBUILD (Abid approved the moonrent-hindi R2 proof as THE standard):
+// same voice, timing, words, mix, lights and set — the six signature
+// beats re-staged to true R2 grammar: (1) OPENING on the seller BIG
+// beside his horse (head ~43% of frame width at f0, low angle, hand up
+// at the horse's neck, push-in); (2) the 'coins' ACTION beat as a front
+// three-quarter medium-close, both men front-on, hands meeting at
+// centre, the coin passing on the word "paid" (mirror of moonrent's
+// market R3 fix — never behind the cards); (3) the buyer's morning
+// REACTION pushed to ~67% face width; (4) the dialogue hold tightened
+// to moonrent's 38%->58% push; (5) L14 opens on an INSERT — the
+// midnight treat bowl by the shed door filling ~90% of frame width —
+// then pulls back to the kneeling dealer and the horse's lowered head;
+// (6) the film ends on a CHARACTER BEAT: the dealer KNEELS in the
+// foreground pointing up at the hook board behind him (board-only
+// wide shot banned). All other shots keep their v1 V3 grammar.
 // Voice stem: Google AI Studio Puck, 57.611 s, 30 fps, TOTAL 1729; clause
 // timings from faster-whisper small (work/words.json, full-file decode,
 // word-match 0.9906). Scene changes ONLY at clause boundaries:
@@ -59,6 +74,7 @@ export const SHOTS = [
 export const TIMING = SHOTS.map((s) => [s.id, s.a, s.b]);
 export const shotAt = (f) => SHOTS.find((s) => f >= s.a && f <= s.b) || (f < 0 ? SHOTS[0] : SHOTS[SHOTS.length - 1]);
 const smooth = M.smooth;
+const lerp3 = (A, B, u) => [lerp(A[0], B[0], u), lerp(A[1], B[1], u), lerp(A[2], B[2], u)];
 
 // ---------- lights / mood grades ----------
 const WATER = { waterDeep: '#1d4e5f', waterShal: '#2e7ea6', glint: '#ffe9c0' };
@@ -142,14 +158,19 @@ export const horsePosAt = (f) => { const h = horseAt(f); return [h.x, 0, h.z]; }
 export const dealerAt = (f) => {
   const S = shotAt(f);
   switch (S.id) {
-    case 'deal': return { x: 1.0, z: 5.75 };
+    case 'deal': return { x: 1.0, z: 6.05 };
     case 'coins': return { x: 1.35, z: 5.1 };
     case 'horse': return { x: -2.2, z: 12.6 };
     case 'march': case 'field': return { x: 0.2, z: 7.6 };
     case 'shrug': return { x: 0.6, z: 5.2 };
     case 'dawn': case 'grin': case 'dialogue': return { x: 1.5, z: 7.9 };
     case 'treat': return { x: 6.3, z: 12.4 };
-    case 'hookq': case 'hook': return { x: -3.2, z: 7.7 };
+    // R2 final (v2): the dealer kneels in the near FOREGROUND on the
+    // road in front of the gate (z 0.9, ~4.7m from the hook camera) so
+    // his head reads ~26% of frame width beside the board — at z 4.35
+    // he shrank to ~13% and the character beat was lost. x 1.25 puts
+    // him screen-LEFT of the board axis (looking +z, screen-left = +x)
+    case 'hookq': case 'hook': return { x: 1.25, z: 0.9 };
     default: return { x: 0.4, z: 4.8 };
   }
 };
@@ -189,11 +210,11 @@ export const buyer7At = (f) => {
 
 // ---------- hero / focus ----------
 const FOCUS = {
-  deal: () => [2.5, 1.5, 6.3],
+  deal: () => [1.15, 1.5, 6.2],
   coins: () => [1.75, 1.2, 5.12],
   horse: () => [2.05, 1.72, 14.05],
   ride: () => { const h = horseAt(300); return [h.x, 1.5, h.z]; },
-  morning: () => { const b = buyer1At(430); return [b.x, 1.45, b.z]; },
+  morning: (f) => { const b = buyer1At(f); return [b.x, 1.5, b.z]; },
   lock: () => [-10.45, 1.05, 0.55],
   empty: () => [-14.8, 0.95, 5.0],
   march: () => { const b = buyer1At(630); return [b.x, 1.4, b.z]; },
@@ -204,7 +225,9 @@ const FOCUS = {
   dawn: () => [1.5, 1.45, 7.9],
   grin: () => [1.5, 1.5, 7.9],
   dialogue: () => [1.5, 1.45, 7.9],
-  treat: () => [7.3, 0.95, 13.3],
+  // rack: starts ON the treat bowl (the insert), settles on the
+  // kneeling dealer + the horse's lowered head as the camera pulls back
+  treat: (f) => lerp3([7.05, 0.3, 13.15], [7.3, 0.9, 13.4], smooth(ramp(f, 1470, 1525))),
   hookq: () => BOARD_POS,
   hook: () => BOARD_POS,
 };
@@ -214,15 +237,22 @@ export const heroPosAt = (f) => FOCUS[shotAt(f).id](f);
 // hold creeping (keysCam/pushInCam through the damped rig), close-ups big.
 const dealerPos = (f) => { const d = dealerAt(f); return [d.x, 0, d.z]; };
 const RIG_BY_ID = {
-  // opens ON the dealer mid-action: one hand on the horse's neck, the other
-  // already holding the rope up for the buyer — push-in as the price lands
+  // R2 OPENING (v2): ON the seller BIG beside his horse from frame 0 —
+  // the camera sits SOUTH-EAST looking north-west so the horse's head
+  // and neck read large at frame LEFT and the dealer (card FLIPPED so
+  // his raised prop hand reaches toward the horse) fills the right,
+  // head ~40% of frame width growing to ~49% (V3 f0 grammar: hero
+  // mid-action, already pushing in). The first framing (camera SW)
+  // stacked the horse's head directly behind the dealer's hat.
   deal: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 0, pos: [-2.3, 1.9, -1.2], look: [2.2, 1.32, 6.5], fov: 41 },
-    { f: 84, pos: [-2.05, 1.82, -0.7], look: [2.35, 1.31, 6.55], fov: 39, ease: 'surge' }] }) },
-  // INSERT: the coin purse changes hands, horse's head proud at frame right
+    { f: 0, pos: [3.15, 1.16, 3.4], look: [1.2, 1.5, 6.42], fov: 39 },
+    { f: 84, pos: [2.85, 1.22, 3.9], look: [1.2, 1.49, 6.42], fov: 36.5, ease: 'surge' }] }) },
+  // R2 ACTION BEAT: the coin pass as a front three-quarter medium-close
+  // (moonrent market R3 framing) — both men front-on, faces and torsos
+  // in frame, hands meeting at centre, the coin crossing on "paid"
   coins: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 85, pos: [1.75, 1.6, -0.7], look: [1.75, 1.28, 5.12], fov: 38 },
-    { f: 150, pos: [1.75, 1.55, 0.1], look: [1.75, 1.24, 5.12], fov: 35, ease: 'surge' }] }) },
+    { f: 85, pos: [1.0, 1.52, 2.5], look: [1.78, 1.16, 5.12], fov: 39 },
+    { f: 150, pos: [1.16, 1.48, 2.82], look: [1.79, 1.13, 5.13], fov: 35.5, ease: 'surge' }] }) },
   // HERO horse: low angle, the horse fills the frame, dealer small at left
   horse: { cut: 'hard', raw: keysCam({ keys: [
     { f: 151, pos: [4.8, 1.85, 18.3], look: [1.2, 1.62, 13.6], fov: 38 },
@@ -230,12 +260,13 @@ const RIG_BY_ID = {
   // ride: side tracking, horse + proud rider centred the whole way
   ride: { cut: 'hard', raw: pushInCam({ subject: horsePosAt, a: 259, b: 345, d0: 9.2, d1: 8.2, h0: 1.62, h1: 1.55, lookOff: [-0.54, 1.45, -0.08], fov0: 40, fov1: 38,
     dir: () => [0.12, -0.99] }) },
-  // morning: buyer crosses to his stable, hauls the door open — push to his
-  // face as the shock lands on "empty"
+  // morning: buyer crosses to his stable, hauls the door open — the
+  // push keeps going to a true R2 REACTION: his face passes 65% of
+  // frame width as the shock lands on "empty"
   morning: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 346, pos: [-9.0, 1.82, -5.4], look: [-11.2, 1.35, 0.2], fov: 40 },
-    { f: 415, pos: [-9.9, 1.7, -4.3], look: [-11.3, 1.4, 0.1], fov: 36, ease: 'smooth' },
-    { f: 465, pos: [-10.4, 1.62, -3.3], look: [-11.0, 1.48, -0.05], fov: 32, ease: 'surge' }] }) },
+    { f: 346, pos: [-8.7, 1.85, -5.6], look: [-10.55, 1.32, 0.35], fov: 40 },
+    { f: 408, pos: [-9.8, 1.7, -4.15], look: [-11.0, 1.4, 0.02], fov: 33, ease: 'smooth' },
+    { f: 465, pos: [-10.62, 1.58, -2.85], look: [-10.84, 1.5, -0.12], fov: 27, ease: 'surge' }] }) },
   // INSERT: the padlock — unbroken. the rope — uncut. nothing was forced.
   lock: { cut: 'hard', raw: keysCam({ keys: [
     { f: 466, pos: [-9.9, 1.38, -1.5], look: [-10.45, 1.05, 0.55], fov: 30 },
@@ -278,24 +309,31 @@ const RIG_BY_ID = {
     { f: 1264, pos: [0.3, 1.62, 4.8], look: [1.5, 1.5, 7.9], fov: 34 },
     { f: 1338, pos: [0.55, 1.58, 5.45], look: [1.5, 1.5, 7.9], fov: 29, ease: 'surge' }] }) },
   // dialogue: the camera HOLDS on the speaker for the whole line (speak
-  // gate rule) — one slow push, no cutaway; the buyer listens at frame left
+  // gate rule) — one slow push, no cutaway. R2: tightened to moonrent's
+  // dialogue scale, the face growing ~38% -> ~58% of frame width
   dialogue: { cut: 'blend', blend: 14, raw: keysCam({ keys: [
-    { f: 1339, pos: [0.15, 1.62, 4.1], look: [1.45, 1.42, 7.85], fov: 36 },
-    { f: 1459, pos: [0.42, 1.58, 4.85], look: [1.47, 1.43, 7.87], fov: 31, ease: 'surge' }] }) },
-  // treat: two years of midnights in one warm pool of lantern light — the
-  // dealer kneels at his own stable and the horse eats from his hand
+    { f: 1339, pos: [0.3, 1.6, 3.55], look: [1.42, 1.44, 7.88], fov: 36 },
+    { f: 1459, pos: [0.6, 1.56, 5.2], look: [1.46, 1.44, 7.89], fov: 28.5, ease: 'surge' }] }) },
+  // treat: R2 INSERT first — the camera opens ON the midnight treat
+  // bowl waiting by the shed door, the bowl filling ~90% of frame
+  // width in the lantern pool; then one continuous pull-back reveals
+  // the ritual: the dealer kneeling, the horse's head coming down
   treat: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1460, pos: [4.2, 1.5, 8.6], look: [6.9, 0.95, 12.9], fov: 37 },
-    { f: 1587, pos: [4.7, 1.42, 9.5], look: [6.95, 0.95, 12.92], fov: 33, ease: 'surge' }] }) },
-  // hookq: the gate at dusk — the board rises into frame as the question
-  // is asked; dealer and horse flank it, small
+    { f: 1460, pos: [6.66, 0.6, 11.6], look: [7.04, 0.3, 13.14], fov: 36 },
+    { f: 1520, pos: [5.5, 1.05, 10.4], look: [6.95, 0.7, 13.2], fov: 37, ease: 'smooth' },
+    { f: 1587, pos: [4.35, 1.4, 9.5], look: [7.0, 0.95, 13.3], fov: 37, ease: 'surge' }] }) },
+  // hookq: R2 — the gate at dusk, the board rising into frame as the
+  // question is asked; the dealer already kneels in the foreground
+  // below it, pointing up (the final's character beat starts here)
   hookq: { cut: 'whip', blend: 20, raw: keysCam({ keys: [
-    { f: 1588, pos: [0.2, 2.05, -5.6], look: [1.1, 2.2, 8.55], fov: 40 },
-    { f: 1650, pos: [0.5, 2.0, -4.9], look: [1.1, 2.24, 8.55], fov: 38, ease: 'surge' }] }) },
-  // hook: the board, full and readable, held to the literal last frame
+    { f: 1588, pos: [0.15, 2.3, -6.4], look: [1.1, 2.2, 8.55], fov: 44 },
+    { f: 1650, pos: [0.45, 2.08, -4.6], look: [1.1, 2.19, 8.55], fov: 42.5, ease: 'surge' }] }) },
+  // hook: R2 FINAL — character beat + board together: the kneeling
+  // dealer in the foreground points up at the board, full and readable
+  // with margins, held to the literal last frame
   hook: { cut: 'blend', blend: 16, raw: keysCam({ keys: [
-    { f: 1651, pos: [0.5, 2.0, -4.9], look: [1.1, 2.24, 8.55], fov: 38 },
-    { f: 1728, pos: [0.7, 1.97, -4.3], look: [1.1, 2.26, 8.55], fov: 36.5, ease: 'surge' }] }) },
+    { f: 1651, pos: [0.45, 2.08, -4.6], look: [1.1, 2.19, 8.55], fov: 42.5 },
+    { f: 1728, pos: [0.6, 2.0, -3.8], look: [1.1, 2.2, 8.55], fov: 41, ease: 'surge' }] }) },
 };
 const RIG = buildRig({
   total: TOTAL,
@@ -315,7 +353,8 @@ export const dofAt = (f) => {
   let cinf = 2.4;
   if (['march', 'hook', 'hookq', 'empty'].includes(S.id)) cinf = 1.4;
   if (['coins', 'lock', 'grin', 'dialogue'].includes(S.id)) cinf = 3.5;
-  if (['horse', 'treat', 'follow'].includes(S.id)) cinf = 3.0;
+  if (['horse', 'follow'].includes(S.id)) cinf = 3.0;
+  if (S.id === 'treat') cinf = 3.4;
   const d = Math.hypot(C.pos[0] - hp[0], C.pos[1] - hp[1], C.pos[2] - hp[2]);
   return { focus: d, cinf };
 };
@@ -400,7 +439,7 @@ const emoDealer = emoTrack('smug', [
   [1157, 'smug', 8], [1268, 'grin', 7], [1460, 'smile', 9], [1590, 'smug', 8],
 ]);
 const emoBuyer1 = emoTrack('proud', [
-  [352, 'shock', 6], [445, 'stern', 8], [575, 'stern', 6],
+  [352, 'shock', 6], [450, 'stern', 8], [575, 'stern', 6],
 ]);
 const emoBuyer2 = emoTrack('smile', [
   [575, 'stern', 6], [830, 'wonder', 8], [885, 'grin', 8],
@@ -415,6 +454,7 @@ const emoBuyer7 = emoTrack('thinking', [
 // from the stable door to us as the shock lands; the dealer WINKS on his
 // grin beat — the plan working exactly as he built it.
 const dealerTreatPose = poseWindows([{ a: 1468, b: 1578, mode: 'kneel', inF: 7, outF: 6 }]);
+const dealerHookPose = poseWindows([{ a: 1580, b: 1728, mode: 'kneel', inF: 9, outF: 1 }]);
 const buyer7Pose = poseWindows([{ a: 922, b: 1016, mode: 'kneel1', inF: 7, outF: 6 }]);
 const buyer1Turn = turnTrack([{ f0: 420, dur: 12, dir: -1 }]);
 const dealerWink = winkTrack([{ a: 1300, b: 1312 }]);
@@ -439,19 +479,23 @@ export const castAt = (f) => {
   if (winkK > 0) DP = T.blendFaceP(DP, T.faceP('wink', 31), winkK);
   switch (S.id) {
     case 'deal': {
-      // mid-action: presenting the horse with one raised arm as the price
-      // is named; the buyer already counting his coins
+      // R2 opening: the seller alone with his horse, BIG — one arm raised
+      // to the horse's neck in a pat, the sales pitch already running.
+      // (The buyer is introduced by the 'coins' beat; in v1 he peeked
+      // half-hidden from behind the horse — a banned partial face.)
       std('dealer', OUTFITS.dealer, { expr: 'smile', exprP: DP, mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: ['point', 0.62],
-        ...head(f, 31, -2, 0.35, 0.1, 0.35) }, d.x, d.z, { yaw: 0.4 });
-      std('buyer1', OUTFITS.buyer1, { expr: 'smile', exprP: P1, mode: 'stand', blink: blinkAt(f, 51), seed: 51, prop: ['coin', 0.5],
-        ...head(f, 51, -1, -0.4, 0.35, -0.4) }, b1.x, b1.z, { yaw: -0.4 });
+        ...head(f, 31, -2, -0.5, 0.05, -0.45) }, d.x, d.z, { yaw: 0.3, flip: true });
       break;
     }
     case 'coins': {
-      // the purse crosses between them inside the insert's frame window
-      std('dealer', OUTFITS.dealer, { expr: 'smile', exprP: DP, mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: f >= 106 ? ['coin', 0.55] : ['point', 0.4],
-        ...head(f, 31, -2.5, 0.3, 0.5, 0.3) }, d.x, d.z, { yaw: 0.4 });
-      std('buyer1', OUTFITS.buyer1, { expr: 'smile', exprP: P1, mode: 'stand', blink: blinkAt(f, 51), seed: 51, prop: f < 106 ? ['coin', 0.5] : null,
+      // the coin crosses between their hands at centre frame, landing
+      // in the dealer's palm on the word "paid" (f112). The dealer is
+      // FLIPPED (moonrent market rule): the prop arm sits on a fixed
+      // side of the card, and unflipped it pointed AWAY from centre —
+      // his received coin fell outside the tight frame entirely
+      std('dealer', OUTFITS.dealer, { expr: 'smile', exprP: DP, mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: f >= 112 ? ['coin', 0.55] : ['point', 0.4],
+        ...head(f, 31, -2.5, -0.3, 0.5, -0.3) }, d.x, d.z, { yaw: 0.4, flip: true });
+      std('buyer1', OUTFITS.buyer1, { expr: 'smile', exprP: P1, mode: 'stand', blink: blinkAt(f, 51), seed: 51, prop: f < 112 ? ['coin', 0.5] : null,
         ...head(f, 51, -1.5, -0.35, 0.45, -0.35) }, b1.x, b1.z, { yaw: -0.4 });
       break;
     }
@@ -554,8 +598,12 @@ export const castAt = (f) => {
       break;
     }
     case 'hookq': case 'hook': {
-      std('dealer', OUTFITS.dealer, { expr: 'smile', exprP: DP, mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: ['point', 0.7],
-        ...head(f, 31, -2, 0.5, 0, 0.5) }, d.x, d.z, { yaw: 0.5 });
+      // R2 final: the dealer KNEELS in the foreground, grinning up and
+      // pointing at the hook board behind him — the character beat and
+      // the board share the frame to the literal last frame
+      const P = dealerHookPose(f);
+      std('dealer', OUTFITS.dealer, { expr: 'smile', exprP: DP, mode: P.mode, squash: P.squash, blink: blinkAt(f, 31), seed: 31, prop: ['point', 0.78],
+        ...head(f, 31, -2, 0.55, -0.3, 0.5) }, d.x, d.z, { yaw: 0.5 });
       break;
     }
     default: break;
