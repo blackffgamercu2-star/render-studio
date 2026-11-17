@@ -1,0 +1,594 @@
+// Shot plan for "कभी न बुझने वाली मोमबत्ती" — candle-hindi (Salted Mine
+// V3 style lock: painted 3D world, flat round-white-head card characters,
+// reference camera grammar — every clause a new shot, push-ins, inserts,
+// word-by-word captions; body.js actions; speak.js performed dialogue).
+// ONE set: the moneylender's room — the tall candle table with its rope
+// barrier, the oil pot hidden underneath, charpai, shelf, crates.
+// Voice stem: Google AI Studio Puck (series voice), 55.051 s, 30 fps,
+// TOTAL 1652; line timings from timing.json (faster-whisper small,
+// char-mapped onto the script — see ../align.py). Scene changes ONLY at
+// line boundaries:
+//   L1 the eternal candle   L7 the servant doubts    L13 the table moves
+//   L2 god's own flame      L8 he crawls under       L14 the secret is out
+//   L3 a coin a darshan     L9 THE TUBE (reveal)     L15 "he admitted..."
+//   L4 none may approach    L10 the oil climbs       L16 THE LINE (performed)
+//   L5 wax never melts      L11 a hollow show        L17 hook board (book)
+//   L6 the blow test        L12 moving day
+// Beats pinned to ASR words: the blow bends the flame f592-605, recovers
+// by f628; the table shifts f1228-1258, the tube SNAPS f1256-1266, the
+// flame dies f1262-1280 (smooth exposure drop, never a pop).
+// GRADE: Night Lamp (candle key) / Royal Gold (moving day). Boards never
+// graded.
+import { M, blinkAt, q, clamp, lerp, ramp, kf } from './motion.js';
+import { buildRig, pushInCam, keysCam } from './camrig.js';
+import { poseWindows, turnTrack, winkTrack } from './body.js';
+import * as SOL from './solid.js';
+import * as T from './toon.js';
+import * as SPK from './speak.js';
+import { SPEAK_DATA } from './speakdata.js';
+
+export const FPS = 30, TOTAL = 1652, DECK = 0;
+export const SHOTS = [
+  { id: 'hook', a: 0, b: 123, light: 'night' },
+  { id: 'claim', a: 124, b: 248, light: 'night' },
+  { id: 'coins', a: 249, b: 313, light: 'night' },
+  { id: 'forbidden', a: 314, b: 421, light: 'night' },
+  { id: 'steady', a: 422, b: 527, light: 'night' },
+  { id: 'blow', a: 528, b: 639, light: 'night' },
+  { id: 'suspect', a: 640, b: 743, light: 'night' },
+  { id: 'crawl', a: 744, b: 822, light: 'under' },
+  { id: 'reveal', a: 823, b: 941, light: 'under' },
+  { id: 'oilflow', a: 942, b: 1029, light: 'under' },
+  { id: 'truth', a: 1030, b: 1122, light: 'night' },
+  { id: 'moving', a: 1123, b: 1224, light: 'day' },
+  { id: 'snap', a: 1225, b: 1313, light: 'day' },
+  { id: 'exposed', a: 1314, b: 1403, light: 'day' },
+  { id: 'tag', a: 1404, b: 1466, light: 'eve' },
+  { id: 'dialogue', a: 1467, b: 1574, light: 'eve' },
+  { id: 'hookboard', a: 1575, b: 1651, light: 'night' },
+];
+export const TIMING = SHOTS.map((s) => [s.id, s.a, s.b]);
+export const shotAt = (f) => SHOTS.find((s) => f >= s.a && f <= s.b) || (f < 0 ? SHOTS[0] : SHOTS[SHOTS.length - 1]);
+const smooth = M.smooth;
+
+// ---------- lights / mood grades ----------
+export const LIGHTS = {
+  night: { az: 150, el: 30, sky: '#5a4632', ground: '#1c1108', hemi: 0.56, sun: '#cbb59a', sunI: 0.5, fog: '#160d06', fogNear: 9, fogFar: 46,
+    skyTop: '#0d0906', skyHor: '#2e1f10', sunDisc: '#000000', sunSize: 0, sat: 1.08, vig: 0.32, shadowExt: 14, aurora: 0, gain: '#ffd9ae',
+    waterDeep: '#1d4e5f', waterShal: '#2e7ea6', glint: '#ffe9c0' },
+  under: { az: 150, el: 24, sky: '#4a3620', ground: '#140b04', hemi: 0.42, sun: '#bfae94', sunI: 0.34, fog: '#100a05', fogNear: 5, fogFar: 30,
+    skyTop: '#0a0603', skyHor: '#241708', sunDisc: '#000000', sunSize: 0, sat: 1.06, vig: 0.36, shadowExt: 10, aurora: 0, gain: '#eecfa4',
+    waterDeep: '#1d4e5f', waterShal: '#2e7ea6', glint: '#ffe9c0' },
+  day: { az: 105, el: 48, sky: '#ffe0b0', ground: '#4a3418', hemi: 1.12, sun: '#ffd9a0', sunI: 1.85, fog: '#2a1a0c', fogNear: 12, fogFar: 60,
+    skyTop: '#7a5a30', skyHor: '#c99a58', sunDisc: '#000000', sunSize: 0, sat: 1.1, vig: 0.26, shadowExt: 16, aurora: 0, gain: '#fff0d0',
+    waterDeep: '#1d4e5f', waterShal: '#2e7ea6', glint: '#ffe9c0' },
+  eve: { az: 140, el: 32, sky: '#6a4a2c', ground: '#20140a', hemi: 0.58, sun: '#ffb45e', sunI: 0.7, fog: '#1e1206', fogNear: 8, fogFar: 44,
+    skyTop: '#140b04', skyHor: '#402a12', sunDisc: '#000000', sunSize: 0, sat: 1.09, vig: 0.3, shadowExt: 13, aurora: 0, gain: '#ffd2a2',
+    waterDeep: '#1d4e5f', waterShal: '#2e7ea6', glint: '#ffe9c0' },
+};
+const DAY_DEAD = { ...LIGHTS.day, hemi: 0.74, sunI: 1.1, gain: '#c9b294', fog: '#1c1108', skyHor: '#8a6a42' };
+const blendLight = (A, B, u) => {
+  const o = {};
+  for (const k in A) {
+    if (typeof A[k] === 'number') o[k] = lerp(A[k], B[k], u);
+    else if (typeof A[k] === 'string' && A[k][0] === '#') {
+      const pa = [1, 3, 5].map((i) => parseInt(A[k].slice(i, i + 2), 16)), pb = [1, 3, 5].map((i) => parseInt(B[k].slice(i, i + 2), 16));
+      o[k] = '#' + pa.map((v, i) => Math.round(lerp(v, pb[i], u)).toString(16).padStart(2, '0')).join('');
+    } else o[k] = A[k];
+  }
+  return o;
+};
+// ---------- the trick's mechanics (single source of truth) ----------
+export const flameOutAt = (f) => smooth(ramp(f, 1262, 1280)); // the flame dies
+export const snapAt = (f) => smooth(ramp(f, 1256, 1266));      // the tube snaps
+export const tableXAt = (f) => 0.55 * smooth(ramp(f, 1228, 1258)); // the table shifts
+export const blowAt = (f) => {
+  if (f < 545 || f > 628) return 0;
+  if (f < 597) return smooth(ramp(f, 545, 597));
+  if (f <= 608) return 1;
+  return 1 - smooth(ramp(f, 608, 628));
+};
+// the oil glint's path: pot mouth -> joint -> under the top -> wick
+const OIL_PATH = [[1.32, 0.52, -3.4], [1.12, 0.58, -3.4], [1.14, 1.0, -3.4], [1.3, 1.14, -3.4], [1.3, 1.5, -3.4]];
+export const oilPtAt = (f) => {
+  const S = shotAt(f);
+  if (S.id === 'reveal') return [...OIL_PATH[1]];
+  if (S.id !== 'oilflow') return [...OIL_PATH[0]];
+  const u = clamp((f - 950) / 62) * (OIL_PATH.length - 1);
+  const i = Math.min(OIL_PATH.length - 2, Math.floor(u)), v = u - i;
+  return OIL_PATH[i].map((c, k) => lerp(c, OIL_PATH[i + 1][k], v));
+};
+export const lightFor = (S, f) => {
+  if (S.light === 'day') { const d = flameOutAt(f); return d > 0 ? blendLight(LIGHTS.day, DAY_DEAD, d) : { ...LIGHTS.day }; }
+  return { ...LIGHTS[S.light] };
+};
+
+// ---------- staging ----------
+// The hook board stands before the back wall; transform mirrored in
+// boards.json — keep in sync.
+export const BOARD_POS = [0, 2.0, -8.2];
+export const TABLE_POS = [1.3, -3.4];
+export const gunAt = (f) => ({ k: 0, x: 0, y: 0, z: 0 });
+
+// cast anchors per shot (single source of truth)
+export const heroAt = (f) => {
+  const S = shotAt(f);
+  switch (S.id) {
+    case 'hook': return { x: 0.05, z: -2.85 };
+    case 'claim': return { x: 0.15, z: -2.8 };
+    case 'coins': return { x: 0.15, z: -2.75 };
+    case 'forbidden': { const u = smooth(ramp(f, 330, 372)); return { x: lerp(0.15, 0.95, u), z: lerp(-2.75, -2.5, u) }; }
+    case 'blow': return { x: 2.65, z: -2.95 };
+    case 'truth': return { x: 1.55, z: -4.45 };
+    case 'moving': return { x: 0.3, z: -2.5 };
+    case 'snap': return { x: 3.35, z: -2.5 };
+    case 'exposed': return { x: 2.7, z: -2.55 };
+    case 'tag': case 'dialogue': return { x: 1.15, z: -2.35 };
+    case 'hookboard': return { x: -1.92, z: -7.9 };
+    default: return { x: 12, z: 6 };
+  }
+};
+export const srvAt = (f) => {
+  const S = shotAt(f);
+  switch (S.id) {
+    case 'suspect': return { x: -2.2, z: -2.2 };
+    case 'crawl': {
+      if (f < 772) { const u = smooth(ramp(f, 748, 772)); return { x: lerp(-0.55, 0.1, u), z: lerp(-2.3, -3.4, u) }; }
+      const u = smooth(ramp(f, 772, 800)); return { x: lerp(0.1, 1.02, u), z: -3.4 };
+    }
+    case 'reveal': case 'oilflow': case 'truth': return { x: 1.02, z: -3.4 };
+    case 'moving': {
+      if (f < 1180) { const u = smooth(ramp(f, 1127, 1180)); return { x: lerp(-4.7, -3.1, u), z: lerp(-6.6, -5.9, u) }; }
+      return { x: -3.1, z: -5.9 };
+    }
+    case 'snap': case 'exposed': return { x: -1.0, z: -2.1 };
+    case 'tag': return { x: -1.5, z: -2.7 };
+    case 'dialogue': return { x: -1.6, z: -2.8 };
+    case 'hookboard': return { x: 2.3, z: -7.9 };
+    default: return { x: 13, z: 7 };
+  }
+};
+export const vilAAt = (f) => {
+  const S = shotAt(f);
+  switch (S.id) {
+    case 'hook': return { x: -1.35, z: -1.7 };
+    case 'claim': return { x: -1.25, z: -1.95 };
+    case 'coins': return { x: 2.75, z: -2.5 };
+    case 'forbidden': return { x: -0.9, z: -1.8 };
+    case 'blow': return { x: 0.0, z: -2.6 };
+    case 'moving': {
+      if (f < 1200) { const u = smooth(ramp(f, 1140, 1200)); return { x: lerp(5.2, 4.2, u), z: lerp(-6.0, -5.6, u) }; }
+      return { x: 4.2, z: -5.6 };
+    }
+    case 'snap': return { x: 0.3, z: -3.35 };
+    case 'exposed': return { x: 0.2, z: -2.6 };
+    case 'tag': return { x: -0.7, z: -1.6 };
+    case 'dialogue': return { x: -0.8, z: -1.7 };
+    default: return { x: 14, z: 8 };
+  }
+};
+export const vilBAt = (f) => {
+  const S = shotAt(f);
+  switch (S.id) {
+    case 'claim': return { x: 2.95, z: -1.75 };
+    case 'coins': return { x: 3.35, z: -1.45 };
+    case 'forbidden': { const u = smooth(ramp(f, 318, 362)); return { x: lerp(2.9, 2.25, u), z: lerp(-1.9, -2.45, u) }; }
+    case 'moving': return { x: -4.6, z: -5.6 };
+    case 'snap': return { x: 2.35, z: -3.35 };
+    case 'exposed': return { x: 3.6, z: -1.9 };
+    case 'tag': return { x: 3.0, z: -1.7 };
+    case 'dialogue': return { x: 3.1, z: -1.8 };
+    default: return { x: 15, z: 9 };
+  }
+};
+export const vilCAt = (f) => {
+  const S = shotAt(f);
+  switch (S.id) {
+    case 'snap': return { x: -1.9, z: -1.3 };
+    case 'exposed': return { x: -2.2, z: -1.5 };
+    case 'tag': return { x: 0.3, z: -1.15 };
+    case 'dialogue': return { x: 0.25, z: -1.3 };
+    default: return { x: 16, z: 10 };
+  }
+};
+
+// ---------- hero / focus ----------
+const FOCUS = {
+  hook: () => [0.6, 1.4, -3.1],
+  claim: () => { const h = heroAt(190); return [h.x, 1.55, h.z]; },
+  coins: () => [1.85, 1.1, -3.2],
+  forbidden: () => [1.3, 1.5, -3.4],
+  steady: () => [1.3, 1.45, -3.4],
+  blow: () => [0.9, 1.35, -3.1],
+  suspect: () => [-2.2, 1.5, -2.2],
+  crawl: () => [0.9, 0.5, -3.2],
+  reveal: () => [1.28, 0.5, -3.4],
+  oilflow: (f) => oilPtAt(f),
+  truth: () => [1.15, 0.95, -3.55],
+  moving: () => [-1.2, 1.0, -5.6],
+  snap: () => [1.4, 1.1, -3.35],
+  exposed: () => { const h = heroAt(1360); return [h.x, 1.52, h.z]; },
+  tag: () => { const h = heroAt(1430); return [h.x, 1.52, h.z]; },
+  dialogue: () => { const h = heroAt(1520); return [h.x, 1.52, h.z]; },
+  hookboard: () => [0, 1.95, -8.2],
+};
+export const heroPosAt = (f) => FOCUS[shotAt(f).id](f);
+
+// ---------- cameras: EVERY shot is a camrig track on a subject ----------
+const heroPos = (f) => { const h = heroAt(f); return [h.x, h.y || 0, h.z]; };
+const srvPos = (f) => { const h = srvAt(f); return [h.x, h.y || 0, h.z]; };
+const RIG_BY_ID = {
+  // hook: opens ON the moneylender mid-action — one hand raised to the
+  // eternal flame, the other already holding a darshan coin.
+  hook: { cut: 'hard', raw: keysCam({ keys: [
+    { f: 0, pos: [-1.15, 1.5, 1.6], look: [0.75, 1.35, -3.1], fov: 40 },
+    { f: 123, pos: [-0.7, 1.45, 0.7], look: [0.85, 1.4, -3.15], fov: 36, ease: 'surge' }] }) },
+  claim: { cut: 'hard', raw: pushInCam({ subject: heroPos, a: 124, b: 248, d0: 5.2, d1: 3.8, h0: 1.72, h1: 1.66, lookOff: [0, 1.55, 0], fov0: 40, fov1: 35,
+    dir: () => [-0.3, 0.95] }) },
+  coins: { cut: 'hard', raw: keysCam({ keys: [
+    { f: 249, pos: [3.6, 1.5, 0.2], look: [1.8, 1.02, -3.25], fov: 38 },
+    { f: 313, pos: [3.25, 1.4, -0.3], look: [1.85, 1.05, -3.3], fov: 35, ease: 'surge' }] }) },
+  // forbidden: low angle UP at the candle on its tall table — the
+  // moneylender steps into frame and bars the way.
+  forbidden: { cut: 'hard', raw: keysCam({ keys: [
+    { f: 314, pos: [0.2, 0.95, 0.9], look: [1.3, 1.5, -3.4], fov: 41 },
+    { f: 421, pos: [0.45, 1.0, 0.3], look: [1.28, 1.52, -3.4], fov: 37, ease: 'surge' }] }) },
+  // steady INSERT: the flame fills the frame — no drip, no shrink.
+  steady: { cut: 'hard', raw: keysCam({ keys: [
+    { f: 422, pos: [0.5, 1.62, -1.5], look: [1.3, 1.42, -3.4], fov: 30 },
+    { f: 527, pos: [0.72, 1.58, -1.75], look: [1.3, 1.43, -3.4], fov: 28, ease: 'surge' }] }) },
+  blow: { cut: 'hard', raw: keysCam({ keys: [
+    { f: 528, pos: [-1.7, 1.5, 0.7], look: [0.9, 1.3, -3.1], fov: 39 },
+    { f: 639, pos: [-1.3, 1.45, 0.2], look: [0.95, 1.32, -3.15], fov: 36, ease: 'surge' }] }) },
+  suspect: { cut: 'hard', raw: pushInCam({ subject: srvPos, a: 640, b: 743, d0: 4.6, d1: 3.4, h0: 1.58, h1: 1.5, lookOff: [0, 1.5, 0], fov0: 39, fov1: 34,
+    dir: () => [-0.25, 0.97] }) },
+  // crawl: floor-level POV as the servant slips under the table
+  crawl: { cut: 'hard', raw: keysCam({ keys: [
+    { f: 744, pos: [-1.7, 0.7, 0.6], look: [0.7, 0.45, -3.2], fov: 42 },
+    { f: 822, pos: [-1.3, 0.62, 0.05], look: [0.9, 0.5, -3.25], fov: 39, ease: 'surge' }] }) },
+  // reveal INSERT: from the room's right, low — the pot, the thin tube
+  // climbing out of it, and the servant's lit face at the frame's edge.
+  reveal: { cut: 'hard', raw: keysCam({ keys: [
+    { f: 823, pos: [-0.35, 0.55, -1.15], look: [1.25, 0.52, -3.42], fov: 37 },
+    { f: 941, pos: [-0.15, 0.52, -1.4], look: [1.26, 0.54, -3.42], fov: 34, ease: 'surge' }] }) },
+  // oilflow: the camera climbs the tube with the glint, pot -> wick
+  oilflow: { cut: 'hard', raw: keysCam({ keys: [
+    { f: 942, pos: [-0.3, 0.6, -1.2], look: [1.28, 0.52, -3.4], fov: 37 },
+    { f: 1029, pos: [0.15, 1.15, -1.75], look: [1.3, 1.13, -3.4], fov: 33, ease: 'surge' }] }) },
+  truth: { cut: 'hard', raw: keysCam({ keys: [
+    { f: 1030, pos: [0.0, 1.1, 1.0], look: [1.2, 0.95, -3.6], fov: 40 },
+    { f: 1122, pos: [0.25, 1.02, 0.5], look: [1.2, 0.98, -3.58], fov: 37, ease: 'surge' }] }) },
+  moving: { cut: 'hard', raw: keysCam({ keys: [
+    { f: 1123, pos: [-0.4, 1.7, 2.6], look: [-1.2, 1.0, -5.6], fov: 42 },
+    { f: 1224, pos: [-0.1, 1.6, 2.0], look: [-1.0, 1.02, -5.5], fov: 39, ease: 'surge' }] }) },
+  // snap: both men have the table; the camera holds the candle as the
+  // table shifts, the tube tears and the flame dies in front of everyone.
+  snap: { cut: 'hard', raw: keysCam({ keys: [
+    { f: 1225, pos: [-1.3, 1.5, 1.7], look: [1.5, 1.05, -3.35], fov: 44 },
+    { f: 1313, pos: [-1.0, 1.45, 1.2], look: [1.55, 1.08, -3.35], fov: 41, ease: 'surge' }] }) },
+  exposed: { cut: 'hard', raw: pushInCam({ subject: heroPos, a: 1314, b: 1403, d0: 4.4, d1: 2.9, h0: 1.62, h1: 1.56, lookOff: [0, 1.52, 0], fov0: 38, fov1: 33,
+    dir: () => [0.3, 0.95] }) },
+  tag: { cut: 'hard', raw: keysCam({ keys: [
+    { f: 1404, pos: [1.1, 1.6, 1.9], look: [1.1, 1.35, -2.5], fov: 39 },
+    { f: 1466, pos: [1.08, 1.55, 1.3], look: [1.12, 1.38, -2.45], fov: 36, ease: 'surge' }] }) },
+  // dialogue: the performed line — a slow push into the moneylender's
+  // face; the camera HOLDS on the speaker.
+  dialogue: { cut: 'hard', raw: pushInCam({ subject: heroPos, a: 1467, b: 1574, d0: 3.1, d1: 2.35, h0: 1.6, h1: 1.55, lookOff: [0, 1.52, 0], fov0: 33, fov1: 30,
+    dir: () => [0.35, 0.94] }) },
+  hookboard: { cut: 'hard', raw: keysCam({ keys: [
+    { f: 1575, pos: [0.4, 2.0, 3.4], look: [0, 1.9, -8.35], fov: 50 },
+    { f: 1651, pos: [0.3, 1.95, 2.2], look: [0, 1.95, -8.35], fov: 48, ease: 'surge' }] }) },
+};
+const RIG = buildRig({
+  total: TOTAL,
+  shots: SHOTS.map((s) => ({ a: s.a, b: s.b, ...RIG_BY_ID[s.id] })),
+  kicks: [],
+  sigma: 2.3, fovSigma: 1.6,
+});
+export const camAt = (f) => ({ ...RIG.camAt(f), flash: 0 });
+export const RIG_META = {
+  kicks: RIG.declared.kicks, hardCuts: RIG.declared.hardCuts,
+  blends: SHOTS.filter((s) => RIG_BY_ID[s.id].cut === 'blend').map((s) => ({ a: s.a - Math.floor(RIG_BY_ID[s.id].blend / 2), b: s.a + Math.ceil(RIG_BY_ID[s.id].blend / 2) })),
+  whips: RIG.declared.whips,
+  samples: RIG.samples,
+};
+export const dofAt = (f) => {
+  const S = shotAt(f), C = camAt(f), hp = heroPosAt(f);
+  let cinf = 2.2;
+  if (['hookboard'].includes(S.id)) cinf = 1.3;
+  if (['steady', 'reveal', 'oilflow'].includes(S.id)) cinf = 3.4;
+  if (['dialogue', 'tag', 'exposed', 'crawl'].includes(S.id)) cinf = 3.0;
+  if (['coins', 'blow', 'suspect', 'truth', 'snap', 'moving', 'forbidden'].includes(S.id)) cinf = 2.6;
+  const d = Math.hypot(C.pos[0] - hp[0], C.pos[1] - hp[1], C.pos[2] - hp[2]);
+  return { focus: d, cinf };
+};
+
+// ---------- world state ----------
+export const worldAt = (f) => {
+  const S = shotAt(f);
+  const oil = oilPtAt(f), tx = tableXAt(f);
+  return {
+    always: 1,
+    hookK: S.id === 'hookboard' ? smooth(ramp(f, 1583, 1609)) : 0,
+    lampK: 1,
+    flameK: 1 - flameOutAt(f),
+    blowK: blowAt(f),
+    snapK: snapAt(f),
+    tableX: tx,
+    winCol: S.light === 'day' ? '#bcd6f5' : '#27354f',
+    oilX: oil[0], oilY: oil[1], oilZ: oil[2],
+    blastX: 1.3 + tx, blastY: 1.66, blastZ: -3.4,
+  };
+};
+export const fxProfileAt = (f) => {
+  const S = shotAt(f);
+  const puff = f >= 1264 && f <= 1284 ? 0.7 : 0; // the flame's last breath
+  const spark = S.id === 'oilflow' ? 0.85 : S.id === 'reveal' ? 0.3 : 0;
+  return { moteRate: S.light === 'day' ? 0.04 : 0.09, blastRate: puff, sparkRate: spark, steamRate: 0, shimmerRate: 0 };
+};
+export const fxAt = () => [];
+
+// ---------- cast ----------
+// NO card tint in any light — faces stay pure white, costume colours flat
+// and saturated even in candlelight (the reference's rule).
+const tintFor = () => '#ffffff';
+export const OUTFITS = {
+  hero: { jacket: '#7a1f2b', pants: '#efe6d0', boots: '#3a2410', hat: 'turban', turban: '#c9962e', skin: '#fbf7ef', moustache: '#2a201a', bigMoustache: true },
+  srv: { jacket: '#6b5a44', pants: '#4a4038', boots: '#241a12', hat: 'hair', hair: '#1c1712', skin: '#fbf7ef' },
+  vilA: { jacket: '#1f7a6a', pants: '#33424a', boots: '#1c1712', hat: 'cap', cap: '#274b63', skin: '#fbf7ef' },
+  vilB: { jacket: '#7a4a2a', pants: '#3c3a40', boots: '#241a12', hat: 'hair', hair: '#14100c', skin: '#fbf7ef' },
+  vilC: { jacket: '#a03a5e', pants: '#4a2436', boots: '#241a12', hat: 'hair', hair: '#241a12', skin: '#fbf7ef' },
+};
+
+// ---------- HEAD PERFORMANCE ----------
+const emoTrack = (initial, events) => ({
+  at(f) {
+    let from = T.faceP(initial), to = from, t0 = 0, dur = 0;
+    const seg = (g) => {
+      if (dur <= 0 || g >= t0 + dur) return { ...to };
+      if (g <= t0) return { ...from };
+      const u = (g - t0) / dur, s = u * u * u * (u * (u * 6 - 15) + 10), o = {};
+      for (const k in to) o[k] = from[k] + (to[k] - from[k]) * s;
+      return o;
+    };
+    for (const [ef, name, ed] of events) {
+      if (ef > f) break;
+      from = seg(ef); to = T.faceP(name); t0 = ef; dur = Math.max(1, ed);
+    }
+    return seg(f);
+  },
+});
+const emoHero = emoTrack('smile', [
+  [124, 'grin', 8], [314, 'smug', 8], [528, 'smug', 8], [1030, 'grin', 8], [1123, 'stern', 8],
+  [1225, 'smug', 8], [1314, 'nervous', 9], [1404, 'pained', 9], [1467, 'smile', 8], [1575, 'grin', 8],
+]);
+const emoSrv = emoTrack('neutral', [
+  [640, 'thinking', 9], [744, 'nervous', 8], [823, 'wonder', 9], [1030, 'relief', 9],
+  [1123, 'neutral', 8], [1225, 'shock', 8], [1404, 'relief', 8], [1467, 'smile', 8],
+]);
+const emoVilA = emoTrack('grin', [
+  [1225, 'shock', 8], [1314, 'shock', 8], [1404, 'relief', 8],
+]);
+const emoVilB = emoTrack('smile', [
+  [314, 'nervous', 8], [1225, 'shock', 8], [1314, 'shock', 8], [1404, 'relief', 8],
+]);
+const emoVilC = emoTrack('neutral', [
+  [1225, 'shock', 8], [1314, 'shock', 8], [1404, 'relief', 8],
+]);
+// ---------- BODY ACTIONS (library body.js) ----------
+// the servant KNEELS low and crawls under the table (L8-L11); the hero
+// TURNS to the crowd as he admits the trick and WINKS on his smug claim.
+const srvPose = poseWindows([{ a: 744, b: 1122, mode: 'kneel1', inF: 8, outF: 6 }]);
+const heroTurn = turnTrack([{ f0: 1418, dur: 12, dir: 1 }]);
+const heroWink = winkTrack([{ a: 208, b: 218 }]);
+const SPEAK = SPK.makeSpeakPlayer(SPEAK_DATA);
+const micro = (f, seed) => 1.1 * Math.sin((f + seed * 5) * 0.037 + 1);
+const nodAt = (f, f0, n = 9, depth = 0.34) => (f >= f0 && f <= f0 + n ? Math.sin((f - f0) / n * Math.PI) * depth : 0);
+const head = (f, seed, tilt, look, lookY, facing = 0, squash = 0) => ({
+  headTilt: q(tilt + micro(f, seed), 1), look: q(look, 2), lookY: q(lookY, 2), facing: q(facing, 2), squash: q(squash, 2),
+});
+const noBlush = (P) => { P.blush = 0; P.openL = Math.min(1, (P.openL ?? 0.85) * 1.45); P.openR = Math.min(1, (P.openR ?? 0.85) * 1.45); return P; };
+
+export const castAt = (f) => {
+  const S = shotAt(f), tint = tintFor(S), out = [];
+  const std = (id, o, opts, x, z, extra = {}) => out.push({ id, x, y: extra.y || 0, z, r: 0.32, ground: extra.ground || 0,
+    actor: (T) => ({ key: 'smx' + JSON.stringify(o) + JSON.stringify(opts) + (extra.y || 0),
+      draw: (p) => { T.bodyFront(p, o, opts); if (extra.overlay) extra.overlay(p); },
+      x, y: extra.y || 0, z, ground: extra.ground || 0, tint, ...extra }) });
+  const h = heroAt(f), sv = srvAt(f), va = vilAAt(f), vb = vilBAt(f), vc = vilCAt(f);
+  let HP = noBlush(emoHero.at(f));
+  const SP = noBlush(emoSrv.at(f)), AP = noBlush(emoVilA.at(f)), BP = noBlush(emoVilB.at(f)), CP = noBlush(emoVilC.at(f));
+  const winkK = heroWink(f);
+  if (winkK > 0) HP = T.blendFaceP(HP, T.faceP('wink', 31), winkK);
+  const P = srvPose(f);
+  const srvKneel = ['crawl', 'reveal', 'oilflow', 'truth'].includes(S.id);
+  const srvOpts = (o) => srvKneel ? { ...o, mode: P.mode, squash: P.squash } : o;
+  switch (S.id) {
+    case 'hook': {
+      // mid-action: one arm UP at the flame he "owns", a coin in hand
+      std('hero', OUTFITS.hero, { expr: 'smile', exprP: HP, mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: ['point', 0.85],
+        ...head(f, 31, -3, 0.35, -0.4, 0.35) }, h.x, h.z, { yaw: 0.35 });
+      std('vilA', OUTFITS.vilA, { expr: 'grin', exprP: AP, mode: 'stand', blink: blinkAt(f, 61), seed: 61,
+        ...head(f, 61, -2.5, -0.4, -0.3, -0.4) }, va.x, va.z, { yaw: -0.35 });
+      break;
+    }
+    case 'claim': {
+      std('hero', OUTFITS.hero, { expr: 'grin', exprP: HP, mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: ['point', 0.7],
+        ...head(f, 31, -2, 0, -0.15 + nodAt(f, 190, 9, -0.7), 0) }, h.x, h.z, { yaw: 0.1 });
+      std('vilA', OUTFITS.vilA, { expr: 'grin', exprP: AP, mode: 'stand', blink: blinkAt(f, 61), seed: 61,
+        ...head(f, 61, -1.5, 0.45, -0.2, 0.45) }, va.x, va.z, { yaw: 0.4 });
+      std('vilB', OUTFITS.vilB, { expr: 'smile', exprP: BP, mode: 'stand', blink: blinkAt(f, 81), seed: 81,
+        ...head(f, 81, -1.5, -0.45, -0.2, -0.45) }, vb.x, vb.z, { yaw: -0.4 });
+      break;
+    }
+    case 'coins': {
+      std('vilA', OUTFITS.vilA, { expr: 'grin', exprP: AP, mode: 'stand', blink: blinkAt(f, 61), seed: 61, prop: ['coin', 0.6],
+        ...head(f, 61, -1, -0.5, 0.3 + nodAt(f, 285), -0.5) }, va.x, va.z, { yaw: -0.45 });
+      std('hero', OUTFITS.hero, { expr: 'smile', exprP: HP, mode: 'stand', blink: blinkAt(f, 31), seed: 31,
+        ...head(f, 31, -1.5, 0.5, 0.25, 0.5) }, h.x, h.z, { yaw: 0.45 });
+      std('vilB', OUTFITS.vilB, { expr: 'smile', exprP: BP, mode: 'stand', blink: blinkAt(f, 81), seed: 81, prop: ['coin', 0.5],
+        ...head(f, 81, -1, -0.4, 0.2, -0.4) }, vb.x, vb.z, { yaw: -0.35 });
+      break;
+    }
+    case 'forbidden': {
+      // vilB creeps toward the table; the hero steps in and bars him
+      std('vilB', OUTFITS.vilB, { expr: 'smile', exprP: BP, mode: 'stand', blink: blinkAt(f, 81), seed: 81,
+        ...head(f, 81, -3.5, -0.3, -0.5, -0.3) }, vb.x, vb.z, { yaw: -0.3 });
+      std('hero', OUTFITS.hero, { expr: 'smile', exprP: HP, mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: ['point', 0.55],
+        ...head(f, 31, -2, -0.5, -0.3, -0.5) }, h.x, h.z, { yaw: -0.5 });
+      std('vilA', OUTFITS.vilA, { expr: 'grin', exprP: AP, mode: 'stand', blink: blinkAt(f, 61), seed: 61,
+        ...head(f, 61, -3, 0.4, -0.45, 0.4) }, va.x, va.z, { yaw: 0.35 });
+      break;
+    }
+    case 'steady': {
+      // pure INSERT on the flame — no cast in frame
+      break;
+    }
+    case 'blow': {
+      // vilA leans in and blows; the flame bends and stands back up
+      const blowP = T.blendFaceP(AP, T.faceP('whistle', 61), blowAt(f));
+      std('vilA', OUTFITS.vilA, { expr: 'grin', exprP: blowP, mode: 'stand', blink: blinkAt(f, 61), seed: 61,
+        ...head(f, 61, kf([[528, -2], [560, 3.5], [610, 4], [639, 1]], f), 0.55, kf([[528, -0.2], [560, 0.35], [639, 0.1]], f), 0.55) }, va.x, va.z, { yaw: 0.5 });
+      std('hero', OUTFITS.hero, { expr: 'smile', exprP: HP, mode: 'stand', blink: blinkAt(f, 31), seed: 31,
+        ...head(f, 31, -2.5, -0.45, -0.35, -0.45) }, h.x, h.z, { yaw: -0.4 });
+      break;
+    }
+    case 'suspect': {
+      // the servant stops sweeping and stares at the candle: it should
+      // have melted long ago
+      std('srv', OUTFITS.srv, { expr: 'neutral', exprP: SP, mode: 'stand', blink: blinkAt(f, 41), seed: 41,
+        ...head(f, 41, kf([[640, 0], [690, -3], [743, -3.5]], f), 0.6, -0.25, 0.6) }, sv.x, sv.z, { yaw: 0.55 });
+      break;
+    }
+    case 'crawl': case 'reveal': case 'oilflow': {
+      // on his knees under the table; in the reveal his face catches the
+      // candle-glow from above as he finds the tube
+      std('srv', OUTFITS.srv, srvOpts({ expr: 'neutral', exprP: SP, blink: blinkAt(f, 41), seed: 41,
+        ...head(f, 41, S.id === 'crawl' ? 2.5 : -4, 0.3, S.id === 'oilflow' ? kf([[942, 0.3], [990, -0.1], [1029, -0.5]], f) : -0.3, 0.3) }), sv.x, sv.z, { yaw: 0.3 });
+      break;
+    }
+    case 'truth': {
+      std('srv', OUTFITS.srv, srvOpts({ expr: 'neutral', exprP: SP, blink: blinkAt(f, 41), seed: 41,
+        ...head(f, 41, -4.5, 0.25, -0.5, 0.25) }), sv.x, sv.z, { yaw: 0.25 });
+      // above the table the moneylender counts coins, suspecting nothing
+      std('hero', OUTFITS.hero, { expr: 'grin', exprP: HP, mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: ['coin', 0.6],
+        ...head(f, 31, 1.5, -0.3, 0.5 + nodAt(f, 1080), -0.3) }, h.x, h.z, { yaw: -0.3 });
+      break;
+    }
+    case 'moving': {
+      const mv = (a, b) => f >= a && f <= b;
+      std('srv', OUTFITS.srv, { expr: 'neutral', exprP: SP, mode: mv(1127, 1180) ? 'march' : 'stand', phase: q((f * 0.016) % 1, 2), blink: blinkAt(f, 41), seed: 41,
+        ...head(f, 41, 1, 0.3, 0.3, 0.3) }, sv.x, sv.z, { yaw: 0.3 });
+      std('vilA', OUTFITS.vilA, { expr: 'grin', exprP: AP, mode: mv(1140, 1200) ? 'march' : 'stand', phase: q((f * 0.016 + 0.4) % 1, 2), blink: blinkAt(f, 61), seed: 61,
+        ...head(f, 61, 1, -0.3, 0.3, -0.3) }, va.x, va.z, { yaw: -0.3 });
+      std('vilB', OUTFITS.vilB, { expr: 'smile', exprP: BP, mode: 'stand', blink: blinkAt(f, 81), seed: 81,
+        ...head(f, 81, 0.5, 0.4, 0.2, 0.4) }, vb.x, vb.z, { yaw: 0.35 });
+      std('hero', OUTFITS.hero, { expr: 'smile', exprP: HP, mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: ['point', 0.6],
+        ...head(f, 31, -1, -0.4, 0.15, -0.4) }, h.x, h.z, { yaw: -0.35 });
+      break;
+    }
+    case 'snap': {
+      // both men lean on the table as it shifts; every head snaps to the
+      // candle the moment the flame dies
+      const dead = flameOutAt(f);
+      std('vilA', OUTFITS.vilA, { expr: 'grin', exprP: AP, mode: 'stand', blink: blinkAt(f, 61), seed: 61,
+        ...head(f, 61, kf([[1225, 2], [1258, 2.5], [1285, -3.5], [1313, -3.5]], f), -0.4, 0.3 - 0.7 * dead, -0.4) }, va.x, va.z, { yaw: -0.35 });
+      std('vilB', OUTFITS.vilB, { expr: 'smile', exprP: BP, mode: 'stand', blink: blinkAt(f, 81), seed: 81,
+        ...head(f, 81, kf([[1225, 2], [1258, 2.5], [1285, -3.5], [1313, -3.5]], f), 0.4, 0.3 - 0.7 * dead, 0.4) }, vb.x, vb.z, { yaw: 0.35 });
+      std('hero', OUTFITS.hero, { expr: 'smile', exprP: HP, mode: 'stand', blink: blinkAt(f, 31), seed: 31,
+        ...head(f, 31, -3, -0.5, -0.4, -0.5) }, h.x, h.z, { yaw: -0.45 });
+      std('srv', OUTFITS.srv, { expr: 'neutral', exprP: SP, mode: 'stand', blink: blinkAt(f, 41), seed: 41,
+        ...head(f, 41, -3, 0.5, -0.4, 0.5) }, sv.x, sv.z, { yaw: 0.45 });
+      std('vilC', OUTFITS.vilC, { expr: 'neutral', exprP: CP, mode: 'stand', blink: blinkAt(f, 91), seed: 91,
+        ...head(f, 91, -3, 0.45, -0.4, 0.45) }, vc.x, vc.z, { yaw: 0.4 });
+      break;
+    }
+    case 'exposed': {
+      // the secret is out; the crowd stares at the moneylender, who has
+      // no answer — mouth shut, eyes down
+      std('hero', OUTFITS.hero, { expr: 'smile', exprP: HP, mode: 'stand', blink: blinkAt(f, 31), seed: 31,
+        ...head(f, 31, kf([[1314, 2], [1360, 4], [1403, 3.5]], f), 0.1, 0.55, 0.1) }, h.x, h.z, { yaw: 0.1 });
+      std('vilA', OUTFITS.vilA, { expr: 'grin', exprP: AP, mode: 'stand', blink: blinkAt(f, 61), seed: 61, prop: ['point', 0.7],
+        ...head(f, 61, -1.5, 0.55, 0, 0.55) }, va.x, va.z, { yaw: 0.5 });
+      std('vilB', OUTFITS.vilB, { expr: 'smile', exprP: BP, mode: 'stand', blink: blinkAt(f, 81), seed: 81,
+        ...head(f, 81, -1.5, -0.55, 0, -0.55) }, vb.x, vb.z, { yaw: -0.5 });
+      std('srv', OUTFITS.srv, { expr: 'neutral', exprP: SP, mode: 'stand', blink: blinkAt(f, 41), seed: 41,
+        ...head(f, 41, -1.5, 0.55, 0, 0.55) }, sv.x, sv.z, { yaw: 0.5 });
+      std('vilC', OUTFITS.vilC, { expr: 'neutral', exprP: CP, mode: 'stand', blink: blinkAt(f, 91), seed: 91,
+        ...head(f, 91, -1.5, 0.5, 0, 0.5) }, vc.x, vc.z, { yaw: 0.45 });
+      break;
+    }
+    case 'tag': {
+      // he raises a hand and admits it — the narration tag; his mouth
+      // stays shut until the performed line
+      const Tn = heroTurn(f);
+      std('hero', OUTFITS.hero, { expr: 'smile', exprP: HP, mode: 'stand', squash: Tn.squash, blink: blinkAt(f, 31), seed: 31, prop: ['point', 0.45],
+        ...head(f, 31, -1.5, kf([[1404, -0.4], [1418, -0.4], [1430, 0], [1466, 0]], f), 0.1, kf([[1404, -0.35], [1430, 0], [1466, 0]], f)) }, h.x, h.z, { yaw: Tn.yaw, y: Tn.hop });
+      std('vilA', OUTFITS.vilA, { expr: 'grin', exprP: AP, mode: 'stand', blink: blinkAt(f, 61), seed: 61,
+        ...head(f, 61, -1.5, 0.5, 0, 0.5) }, va.x, va.z, { yaw: 0.45 });
+      std('vilB', OUTFITS.vilB, { expr: 'smile', exprP: BP, mode: 'stand', blink: blinkAt(f, 81), seed: 81,
+        ...head(f, 81, -1.5, -0.5, 0, -0.5) }, vb.x, vb.z, { yaw: -0.45 });
+      std('srv', OUTFITS.srv, { expr: 'neutral', exprP: SP, mode: 'stand', blink: blinkAt(f, 41), seed: 41,
+        ...head(f, 41, -1.5, 0.45, 0, 0.45) }, sv.x, sv.z, { yaw: 0.4 });
+      std('vilC', OUTFITS.vilC, { expr: 'neutral', exprP: CP, mode: 'stand', blink: blinkAt(f, 91), seed: 91,
+        ...head(f, 91, -1.5, -0.45, 0, -0.45) }, vc.x, vc.z, { yaw: -0.4 });
+      break;
+    }
+    case 'dialogue': {
+      // THE LINE, performed: the moneylender's mouth is driven by the
+      // stem itself (speak.js); every other mouth stays shut.
+      const sp = SPEAK.at(f);
+      const speakP = SPK.applySpeak({ ...T.faceP('smile'), cheek: 0 }, sp);
+      speakP.blush = 0; speakP.openL = Math.min(1, (speakP.openL ?? 0.85) * 1.45); speakP.openR = Math.min(1, (speakP.openR ?? 0.85) * 1.45);
+      std('hero', OUTFITS.hero, { expr: 'smile', exprP: speakP, mode: 'stand', blink: blinkAt(f, 31), seed: 31,
+        headTilt: q((sp.nod || 0) + micro(f, 31) - 1.5, 1), look: q(0.08, 2), lookY: q(0.02, 2), facing: q(0.1, 2), squash: 0 }, h.x, h.z, { yaw: 0.1 });
+      std('vilA', OUTFITS.vilA, { expr: 'grin', exprP: AP, mode: 'stand', blink: blinkAt(f, 61), seed: 61,
+        ...head(f, 61, -1.5, 0.45, 0.05, 0.45) }, va.x, va.z, { yaw: 0.4 });
+      std('vilB', OUTFITS.vilB, { expr: 'smile', exprP: BP, mode: 'stand', blink: blinkAt(f, 81), seed: 81,
+        ...head(f, 81, -1.5, -0.45, 0.05, -0.45) }, vb.x, vb.z, { yaw: -0.4 });
+      std('srv', OUTFITS.srv, { expr: 'neutral', exprP: SP, mode: 'stand', blink: blinkAt(f, 41), seed: 41,
+        ...head(f, 41, -1.5, 0.4, 0.05, 0.4) }, sv.x, sv.z, { yaw: 0.35 });
+      std('vilC', OUTFITS.vilC, { expr: 'neutral', exprP: CP, mode: 'stand', blink: blinkAt(f, 91), seed: 91,
+        ...head(f, 91, -1, -0.4, 0.05, -0.4) }, vc.x, vc.z, { yaw: -0.35 });
+      break;
+    }
+    case 'hookboard': {
+      std('hero', OUTFITS.hero, { expr: 'grin', exprP: HP, mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: ['point', 0.8],
+        ...head(f, 31, -2, 0.5, -0.05, 0.5) }, h.x, h.z, { yaw: 0.45 });
+      std('srv', OUTFITS.srv, { expr: 'neutral', exprP: SP, mode: 'stand', blink: blinkAt(f, 41), seed: 41,
+        ...head(f, 41, -1, -0.45, 0, -0.45) }, sv.x, sv.z, { yaw: -0.4 });
+      break;
+    }
+  }
+  return out;
+};
+export const actorsAt = (f, T) => castAt(f).map((c) => c.actor(T));
+
+// ---------- solidity ----------
+export const STATICS = [
+  SOL.aabb(-7.5, -4.4, -8.65, -8.35, { h: 3.6, id: 'backwallL' }),
+  SOL.aabb(-2.6, 7.5, -8.65, -8.35, { h: 3.6, id: 'backwallR' }),
+  SOL.aabb(-7.65, -7.35, -8.5, 3.5, { h: 3.6, id: 'wallL' }),
+  SOL.aabb(7.35, 7.65, -8.5, 3.5, { h: 3.6, id: 'wallR' }),
+  SOL.circle(0.6, -3.8, 0.05, { h: 1.03, id: 'legFL' }),
+  SOL.circle(2.0, -3.8, 0.05, { h: 1.03, id: 'legFR' }),
+  SOL.circle(0.6, -3.0, 0.05, { h: 1.03, id: 'legBL' }),
+  SOL.circle(2.0, -3.0, 0.05, { h: 1.03, id: 'legBR' }),
+  SOL.aabb(-6.05, -5.15, -7.95, -7.25, { h: 1.15, id: 'crates' }),
+  SOL.circle(-6.35, -6.7, 0.34, { h: 0.85, id: 'barrel' }),
+  SOL.circle(-1.9, -6.9, 0.34, { h: 0.55, id: 'sack1' }),
+  SOL.circle(5.9, -6.6, 0.31, { h: 0.5, id: 'sack2' }),
+  SOL.circle(-2.08, -8.28, 0.06, { h: 2.0, id: 'boardpostL' }),
+  SOL.circle(2.08, -8.28, 0.06, { h: 2.0, id: 'boardpostR' }),
+];
+export const WORLD = SOL.makeWorld(STATICS);
+export const dynamicsAt = (f) => {
+  const out = [];
+  for (const a of castAt(f)) out.push(SOL.circle(a.x, a.z, a.r, { kind: 'dynamic', id: a.id, group: '' }));
+  return out;
+};
+export const groundItemsAt = (f) => {
+  const items = [];
+  for (const a of castAt(f)) items.push({ id: a.id, y: a.y, ground: a.ground || 0, maxHover: 0.06 });
+  return items;
+};
