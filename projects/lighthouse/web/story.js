@@ -26,6 +26,13 @@
 // warm lamp light motivates everything (cone brightest at source, soft
 // falloff, dust only inside the beam); the morning beat warms a touch toward
 // dawn INSIDE the same family. Grade changes ONLY on clause boundaries.
+// R2 REBUILD (2026-11-17, the approved moonrent R2 standard): opening =
+// keeper BIG from f0 hauling beside the lamp, low angle + push-in; reveal =
+// pure INSERT on the pulley wheel / ropes / lamp hook (no cast, no faces);
+// ritual = ACTION close-up, keeper's hauling hands + rope + glowing lamp
+// centre-frame from the FRONT; lampcu ends on the captain's amazed face
+// (>=65% frame width) after opening on the burning lamp; hook = character
+// beat + board together (keeper in frame pointing at the board).
 import { M, blinkAt, q, clamp, lerp, ramp, kf } from './motion.js';
 import { buildRig, keysCam } from './camrig.js';
 import { poseWindows, turnTrack, gazeTrack, winkTrack } from './body.js';
@@ -78,6 +85,7 @@ export const lightFor = (S, f) => {
 // ---------- staging (shared by story, main, colliders) ----------
 export const BOARD_POS = [0, 3.0, 12.5];
 export const KEEPER = { x: 1.35, z: 1.05 };        // ground floor, by the rope
+export const KEEPER_NEAR = { x: 0.95, z: 0.62 };   // haul/ritual: right at the lamp, so keeper + lamp + rope share one tight frame
 export const CAPTAIN_G = { x: -1.15, z: 1.35 };    // ground floor, facing keeper
 export const TABLE = { x: -1.7, z: -1.1 };         // keeper's work table (inside the stair ring's 2D clearance)
 export const TOPFLOOR_Y = 11.9;
@@ -166,21 +174,24 @@ const head = (f, seed, tilt, look, lookY, facing = 0, squash = 0) => ({
 
 // ---------- hero / focus ----------
 const FOCUS = {
-  haul: () => [KEEPER.x, 1.6, KEEPER.z],
+  haul: () => [0.5, 1.4, 0.3],
   blaze: () => [0, 12.5, 0],
   village: () => [0, 11, 4],
   climb: () => { const c = captainAt(520); return [c.x, c.y + 1.2, c.z]; },
   search: () => [CAPTAIN_T.x, TOPFLOOR_Y + 1.4, CAPTAIN_T.z],
-  lampcu: () => [0, LAMP_TOP, 0],
+  // focus racks from the burning lamp to the captain's upturned face
+  lampcu: (f) => { const u = smooth(ramp(f, B('lampcu') + 45, B('lampcu') + 95)); return [lerp(0, 1.6, u), lerp(LAMP_TOP, TOPFLOOR_Y + 1.45, u), lerp(0, 0.2, u)]; },
   demand: () => [CAPTAIN_G.x, 1.35, CAPTAIN_G.z],
   laugh: () => [KEEPER.x, 1.45, KEEPER.z],
   dialogue: () => [KEEPER.x, 1.45, KEEPER.z],
-  reveal: () => [0, LAMP_MID, 0],
-  ritual: () => [0, 1.1, 0],
+  reveal: () => [0, 14.4, 0],
+  ritual: () => [0.5, 1.2, 0.3],
   morning: () => [0.4, 1.2, 0.3],
-  hook: () => BOARD_POS,
+  // R2 fix: focus sits between the near keeper (~6 m) and the board
+  // (~13 m) so BOTH stay readable with cinf 1.8 (keeper coc ~1.1, board <0.6).
+  hook: () => [0.4, 2.8, 16.2],
 };
-export const heroPosAt = (f) => FOCUS[shotAt(f).id]();
+export const heroPosAt = (f) => FOCUS[shotAt(f).id](f);
 
 // ---------- cameras: EVERY shot is a camrig track on a subject ----------
 // the climb TRACKS the captain: keys are sampled from his own stair path,
@@ -195,47 +206,68 @@ const climbKeys = () => {
 };
 // Interior positions stay inside the shaft (r <= 4.0); every hold creeps.
 const RIG_BY_ID = {
+  // R2 OPENING: low angle, front three-quarter — the keeper BIG (head ~half
+  // the frame width) hauling at frame right, the great lamp lifting off its
+  // cradle at centre-left; a slow push-in, the look tilting up only as far
+  // as the keeper stays in frame while the lamp climbs through it.
   haul: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('haul'), pos: [2.6, 1.25, 3.0], look: [0.5, 2.2, 0.2], fov: 39 },
-    { f: B('haul') + 80, pos: [2.4, 1.35, 2.8], look: [0.35, 3.0, 0.1], fov: 35 },
-    { f: E('haul'), pos: [2.2, 1.6, 2.6], look: [0.25, 4.1, 0], fov: 32, ease: 'io' }] }) },
+    { f: B('haul'), pos: [3.55, 1.0, -1.8], look: [0.58, 1.45, 0.5], fov: 43 },
+    { f: B('haul') + 80, pos: [3.4, 1.25, -1.68], look: [0.55, 1.95, 0.47], fov: 40 },
+    { f: E('haul'), pos: [3.25, 1.6, -1.55], look: [0.52, 2.65, 0.42], fov: 37, ease: 'io' }] }) },
   blaze: { cut: 'hard', raw: keysCam({ keys: [
     { f: B('blaze'), pos: [14.5, 6.8, 26], look: [0, 10.2, 0], fov: 43 },
-    { f: E('blaze'), pos: [12.6, 5.8, 23.4], look: [0, 11.4, 0], fov: 37, ease: 'io' }] }) },
+    { f: E('blaze'), pos: [12.6, 5.8, 23.4], look: [0, 11.4, 0], fov: 35, ease: 'io' }] }) },
   village: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('village'), pos: [-4.7, 1.7, 21.0], look: [-0.3, 5.2, 3], fov: 42 },
-    { f: E('village'), pos: [-4.3, 1.8, 20.2], look: [-0.2, 5.9, 2.5], fov: 38, ease: 'io' }] }) },
+    { f: B('village'), pos: [-4.5, 1.7, 19.2], look: [-0.3, 4.8, 3], fov: 40 },
+    { f: E('village'), pos: [-4.2, 1.8, 18.4], look: [-0.2, 5.5, 2.5], fov: 36, ease: 'io' }] }) },
   climb: { cut: 'hard', raw: keysCam({ keys: climbKeys() }) },
   search: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('search'), pos: [2.9, 13.1, 2.9], look: [0.9, 13.2, 0.5], fov: 37 },
-    { f: E('search'), pos: [2.55, 13.15, 2.55], look: [0.95, 13.25, 0.5], fov: 32, ease: 'io' }] }) },
+    { f: B('search'), pos: [2.75, 13.15, 2.75], look: [0.9, 13.25, 0.5], fov: 35 },
+    { f: E('search'), pos: [2.5, 13.2, 2.5], look: [0.95, 13.3, 0.5], fov: 30, ease: 'io' }] }) },
+  // R2 REACTION: open ON the burning lamp (fills the frame), then pan/tilt
+  // down-right onto the captain's upturned face, ending with his face at
+  // ~3/4 of the frame width. No partial faces at any edge.
   lampcu: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('lampcu'), pos: [1.75, 14.25, 1.95], look: [0, 14.0, 0], fov: 31 },
-    { f: B('lampcu') + 52, pos: [1.9, 14.1, 2.1], look: [0.2, 13.9, 0.1], fov: 29 },
-    { f: E('lampcu'), pos: [2.35, 13.45, 2.45], look: [0.95, 13.35, 0.5], fov: 29, ease: 'io' }] }) },
+    { f: B('lampcu'), pos: [2.1, 14.3, 2.4], look: [0, 13.95, 0], fov: 30 },
+    { f: B('lampcu') + 58, pos: [2.4, 13.7, 2.65], look: [0.8, 13.5, 0.1], fov: 29 },
+    { f: E('lampcu'), pos: [2.45, 13.45, 2.7], look: [1.6, 13.38, 0.2], fov: 28, ease: 'io' }] }) },
   demand: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('demand'), pos: [0.35, 1.72, 3.8], look: [-1.05, 1.38, 1.32], fov: 35 },
-    { f: E('demand'), pos: [0.2, 1.68, 3.6], look: [-1.1, 1.4, 1.34], fov: 31, ease: 'io' }] }) },
+    { f: B('demand'), pos: [0.3, 1.7, 3.55], look: [-1.05, 1.38, 1.32], fov: 33 },
+    { f: E('demand'), pos: [0.15, 1.66, 3.35], look: [-1.1, 1.4, 1.34], fov: 29, ease: 'io' }] }) },
   laugh: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('laugh'), pos: [2.5, 1.62, 3.1], look: [1.3, 1.42, 1.05], fov: 34 },
-    { f: E('laugh'), pos: [2.28, 1.58, 2.82], look: [1.35, 1.45, 1.05], fov: 29, ease: 'io' }] }) },
+    { f: B('laugh'), pos: [2.35, 1.6, 2.9], look: [1.3, 1.42, 1.05], fov: 32 },
+    { f: E('laugh'), pos: [2.15, 1.56, 2.65], look: [1.35, 1.45, 1.05], fov: 27, ease: 'io' }] }) },
   dialogue: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('dialogue'), pos: [2.38, 1.6, 2.85], look: [1.33, 1.44, 1.05], fov: 31 },
-    { f: E('dialogue'), pos: [2.2, 1.58, 2.62], look: [1.35, 1.45, 1.05], fov: 27, ease: 'io' }] }) },
+    { f: B('dialogue'), pos: [2.38, 1.6, 2.85], look: [1.33, 1.44, 1.05], fov: 30 },
+    { f: E('dialogue'), pos: [2.2, 1.58, 2.62], look: [1.35, 1.45, 1.05], fov: 26, ease: 'io' }] }) },
+  // R2 INSERT: no cast — the camera rides the mechanism itself: the great
+  // beam across the top of frame, the pulley wheel centre, both ropes
+  // dropping out of frame; a slow push + tilt down the main rope toward
+  // the lamp hanging at mid-shaft. The wheel alone spans ~85% of width.
   reveal: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('reveal'), pos: [3.2, 5.4, 3.2], look: [0, 6.4, 0], fov: 44 },
-    { f: E('reveal'), pos: [2.95, 5.25, 2.95], look: [0, 6.5, 0], fov: 41, ease: 'io' }] }) },
+    { f: B('reveal'), pos: [1.6, 13.9, 2.15], look: [0, 14.5, 0], fov: 34 },
+    { f: B('reveal') + 73, pos: [1.5, 13.65, 2.0], look: [0.05, 13.8, -0.05], fov: 32 },
+    { f: E('reveal'), pos: [1.4, 13.3, 1.9], look: [0.1, 12.6, -0.1], fov: 30, ease: 'io' }] }) },
+  // R2 ACTION: front close on the work — kneeling keeper trimming the lit
+  // lamp, then standing to haul hand over hand, his hands + the rope + the
+  // rising glowing lamp held centre-frame as the camera pushes and tilts.
   ritual: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('ritual'), pos: [2.35, 1.45, 2.7], look: [0, 1.0, 0], fov: 35 },
-    { f: B('ritual') + 62, pos: [2.95, 1.65, 3.45], look: [1.0, 1.15, 0.8], fov: 33 },
-    { f: E('ritual'), pos: [2.8, 2.0, 3.25], look: [0.6, 3.4, 0.3], fov: 30, ease: 'io' }] }) },
+    { f: B('ritual'), pos: [3.55, 1.15, -1.8], look: [0.6, 1.0, 0.5], fov: 41 },
+    { f: B('ritual') + 70, pos: [3.4, 1.4, -1.68], look: [0.57, 1.45, 0.47], fov: 38 },
+    { f: E('ritual'), pos: [3.25, 1.75, -1.55], look: [0.52, 2.25, 0.42], fov: 35, ease: 'io' }] }) },
   morning: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('morning'), pos: [3.0, 2.05, 3.4], look: [0.3, 1.7, 0.2], fov: 41 },
-    { f: B('morning') + 70, pos: [2.85, 1.8, 3.25], look: [0.35, 1.15, 0.25], fov: 38 },
-    { f: E('morning'), pos: [2.7, 1.85, 3.1], look: [0.5, 2.6, 0.3], fov: 35, ease: 'io' }] }) },
+    { f: B('morning'), pos: [3.0, 2.05, 3.4], look: [0.3, 1.7, 0.2], fov: 39 },
+    { f: B('morning') + 70, pos: [2.85, 1.8, 3.25], look: [0.35, 1.15, 0.25], fov: 36 },
+    { f: E('morning'), pos: [2.7, 1.85, 3.1], look: [0.5, 2.6, 0.3], fov: 34, ease: 'io' }] }) },
+  // R2 FINAL: the keeper stands in the near foreground at frame left,
+  // pointing up at the hook board — character beat + board together, the
+  // board's text band still fully inside the frame with margins.
+  // R2 fix: camera lowered (3.3 -> 2.2) and aimed at the board's centre,
+  // so the closer keeper's head rides at ~76% of frame height instead of
+  // sinking to the bottom edge; board share stays ~85% (distance ~same).
   hook: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('hook'), pos: [5.2, 3.8, 27.5], look: [0.05, 2.9, 12.5], fov: 39 },
-    { f: E('hook'), pos: [5.0, 3.75, 27.0], look: [0.02, 2.92, 12.5], fov: 37, ease: 'io' }] }) },
+    { f: B('hook'), pos: [4.2, 2.3, 25.5], look: [0, 3.02, 12.5], fov: 40 },
+    { f: E('hook'), pos: [4.0, 2.2, 25.0], look: [-0.02, 3.02, 12.5], fov: 38, ease: 'io' }] }) },
 };
 const RIG = buildRig({
   total: TOTAL,
@@ -253,9 +285,11 @@ export const RIG_META = {
 export const dofAt = (f) => {
   const S = shotAt(f), C = camAt(f), hp = heroPosAt(f);
   let cinf = 2.2;
-  if (['blaze', 'village', 'reveal', 'climb'].includes(S.id)) cinf = 1.3;
+  if (['blaze', 'village', 'climb'].includes(S.id)) cinf = 1.3;
   if (['dialogue', 'laugh', 'lampcu', 'demand'].includes(S.id)) cinf = 3.6;
-  if (S.id === 'hook') cinf = 2.6;
+  if (S.id === 'reveal') cinf = 2.4;   // the mechanism stays crisp, shaft softens
+  if (S.id === 'ritual') cinf = 3.0;
+  if (S.id === 'hook') cinf = 1.8;     // keeper (near) + board (far) both readable
   const d = Math.hypot(C.pos[0] - hp[0], C.pos[1] - hp[1], C.pos[2] - hp[2]);
   return { focus: d, cinf };
 };
@@ -303,21 +337,23 @@ export const castAt = (f) => {
   const KG = keeperGaze(f), CG = captainGaze(f);
   const KP = keeperPose(f);
   const keeperStd = (opts, extra = {}) => std('keeper', OUTFITS.keeper, opts, KEEPER.x, KEEPER.z, extra);
+  const keeperNearStd = (opts, extra = {}) => std('keeper', OUTFITS.keeper, opts, KEEPER_NEAR.x, KEEPER_NEAR.z, extra);
   const captainStd = (opts, extra = {}) => std('captain', OUTFITS.captain, opts, cap.x, cap.z, { y: cap.y, ground: cap.ground, blob: cap.aboard ? false : undefined, ...extra });
   switch (S.id) {
     case 'haul': {
-      // OPENS mid-action: the keeper hauls the rope hand over hand, gaze up
+      // OPENS mid-action: the keeper hauls the rope hand over hand (the
+      // prop arm pumps k 0.2..0.8, body squashing with the pull), gaze up
       // at the rising lamp, body leaning with the effort.
-      keeperStd({ expr: 'stern', mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: ['point', 0.5],
-        ...head(f, 31, -2.5, KG.look, KG.lookY, 0.2) }, { yaw: 0.3 });
+      keeperNearStd({ expr: 'stern', mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: ['point', q(0.5 + 0.3 * Math.sin(f * 0.21), 2)],
+        ...head(f, 31, -2.5, KG.look, KG.lookY, 0.2, q(0.03 * Math.sin(f * 0.21 + 1), 2)) }, { yaw: 0.3 });
       break;
     }
     case 'blaze': break;   // exterior: tower, lamp, ship — no cast
     case 'village': {
       std('villager1', OUTFITS.villager1, { expr: 'shock', mode: 'stand', blink: blinkAt(f, 51), seed: 51, prop: ['point', 0.8],
-        ...head(f, 51, -3, 0.2, 0.62, 0.15) }, -3.2, 11.8, { yaw: -0.25 });
+        ...head(f, 51, -3, 0.2, 0.62, 0.15) }, -3.4, 14.2, { yaw: -0.25 });
       std('villager2', OUTFITS.villager2, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 52), seed: 52,
-        ...head(f, 52, -2, -0.25, 0.58, -0.1) }, -2.0, 13.8, { yaw: 0.2 });
+        ...head(f, 52, -2, -0.25, 0.58, -0.1) }, -1.85, 15.9, { yaw: 0.2 });
       break;
     }
     case 'climb': {
@@ -333,8 +369,11 @@ export const castAt = (f) => {
       break;
     }
     case 'lampcu': {
-      captainStd({ expr: 'shock', mode: 'stand', blink: blinkAt(f, 41), seed: 41,
-        ...head(f, 41, -2, CG.look, CG.lookY, 0) }, { yaw: -0.2 });
+      // R2: the captain stands clear of the lamp framing at (1.6, 0.2) —
+      // out of frame while the camera is on the lamp, then centred for
+      // the closing reaction close-up.
+      std('captain', OUTFITS.captain, { expr: 'shock', mode: 'stand', blink: blinkAt(f, 41), seed: 41,
+        ...head(f, 41, -2, CG.look, CG.lookY, 0) }, 1.6, 0.2, { y: TOPFLOOR_Y, ground: TOPFLOOR_Y, yaw: -0.2 });
       break;
     }
     case 'demand': {
@@ -363,16 +402,10 @@ export const castAt = (f) => {
         ...head(f, 41, 0, 0.3, 0.05, 0.25) }, { yaw: 0.5 });
       break;
     }
-    case 'reveal': {
-      keeperStd({ expr: 'smile', mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: ['point', 0.45],
-        ...head(f, 31, -2, KG.look, KG.lookY, 0.1) }, { yaw: 0.25 });
-      captainStd({ expr: 'shock', mode: 'stand', blink: blinkAt(f, 41), seed: 41,
-        ...head(f, 41, -2, CG.look, CG.lookY, -0.1) }, { yaw: -0.3 });
-      break;
-    }
+    case 'reveal': break;   // R2: pure mechanism insert — no cast, no faces
     case 'ritual': {
-      keeperStd({ expr: f < B('ritual') + 66 ? 'neutral' : 'smile', mode: KP.mode, squash: KP.squash, blink: blinkAt(f, 31), seed: 31,
-        prop: f >= B('ritual') + 66 ? ['point', 0.5] : null,
+      keeperNearStd({ expr: f < B('ritual') + 66 ? 'neutral' : 'smile', mode: KP.mode, squash: KP.squash, blink: blinkAt(f, 31), seed: 31,
+        prop: f >= B('ritual') + 66 ? ['point', q(0.5 + 0.3 * Math.sin((f - B('ritual')) * 0.21), 2)] : null,
         ...head(f, 31, f < B('ritual') + 66 ? -4 : -2, KG.look, KG.lookY, 0.15) }, { yaw: 0.3 });
       break;
     }
@@ -382,7 +415,16 @@ export const castAt = (f) => {
         ...head(f, 31, -2, KG.look, KG.lookY, 0.15) }, { yaw: 0.3 });
       break;
     }
-    case 'hook': break;   // the board shot — no cast
+    case 'hook': {
+      // R2 FINAL: the keeper himself delivers the tease — standing in the
+      // near foreground left of the board, grinning and pointing up at it.
+      // R2 fix: moved closer to camera along the view ray (17.8 -> 19.3)
+      // so his head reads ~22% of frame width (was ~17%); paired with the
+      // lowered hook camera so he stays framed as a foreground figure.
+      std('keeper', OUTFITS.keeper, { expr: 'grin', mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: ['point', 0.78],
+        ...head(f, 31, -2, -0.25, 0.4, 0.1) }, 1.85, 19.3, { yaw: -0.1 });
+      break;
+    }
   }
   return out;
 };
