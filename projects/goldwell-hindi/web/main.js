@@ -5,6 +5,7 @@ import * as FX from './fx.js';
 import * as PR from './props.js';
 import * as M4 from './materials.js';
 import { TOTAL, shotAt, camAt, dofAt, lightFor, actorsAt, worldAt, fxAt, fxProfileAt, BOARD_POS, WELL, KILN } from './story.js';
+import { WORDS } from './words.js';
 
 const W = 1080, H = 1920;
 const canvas = document.getElementById('c');
@@ -322,7 +323,13 @@ add(tbox(0.16, 0.22, 0.16, 1), MAT.dark, WELL.x + 1.88, 2.02, WELL.z + 0.18, wor
 // ---------- boards (transforms mirrored in boards.json — keep in sync) ----------
 const boardTitle = textBoard(['दोगुना लौटाने', 'वाला कुआँ'], 4.6, 1.2, '#3a2410', '#ffe9a8', 900, { fsMul: 0.88, pitch: 0.40, dy: 0.02 });
 boardTitle.position.set(...BOARD_POS); world.add(boardTitle); addBoardOccluder(boardTitle, 4.6, 1.2, 'boardTitle');
-const boardHook = textBoard(['लेकिन कल...', 'वह आदमी जिसने', 'चाँद को किराए पर', 'दे दिया?'], 4.6, 1.8, '#2e1a3a', '#ffd76a', 900, { pitch: 0.20, dy: 0.01, fsMul: 0.78 });
+// fsMul 0.55 (was 0.74): at fs ~71px the Black weight's ि-matra stem in
+// 'लेकिन' sits in a hairline sandwich (क bowl | stem | न) that the scene
+// render + grade merges into one blob, re-reading as 'लोकेन'. Cart-hindi's
+// hook board paints the same word at fs ~49px and the stem survives the
+// same pipeline — so the hook board now paints at fs ~53px, same font
+// stack / weight / full-line shaped fillText as cart-hindi.
+const boardHook = textBoard(['लेकिन कल...', 'वह आदमी जिसने', 'चाँद को किराए पर', 'दे दिया?'], 4.6, 1.8, '#2e1a3a', '#ffd76a', 900, { pitch: 0.22, dy: 0.045, fsMul: 0.55 });
 boardHook.position.set(...BOARD_POS); world.add(boardHook); addBoardOccluder(boardHook, 4.6, 1.8, 'boardHook');
 
 // ---------- FX: dry dust motes + heat shimmer + drifting clouds ----------
@@ -419,6 +426,37 @@ const dofScene = fs(new THREE.ShaderMaterial({ uniforms: dofU, vertexShader: `va
       acc += texture2D(src, vUv+o).rgb*w; wsum += w; }
     gl_FragColor = linearToOutputTexel(vec4(acc/max(wsum,1e-3), 1.)); }` }));
 dofScene.children[0].material.toneMapped = false;
+
+// ---------- word-by-word captions (the V3 signature) ----------
+// Script text verbatim (Devanagari) from web/words.js — timings
+// char-mapped from the existing ASR (align_captions.py). Bold white,
+// thick black stroke, centred, baseline ~76% of frame height. Boards
+// and captions are never graded (drawn after the grade/DOF pass).
+const capCanvas = document.createElement('canvas'); capCanvas.width = W; capCanvas.height = H;
+const capG = capCanvas.getContext('2d');
+const capTex = new THREE.CanvasTexture(capCanvas); capTex.colorSpace = THREE.SRGBColorSpace;
+const capScene = fs(new THREE.MeshBasicMaterial({ map: capTex, transparent: true, toneMapped: false }));
+let capKey = null;
+const drawCaption = (f) => {
+  const t = f / 30;
+  let i = -1;
+  for (let k = 0; k < WORDS.length; k++) { if (t >= WORDS[k].s) i = k; else break; }
+  let word = '';
+  if (i >= 0) word = WORDS[i].w;
+  if (word === capKey) return;
+  capKey = word;
+  capG.clearRect(0, 0, W, H);
+  if (word) {
+    capG.font = `900 74px 'Noto Sans Devanagari', Arial, sans-serif`;
+    capG.textAlign = 'center'; capG.textBaseline = 'middle'; capG.lineJoin = 'round';
+    capG.lineWidth = 17; capG.strokeStyle = '#000000';
+    const y = Math.round(H * 0.76);
+    capG.strokeText(word, W / 2, y);
+    capG.fillStyle = '#ffffff';
+    capG.fillText(word, W / 2, y);
+  }
+  capTex.needsUpdate = true;
+};
 
 // ---------- per-frame state ----------
 const tmpV = new THREE.Vector3();
@@ -527,6 +565,8 @@ window.renderFrame = (f) => {
   renderer.setRenderTarget(rtInk); renderer.render(inkScene, fsCam);
   dofU.focus.value = D.focus; dofU.cinf.value = D.cinf; dofU.near.value = D.near ?? 1;
   renderer.setRenderTarget(null); renderer.render(dofScene, fsCam);
+  drawCaption(f);
+  renderer.autoClear = false; renderer.render(capScene, fsCam); renderer.autoClear = true;
   return true;
 };
 window.TOTAL = TOTAL;

@@ -1,16 +1,39 @@
-// Shot plan for "दोगुना लौटाने वाला कुआँ" — goldwell-hindi (LIBRARY v4:
-// speak.js dialogue performance + materials v4, camrig smooth tracking +
-// solid colliders). Batch 8 topic 5 (Hindi-only). ONE set: a drought-
-// struck village square and its WELL. Whatever is dropped in the basket
-// comes back doubled by morning — because the old potter slips through a
-// hidden tunnel in the well wall at night and adds one more of everything,
-// just to keep the village's hope alive in the dry year. The greedy Seth
-// drops a whole GOLD brick (real ingot) expecting two — and gets back two
-// PAINTED clay bricks.
-// Voice stem: 50.971 s, 30 fps, TOTAL 1529. Timings: faster-whisper small
-// word alignment (words.json, timings only — Hindi spellings garbled).
-// ASR dropped L10/L11 entirely (30.56-37.30 s); their boundary (33.50 /
-// 33.80) comes from the stem's RMS clause dips, verified by hand.
+// Shot plan for "दोगुना लौटाने वाला कुआँ" — goldwell-hindi.
+// *** v4 UPGRADE (2026-11-19) — PICTURE-ONLY rebuild on the existing
+// stem. Voice stem, beat map, clause timings, story content, scene
+// order, boards and mix are UNCHANGED from the Batch-8 build. What
+// changed: (1) the camera is now Abid's "v4" ACTION camera (Zack D
+// Films grammar, proven in waterrun-hindi / fireless-hindi): camera
+// velocity keyed to the subject, fast eased push-ins at action starts
+// (subject scale x2-3 inside ~12-18 frames), tracking at subject
+// speed, declared impact KICKS, clause-boundary cuts only, NO slow
+// drift, NO static holds, camera NEVER behind the card characters
+// (front / front three-quarter only). (2) ANIMATION UPGRADE v1+v2
+// (kit body.js = Library v6): continuous life (lifeAt breath / weight
+// shift / sway on EVERY figure), emotion morphs at beats (emoTrack),
+// dialogue gesture (gestureAt), real leg stride from distance
+// travelled (stridePh — no glide), PHYSICAL GRIPS (gripAt: the hand
+// closes on the mango / coin / gold brick and releases with it),
+// cheek/brow shading tied to the expression morphs (toon v6 cheek).
+// (3) R2 FRAMING: the opening is no longer a distant drone wide —
+// the boy is BIG from frame 0 (head ~50%), mid-action at the well,
+// and the camera pulls back to reveal the well + title board. The
+// FINAL frame is a character beat + hook board TOGETHER (potter in
+// the foreground, head ~21%, board ~85% of frame width, whole panel
+// inside the frame with margins, full opacity to the last frame) —
+// the old build ended on a board-only shot wider than the frame.
+// (4) Word-by-word captions (V3 signature) added in main.js from
+// web/words.js (script text verbatim, timings char-mapped from the
+// existing ASR — see align_captions.py).
+// END RULE: the ONE performed dialogue line (L13, the potter) sits
+// at 1204-1318 of 1529 (~79-86% — mid-story, before the final
+// narration line + hook); the final quarter's narration (L14) and
+// the hook line (L15) are voice-over only — no character is shown
+// speaking at the end; the film ends on narration + hook board.
+// Voice stem: 50.971 s, 30 fps, TOTAL 1529. Timings: faster-whisper
+// small word alignment (words.json, timings only — Hindi spellings
+// garbled). ASR dropped L10/L11 entirely (30.56-37.30 s); their
+// boundary (33.50 / 33.80) comes from the stem's RMS clause dips.
 // Scene changes ONLY at clause boundaries:
 //   L1 0.00-3.34   उस गाँव के कुएँ में...लौट आता था।      L9  27.50-30.56 फिर लालची सेठ आया...डाल दी।
 //   L2 3.64-5.96   एक लड़के ने एक आम डाला, / सुबह...मिले।   L10 30.80-33.50 उसे पक्का यक़ीन था...मिलेंगी।
@@ -25,8 +48,9 @@
 // and back — grade changes ONLY on clause boundaries. Signature VFX:
 // heat shimmer over the cracked square, dry dust, the gold brick's
 // moving sheen + glints, the lantern glow on night beats.
-import { M, blinkAt, q, clamp, lerp, ramp } from './motion.js';
-import { buildRig, pushInCam, staticTrackCam, keysCam } from './camrig.js';
+import { M, blinkAt, q, clamp, lerp, ramp, kf } from './motion.js';
+import { buildRig, pushInCam, keysCam } from './camrig.js';
+import { emoTrack, lifeAt, gripAt, gestureAt, stridePh } from './body.js';
 import * as SOL from './solid.js';
 import * as T from './toon.js';
 import * as SPK from './speak.js';
@@ -34,14 +58,10 @@ import { SPEAK_DATA } from './speakdata.js';
 
 // ---------- v4 dialogue performance ----------
 const SPEAK = SPK.makeSpeakPlayer(SPEAK_DATA);
-const speakFace = (baseName, f) => {
-  const s = SPEAK.at(f);
-  return { expr: 'smile', exprP: SPK.applySpeak({ ...T.faceP(baseName), cheek: 0.5 }, s), headTilt: q(s.nod || 0, 2), clothShade: true };
-};
 
 export const FPS = 30, TOTAL = 1529, DECK = 0;
 export const SHOTS = [
-  { id: 'drone', a: 0, b: 108, light: 'gold' },
+  { id: 'open', a: 0, b: 108, light: 'gold' },
   { id: 'boy', a: 109, b: 148, light: 'gold' },
   { id: 'boymorn', a: 149, b: 186, light: 'gold' },
   { id: 'farmer', a: 187, b: 223, light: 'gold' },
@@ -108,6 +128,18 @@ const walkKeys = (keys, f) => {
   }
   return [x, z];
 };
+// stride phase from distance travelled along the key path (feet plant
+// with the ground — no glide; body.js stridePh, shared form).
+const phaseAlong = (keys, f, stride = 1.15) => {
+  let dist = 0;
+  for (let i = 1; i < keys.length; i++) {
+    const a = keys[i - 1], b = keys[i];
+    const segLen = Math.hypot(b[1] - a[1], b[2] - a[2]);
+    if (f <= b[0]) { const u = smooth(ramp(f, a[0], b[0])); return stridePh(0, dist + segLen * u, stride); }
+    dist += segLen;
+  }
+  return stridePh(0, dist, stride);
+};
 const POTTER_KEYS = [
   [0, 4.2, -4.2], [502, 4.2, -4.2], [548, 1.3, 0.1], [700, 1.3, 0.1], [730, 1.05, 0.05],
   [738, 1.05, 0.05], [739, 1.35, 0.15], [824, 1.35, 0.15], [825, 4.2, -4.2], [1118, 4.2, -4.2],
@@ -123,6 +155,12 @@ export const farmerAt = (f) => f >= 1328 ? { x: 0.7, z: 4.75 } : { x: 1.5, z: 4.
 const strolling = (f, spans) => spans.some(([a, b]) => f >= a && f <= b) ? 1 : 0;
 export const potterMode = (f) => strolling(f, [[503, 548], [700, 730], [1119, 1200]]) ? 'stroll' : 'stand';
 export const sethMode = (f) => strolling(f, [[825, 878]]) ? 'stroll' : 'stand';
+export const potterPh = (f) => phaseAlong(POTTER_KEYS, f);
+export const sethPh = (f) => phaseAlong(SETH_KEYS, f);
+// the potter's final-beat position: foreground by the hook board
+// (waterrun/fireless pattern — the cast re-stages at the clause cut).
+export const HOOK_POTTER = { x: 1.05, z: -2.2 };
+export const HOOK_SETH = { x: -0.95, z: -4.6 };
 
 // ---------- the basket, the brick, the drops ----------
 export const basketAt = (f) => {
@@ -176,7 +214,7 @@ export const lanternAt = (f) => {
 
 // ---------- hero / focus ----------
 const FOCUS = {
-  drone: () => [0, 1.2, 2],
+  open: () => { const b = boyAt(60); return [b.x, 1.3, b.z]; },
   boy: () => { const b = boyAt(130); return [b.x, 0.95, b.z]; },
   boymorn: () => [0, 1.0, 2],
   farmer: () => { const a = farmerAt(205); return [a.x, 1.3, a.z]; },
@@ -188,88 +226,164 @@ const FOCUS = {
   why: () => { const p = potterAt(780); return [p.x, 1.1, p.z]; },
   seth: () => { const s = sethAt(880); return [s.x, 1.3, s.z]; },
   wait: () => { const s = sethAt(960); return [s.x, 1.3, s.z]; },
-  payoff: () => { const B = basketAt(1065); return [B.x, B.y + 0.4, B.z]; },
+  payoff: (f) => f < 1055 ? [0, 1.15, 2] : (() => { const s = sethAt(f); return [s.x, 1.45, s.z]; })(),
   emerge: () => { const p = potterAt(1160); return [p.x, 1.2, p.z]; },
   dialogue: () => { const p = potterAt(1260); return [p.x, 1.45, p.z]; },
   after: () => [0, 1.1, 2.6],
   hookq: () => BOARD_POS, hook: () => BOARD_POS,
 };
-export const heroPosAt = (f) => FOCUS[shotAt(f).id]();
+export const heroPosAt = (f) => FOCUS[shotAt(f).id](f);
 
-// ---------- cameras: EVERY shot is a camrig track on a subject ----------
+// ---------- cameras: v4 ACTION LEVEL — every shot travels WITH its subject ----------
+// Head-width maths (card head ~0.61 m): % = 0.61 / (2*d*tan(fov/2)*0.5625).
+// Push-ins are eased key moves concentrated in the first ~15 frames of
+// the action; tracking raws follow the movement tracks analytically.
+// ALL cameras stay SOUTH / FRONT of the card characters (front three-
+// quarter); never behind them.
 const potterPos = (f) => { const p = potterAt(f); return [p.x, 0, p.z]; };
 const sethPos = (f) => { const s = sethAt(f); return [s.x, 0, s.z]; };
-const boyPos = (f) => { const b = boyAt(f); return [b.x, 0, b.z]; };
-const farmerPos = (f) => { const a = farmerAt(f); return [a.x, 0, a.z]; };
-const basketPos = (f) => { const B = basketAt(f); return [B.x, B.y, B.z]; };
-const bezierCam = (P, L, a, b, fov0, fov1) => (f) => {
-  const u = M.smooth(ramp(f, a, b));
-  const w0 = (1 - u) ** 3, w1 = 3 * (1 - u) ** 2 * u, w2 = 3 * (1 - u) * u * u, w3 = u ** 3;
-  const mix = (Q) => [0, 1, 2].map((j) => w0 * Q[0][j] + w1 * Q[1][j] + w2 * Q[2][j] + w3 * Q[3][j]);
-  return { pos: mix(P), look: mix(L), fov: lerp(fov0, fov1, u), roll: 0 };
-};
 const RIG_BY_ID = {
-  drone: { cut: 'hard', raw: bezierCam(
-    [[20, 12, 26], [12, 7, 18], [8.5, 4.2, 14.5], [6.8, 2.9, 12.6]],
-    [[0, 3.0, -8], [0, 2.2, -3], [0, 1.2, 1.4], [0, 1.0, 2.2]], 0, 108, 44, 40) },
+  // open: NO drone wide. The boy is BIG from frame 0 (head ~50%),
+  // low front three-quarter at the well, mid-action; a snap push-in
+  // over f0-15, then the camera pulls back and rises to reveal the
+  // well and the title board behind it by the end of the line.
+  open: { cut: 'hard', raw: keysCam({ keys: [
+    { f: 0, pos: [-2.45, 1.44, 7.0], look: [-1.3, 1.3, 4.35], fov: 38 },
+    { f: 15, pos: [-2.2, 1.37, 6.6], look: [-1.28, 1.32, 4.35], fov: 36, ease: 'surge' },
+    { f: 45, pos: [-3.6, 2.05, 9.8], look: [-0.7, 1.6, 1.6], fov: 39, ease: 'smooth' },
+    { f: 72, pos: [-4.4, 2.5, 11.2], look: [-0.3, 1.9, -0.6], fov: 40, ease: 'surge' },
+    { f: 108, pos: [-4.2, 2.45, 10.85], look: [-0.3, 1.9, -0.6], fov: 40, ease: 'surge' }] }) },
+  // boy: tight on the boy's hands + the basket — the mango drop
+  // (f131-140) plays centre frame; push 3.1 -> 2.2 m in 14 frames.
   boy: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 109, pos: [-2.9, 1.7, 7.6], look: [-1.3, 1.05, 4.35], fov: 36 },
-    { f: 126, pos: [-3.3, 1.95, 8.1], look: [-0.9, 1.0, 3.7], fov: 36 },
-    { f: 148, pos: [-3.64, 2.2, 8.58], look: [-0.5, 1.0, 3.0], fov: 35, ease: 'surge' }] }) },
+    { f: 109, pos: [-2.95, 1.6, 7.5], look: [-0.85, 1.0, 3.4], fov: 37 },
+    { f: 123, pos: [-2.45, 1.42, 6.6], look: [-0.7, 1.02, 3.1], fov: 35, ease: 'surge' },
+    { f: 148, pos: [-2.3, 1.38, 6.35], look: [-0.65, 1.02, 3.0], fov: 34, ease: 'surge' }] }) },
+  // boymorn: the basket RISES with two mangoes — the camera rides up
+  // with it, the boy's laughing face at the frame edge.
   boymorn: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 149, pos: [-3.9, 2.3, 9.2], look: [-0.4, 0.95, 2.9], fov: 37 },
-    { f: 186, pos: [-3.5, 2.1, 8.7], look: [-0.45, 0.95, 2.9], fov: 35, ease: 'surge' }] }) },
+    { f: 149, pos: [-3.1, 1.75, 7.3], look: [-0.3, 0.9, 2.6], fov: 37 },
+    { f: 176, pos: [-2.7, 1.6, 6.5], look: [-0.35, 1.0, 2.5], fov: 35, ease: 'surge' },
+    { f: 186, pos: [-2.6, 1.58, 6.35], look: [-0.35, 1.02, 2.5], fov: 34, ease: 'surge' }] }) },
+  // farmer: the coin drop, mirrored from the east — same energy.
   farmer: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 187, pos: [3.6, 1.7, 8.2], look: [1.5, 1.25, 4.4], fov: 36 },
-    { f: 205, pos: [4.1, 1.95, 8.7], look: [0.9, 1.05, 3.6], fov: 36 },
-    { f: 223, pos: [4.35, 2.2, 8.96], look: [0.5, 1.0, 3.0], fov: 35, ease: 'surge' }] }) },
+    { f: 187, pos: [3.75, 1.6, 7.7], look: [0.85, 1.05, 3.4], fov: 37 },
+    { f: 201, pos: [3.2, 1.42, 6.8], look: [0.7, 1.05, 3.1], fov: 35, ease: 'surge' },
+    { f: 223, pos: [3.05, 1.38, 6.55], look: [0.65, 1.05, 3.0], fov: 34, ease: 'surge' }] }) },
+  // farmermorn: the basket rises with two coins; punch toward the
+  // farmer's satisfied face in the last frames.
   farmermorn: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 224, pos: [4.8, 2.6, 10.6], look: [-0.2, 1.0, 2.1], fov: 38 },
-    { f: 265, pos: [4.4, 2.4, 10.0], look: [-0.2, 1.0, 2.1], fov: 35, ease: 'surge' }] }) },
+    { f: 224, pos: [3.9, 1.9, 7.9], look: [0.2, 0.95, 2.4], fov: 38 },
+    { f: 253, pos: [3.3, 1.7, 6.9], look: [0.3, 1.0, 2.4], fov: 36, ease: 'surge' },
+    { f: 265, pos: [3.15, 1.65, 6.7], look: [0.35, 1.05, 2.5], fov: 35, ease: 'surge' }] }) },
+  // crowd: the news spreads — a lateral track that slides along the
+  // arc of villagers at walking pace (7+ m of travel), faces punched
+  // in, ending on the boy's shock.
   crowd: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 266, pos: [7.6, 3.2, 14.5], look: [0, 1.1, 2.6], fov: 44 },
-    { f: 382, pos: [6.9, 3.0, 13.6], look: [0, 1.1, 2.6], fov: 41, ease: 'surge' }] }) },
+    { f: 266, pos: [-4.6, 1.75, 9.9], look: [-1.6, 1.35, 4.6], fov: 40 },
+    { f: 324, pos: [-0.6, 1.66, 9.7], look: [0.1, 1.35, 4.5], fov: 38, ease: 'smooth' },
+    { f: 382, pos: [2.9, 1.6, 9.5], look: [0.7, 1.35, 4.4], fov: 37, ease: 'surge' }] }) },
+  // secret: the ONE man who knows — a fast punch-in on the potter at
+  // his kiln corner (head ~33% -> ~62% inside 15 frames), then a
+  // slow track as he watches the square.
   secret: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 383, pos: [6.9, 3.0, 13.6], look: [0, 1.1, 2.6], fov: 41 },
-    { f: 502, pos: [1.8, 2.0, -0.5], look: [4.2, 1.1, -4.2], fov: 36, ease: 'surge' }] }) },
-  tunnel: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 503, pos: [5.2, 1.9, -4.6], look: [0.5, 0.7, 0.25], fov: 42 },
-    { f: 600, pos: [4.6, 1.7, -4.2], look: [0.5, 0.65, 0.25], fov: 40, ease: 'surge' }] }) },
+    { f: 383, pos: [3.3, 1.7, -0.35], look: [4.2, 1.35, -4.2], fov: 38 },
+    { f: 398, pos: [3.75, 1.55, -2.15], look: [4.2, 1.4, -4.2], fov: 35, ease: 'surge' },
+    { f: 502, pos: [3.95, 1.5, -2.45], look: [4.18, 1.4, -4.2], fov: 34, ease: 'surge' }] }) },
+  // tunnel: front three-quarter TRACKING — the camera walks with the
+  // potter from his corner to the well's hidden mouth, staying ahead
+  // -south of him, and settles on the slab as it slides aside.
+  tunnel: { cut: 'hard', raw: (f) => {
+    const p = potterAt(f), u = smooth(ramp(f, 503, 600));
+    const off = [lerp(-2.5, -1.7, u), lerp(1.55, 1.35, u), lerp(3.3, 2.6, u)];
+    return { pos: [p.x + off[0], off[1], p.z + off[2]], look: [lerp(p.x, 0.4, u * 0.35), lerp(1.25, 0.75, u), lerp(p.z, 0.3, u * 0.35)], fov: lerp(38, 36, u), roll: 0 };
+  } },
+  // night: low at the tunnel mouth — the potter adds the mango by
+  // lantern light (grip beat f663-700 centre frame); push-in as he
+  // works, then he carries the basket back inside.
   night: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 601, pos: [7.6, 2.2, -8.4], look: [4.2, 1.0, -4.2], fov: 40 },
-    { f: 665, pos: [4.8, 1.8, -4.2], look: [0.45, 0.65, 0.15], fov: 40 },
-    { f: 738, pos: [4.5, 1.7, -3.9], look: [0.45, 0.65, 0.15], fov: 38, ease: 'surge' }] }) },
+    { f: 601, pos: [4.15, 1.45, 3.75], look: [1.2, 0.9, 0.1], fov: 39 },
+    { f: 663, pos: [3.35, 1.28, 2.95], look: [1.22, 0.85, 0.08], fov: 37, ease: 'surge' },
+    { f: 738, pos: [3.1, 1.22, 2.7], look: [1.1, 0.82, 0.06], fov: 36, ease: 'surge' }] }) },
+  // why: his reason — a tender close on the potter (face ~40% ->
+  // ~58%), the village asleep behind him.
   why: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 739, pos: [-5.5, 2.6, 10.5], look: [0.3, 1.0, 1.8], fov: 42 },
-    { f: 824, pos: [-4.9, 2.4, 9.8], look: [0.4, 1.05, 1.8], fov: 39, ease: 'surge' }] }) },
-  seth: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 825, pos: [9.2, 2.4, 13.2], look: [4.6, 1.15, 5.6], fov: 38 },
-    { f: 878, pos: [7.0, 2.0, 11.0], look: [2.2, 1.05, 4.0], fov: 35 },
-    { f: 923, pos: [6.2, 1.9, 10.2], look: [1.3, 1.0, 3.2], fov: 33, ease: 'surge' }] }) },
-  wait: { cut: 'hard', raw: staticTrackCam({ pos: [5.6, 2.3, 11.8], subject: sethPos, lookOff: [0, 1.2, 0], fov: 38 }) },
+    { f: 739, pos: [3.6, 1.7, 3.6], look: [1.35, 1.35, 0.15], fov: 38 },
+    { f: 754, pos: [3.0, 1.58, 2.85], look: [1.35, 1.4, 0.15], fov: 35, ease: 'surge' },
+    { f: 824, pos: [2.85, 1.55, 2.7], look: [1.35, 1.4, 0.15], fov: 34, ease: 'surge' }] }) },
+  // seth: FRONT three-quarter tracking — the camera races backward
+  // ahead of the striding Seth, the gold brick glinting in his hand;
+  // the push tightens as he reaches the well, and the look swings to
+  // the basket for the drop (f888-898, KICK on the splash-down).
+  seth: { cut: 'hard', raw: (f) => {
+    const s = sethAt(f), b = brickAt(f), u = smooth(ramp(f, 825, 890));
+    // camera rides FRONT-RIGHT (south-east) of Seth so the farmer at
+    // the well stays out of the narrow portrait frame; the look holds
+    // Seth's head until the release (f888), whips to the flying brick,
+    // follows it down, then settles on the basket.
+    const off = f < 886
+      ? [lerp(2.6, 1.85, u), lerp(1.62, 1.48, u), lerp(3.3, 2.5, u)]
+      : (() => { const w = smooth(ramp(f, 886, 900)); return [lerp(1.85, 2.45, w), lerp(1.48, 1.58, w), lerp(2.5, 3.1, w)]; })();
+    const head = [s.x, 1.3, s.z];
+    const lk = f < 888 ? head : (() => {
+      const v = smooth(ramp(f, 888, 895));
+      const brick = [b.x, Math.max(b.y, 0.85), b.z];
+      const mid = [lerp(head[0], brick[0], v), lerp(head[1], brick[1], v), lerp(head[2], brick[2], v)];
+      const w2 = smooth(ramp(f, 915, 923));
+      return [lerp(mid[0], 0, w2), lerp(mid[1], 1.35, w2), lerp(mid[2], 2, w2)];
+    })();
+    return { pos: [s.x + off[0], off[1], s.z + off[2]], look: lk, fov: lerp(38, 34, u), roll: 0 };
+  } },
+  // wait: night — Seth waits by the well, sure of his gold; a slow
+  // push-in as his eyelids droop (no static hold: the push travels
+  // the whole shot).
+  wait: { cut: 'hard', raw: keysCam({ keys: [
+    { f: 924, pos: [5.3, 1.85, 9.6], look: [2.9, 1.3, 4.5], fov: 38 },
+    { f: 1013, pos: [4.55, 1.65, 8.4], look: [2.9, 1.32, 4.5], fov: 35, ease: 'surge' }] }) },
+  // payoff: the basket rises — camera rides with it — then a FAST
+  // reframe onto Seth's face as the painted bricks appear: shock at
+  // ~75% (KICK at f1058), the crowd laughing at the edges.
   payoff: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1014, pos: [6.4, 3.2, 9.4], look: [1.2, 1.1, 3.4], fov: 36 },
-    { f: 1055, pos: [5.2, 2.9, 7.6], look: [0.4, 1.0, 2.3], fov: 34 },
-    { f: 1118, pos: [4.5, 2.6, 6.4], look: [0.2, 1.05, 2.1], fov: 33, ease: 'surge' }] }) },
-  emerge: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1119, pos: [4.6, 1.8, -2.8], look: [0.3, 0.8, 0.3], fov: 40 },
-    { f: 1203, pos: [6.4, 2.6, 10.8], look: [1.7, 1.2, 3.6], fov: 38, ease: 'surge' }] }) },
-  dialogue: { cut: 'hard', raw: pushInCam({ subject: potterPos, a: 1204, b: 1327, d0: 3.6, d1: 2.9, h0: 1.58, h1: 1.5, lookOff: [0, 1.45, 0], fov0: 32, fov1: 28,
-    dir: () => [0.45, 0.85] }) },
+    { f: 1014, pos: [-2.0, 1.95, 8.6], look: [0, 1.05, 2.1], fov: 37 },
+    { f: 1050, pos: [-1.9, 1.9, 8.5], look: [0.05, 1.1, 2.1], fov: 35, ease: 'smooth' },
+    { f: 1062, pos: [-1.8, 1.85, 8.35], look: [0.05, 1.15, 2.1], fov: 34, ease: 'smooth' },
+    { f: 1070, pos: [1.9, 1.58, 7.0], look: [2.9, 1.45, 4.5], fov: 33, ease: 'surge' },
+    { f: 1118, pos: [1.8, 1.58, 6.85], look: [2.9, 1.45, 4.5], fov: 33, ease: 'surge' }] }) },
+  // emerge: the potter comes OUT of the tunnel in front of everyone
+  // — front three-quarter tracking as he walks to face Seth.
+  emerge: { cut: 'hard', raw: (f) => {
+    const p = potterAt(f), u = smooth(ramp(f, 1119, 1203));
+    const off = [lerp(2.2, 1.9, u), lerp(1.5, 1.55, u), lerp(3.1, 3.3, u)];
+    return { pos: [p.x + off[0], off[1], p.z + off[2]], look: [p.x, 1.25, p.z], fov: lerp(38, 35, u), roll: 0 };
+  } },
+  // dialogue: THE LINE, performed — push-in on the potter as he
+  // speaks (face ~48% -> ~72%); Seth listens at the frame edge,
+  // mouth shut. Camera holds on the speaker.
+  dialogue: { cut: 'hard', raw: pushInCam({ subject: potterPos, a: 1204, b: 1327, d0: 3.35, d1: 2.2, h0: 1.6, h1: 1.52, lookOff: [0, 1.45, 0], fov0: 34, fov1: 30,
+    dir: () => [0.5, 0.86] }) },
+  // after: the village after — a warm group shot with a gentle
+  // push; the helping hands already at work.
   after: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1328, pos: [8.8, 3.6, 15.5], look: [0, 1.1, 2.4], fov: 44 },
-    { f: 1453, pos: [8.2, 3.4, 14.6], look: [0, 1.1, 2.4], fov: 42, ease: 'surge' }] }) },
-  hookq: { cut: 'blend', blend: 10, raw: keysCam({ keys: [
-    { f: 1454, pos: [8.2, 3.4, 14.6], look: [0, 1.1, 2.4], fov: 42 },
-    { f: 1499, pos: [6.3, 3.4, 4.0], look: [0, 3.22, -8.12], fov: 38, ease: 'surge' }] }) },
+    { f: 1328, pos: [6.1, 2.3, 12.3], look: [0.5, 1.2, 3.2], fov: 42 },
+    { f: 1453, pos: [5.2, 2.05, 10.9], look: [0.55, 1.22, 3.3], fov: 39, ease: 'surge' }] }) },
+  // hookq: the hook line (narration) — the camera pushes from the
+  // group toward the board as the potter steps into the foreground
+  // beside it; the board fades up behind him.
+  hookq: { cut: 'hard', raw: keysCam({ keys: [
+    { f: 1454, pos: [5.2, 2.05, 10.9], look: [0.55, 1.22, 3.3], fov: 39 },
+    { f: 1499, pos: [0.7, 2.05, 3.1], look: [0, 3.22, -8.15], fov: 46, ease: 'surge' }] }) },
+  // hook: the final frame — character beat + hook board TOGETHER:
+  // board ~85% of frame width, whole panel inside with margins,
+  // the potter's head ~21% in the foreground, board at FULL opacity
+  // through the literal last frame. A last small push, never frozen.
   hook: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1500, pos: [6.3, 3.4, 4.0], look: [0, 3.22, -8.12], fov: 38 },
-    { f: 1528, pos: [6.05, 3.45, 3.7], look: [0, 3.27, -8.17], fov: 37, ease: 'surge' }] }) },
+    { f: 1500, pos: [0.7, 2.05, 3.1], look: [0, 3.22, -8.15], fov: 46 },
+    { f: 1528, pos: [0.62, 2.08, 2.85], look: [0, 3.25, -8.17], fov: 45, ease: 'surge' }] }) },
 };
 const RIG = buildRig({
   total: TOTAL,
   shots: SHOTS.map((s) => ({ a: s.a, b: s.b, ...RIG_BY_ID[s.id] })),
-  kicks: [{ f: 898, a: 0.03 }, { f: 1058, a: 0.03 }],
+  kicks: [{ f: 140, a: 0.12 }, { f: 898, a: 0.22 }, { f: 1058, a: 0.3 }],
   sigma: 2.3, fovSigma: 1.6,
 });
 export const camAt = (f) => RIG.camAt(f);
@@ -279,14 +393,11 @@ export const RIG_META = {
   whips: RIG.declared.whips,
   samples: RIG.samples,
 };
+const CINF = { open: 1.6, boy: 3.0, boymorn: 2.6, farmer: 3.0, farmermorn: 2.6, crowd: 2.0, secret: 3.2, tunnel: 2.6, night: 3.2, why: 3.2, seth: 2.8, wait: 2.6, payoff: 3.0, emerge: 2.6, dialogue: 3.6, after: 1.8, hookq: 1.6, hook: 2.6 };
 export const dofAt = (f) => {
   const S = shotAt(f), C = camAt(f), hp = heroPosAt(f);
-  let cinf = 2.4;
-  if (['drone', 'hookq'].includes(S.id)) cinf = 1.4;
-  if (['tunnel', 'night', 'dialogue', 'payoff'].includes(S.id)) cinf = 3.6;
-  if (S.id === 'hook') cinf = 3.0;
   const d = Math.hypot(C.pos[0] - hp[0], C.pos[1] - hp[1], C.pos[2] - hp[2]);
-  return { focus: d, cinf };
+  return { focus: d, cinf: CINF[S.id] || 2.2 };
 };
 
 // ---------- world state ----------
@@ -301,7 +412,7 @@ export const worldAt = (f) => {
     slabK: slabAt(f), lanternK: lanternAt(f),
     dustK: 0.05,
   };
-  if (S.id === 'drone') W.boardTitle = smooth(ramp(f, 16, 30)) * (1 - smooth(ramp(f, 42, 56)));
+  if (S.id === 'open') W.boardTitle = smooth(ramp(f, 66, 80)) * (1 - smooth(ramp(f, 94, 108)));
   if (S.id === 'hookq') W.boardHook = smooth(ramp(f, 1484, 1498));
   if (S.id === 'hook') W.boardHook = 1;   // held at FULL opacity to the literal last frame
   return W;
@@ -314,143 +425,219 @@ export const fxProfileAt = (f) => {
 export const fxAt = () => [];
 
 // ---------- cast (single source for actors AND colliders) ----------
-const TINT = { gold: '#ffffff', night: '#aebadd', dusk: '#f2ddc4' };
-const tintFor = (S) => TINT[S.light] || '#ffffff';
+// V3 rule (as in waterrun/fireless): NO card tint in any light —
+// faces stay pure white, costume colours flat and saturated.
+const tintFor = () => '#ffffff';
 export const OUTFITS = {
-  potter: { jacket: '#cbb59a', pants: '#8a6f52', boots: '#4a3826', hat: 'hair', hair: '#d8d0bc', skin: '#8a5a34', moustache: '#d8d0bc' },
-  seth: { jacket: '#7a1f3a', pants: '#3a2a4a', boots: '#241a12', hat: 'cap', cap: '#d9a441', skin: '#c98a5a', moustache: '#241a12', build: 'stout' },
-  boy: { jacket: '#3a7a8c', pants: '#5a4632', boots: '#2c2015', hat: 'hair', hair: '#1c1410', skin: '#a06a3c' },
-  farmer: { jacket: '#5d7a2e', pants: '#4a3b28', boots: '#2c2015', hat: 'cap', cap: '#a8894f', skin: '#8a5a34', moustache: '#2a201a' },
-  v1: { jacket: '#8c4a5a', pants: '#33302c', boots: '#1c1712', hat: 'hair', hair: '#241a12', skin: '#c98a5a' },
-  v2: { jacket: '#2c4a6e', pants: '#2a3242', boots: '#1c1712', hat: 'cap', cap: '#7a8a99', skin: '#a06a3c', moustache: '#241a12' },
-  v3: { jacket: '#a8873a', pants: '#3a332a', boots: '#241a12', hat: 'hair', hair: '#101010', skin: '#7a4a2a' },
+  potter: { jacket: '#cbb59a', pants: '#8a6f52', boots: '#4a3826', hat: 'hair', hair: '#d8d0bc', skin: '#fbf7ef', moustache: '#d8d0bc' },
+  seth: { jacket: '#7a1f3a', pants: '#3a2a4a', boots: '#241a12', hat: 'cap', cap: '#d9a441', skin: '#fbf7ef', moustache: '#241a12', build: 'stout' },
+  boy: { jacket: '#3a7a8c', pants: '#5a4632', boots: '#2c2015', hat: 'hair', hair: '#1c1410', skin: '#fbf7ef' },
+  farmer: { jacket: '#5d7a2e', pants: '#4a3b28', boots: '#2c2015', hat: 'cap', cap: '#a8894f', skin: '#fbf7ef', moustache: '#2a201a' },
+  v1: { jacket: '#8c4a5a', pants: '#33302c', boots: '#1c1712', hat: 'hair', hair: '#241a12', skin: '#fbf7ef' },
+  v2: { jacket: '#2c4a6e', pants: '#2a3242', boots: '#1c1712', hat: 'cap', cap: '#7a8a99', skin: '#fbf7ef', moustache: '#241a12' },
+  v3: { jacket: '#a8873a', pants: '#3a332a', boots: '#241a12', hat: 'hair', hair: '#101010', skin: '#fbf7ef' },
 };
+
+// ---------- HEAD + BODY PERFORMANCE (animation upgrade v1+v2) ----------
+// Emotion morphs at story beats (body.js emoTrack; cheek/brow shading
+// rides inside the face params — toon v6 cheek contour).
+const emoPotter = emoTrack(T.faceP, 'neutral', [
+  [383, 'thinking', 8], [503, 'determined', 8], [739, 'smile', 9], [825, 'neutral', 8],
+  [1119, 'stern', 8], [1204, 'proud', 8], [1328, 'smile', 8], [1454, 'grin', 8],
+]);
+const emoSeth = emoTrack(T.faceP, 'smug', [
+  [825, 'grin', 8], [924, 'sleepy', 10], [1014, 'smug', 8], [1055, 'shock', 6],
+  [1119, 'scared', 8], [1204, 'nervous', 8], [1328, 'sad', 9], [1454, 'smile', 8],
+]);
+const emoBoy = emoTrack(T.faceP, 'smile', [
+  [149, 'laugh', 7], [266, 'shock', 7], [383, 'smile', 8], [1014, 'laugh', 7], [1328, 'smile', 8],
+]);
+const emoFarmer = emoTrack(T.faceP, 'neutral', [
+  [224, 'smile_closed', 8], [266, 'smile', 7], [1014, 'shock', 6], [1328, 'smile', 8],
+]);
+const emoV1 = emoTrack(T.faceP, 'neutral', [[266, 'shock', 7], [1014, 'shock', 6], [1119, 'smile', 8], [1328, 'smile', 8]]);
+const emoV2 = emoTrack(T.faceP, 'neutral', [[266, 'smile', 7], [1014, 'shock', 6], [1119, 'smile', 8], [1328, 'smile', 8]]);
+const emoV3 = emoTrack(T.faceP, 'neutral', [[266, 'shock', 7], [1014, 'shock', 6], [1119, 'smile', 8], [1328, 'smile', 8]]);
+// Continuous life per character (body.js lifeAt): breathing phase,
+// weight-shift tilt, micro sway — nobody stands like a post.
+const lifePotter = lifeAt({ seed: 31 }), lifeSeth = lifeAt({ seed: 51 }), lifeBoy = lifeAt({ seed: 21 }),
+  lifeFarmer = lifeAt({ seed: 41 }), lifeV1 = lifeAt({ seed: 71 }), lifeV2 = lifeAt({ seed: 72 }), lifeV3 = lifeAt({ seed: 73 });
+const micro = (f, seed) => 1.1 * Math.sin((f + seed * 5) * 0.037 + 1);
+// head/body opts fragment: life (breath/tilt/sway) + directed gaze.
+const H2 = (life, f, seed, o = {}) => ({
+  headTilt: q((o.ht || 0) + micro(f, seed) + life(f).sway, 1),
+  look: q(o.look || 0, 2), lookY: q(o.lookY || 0, 2), facing: q(o.facing || 0, 2),
+  squash: q(o.squash || 0, 2), tilt: q((o.tilt || 0) + life(f).tilt, 1),
+  breath: Math.round(life(f).breath / 6) * 6,
+});
+const noBlush = (P) => { const o = { ...P }; o.blush = 0; o.openL = Math.min(1, (o.openL ?? 0.85) * 1.45); o.openR = Math.min(1, (o.openR ?? 0.85) * 1.45); return o; };
+// PHYSICAL GRIPS (body.js gripAt): the hand closes on the object and
+// releases WITH it — the same k drives the arm and matches the 3D
+// prop's own track (dropAt / brickAt in the world state above).
+const gripBoy = gripAt([{ f0: 120, dur: 10, type: 'lift' }, { f0: 130, dur: 10, type: 'place', settle: 6 }]);
+const gripFarmer = gripAt([{ f0: 196, dur: 10, type: 'lift' }, { f0: 206, dur: 10, type: 'place', settle: 6 }]);
+const gripPotterNight = gripAt([{ f0: 662, dur: 9, type: 'lift' }, { f0: 686, dur: 10, type: 'place', settle: 6 }]);
+const gripSeth = gripAt([{ f0: 879, dur: 9, type: 'place', settle: 5 }]);   // release as the brick arcs (f888-898)
+// dialogue gesture: the potter's free hand talks with the voice
+// during the performed line (stresses on the content words).
+const gestPotter = gestureAt([{ a: 1204, b: 1318, beats: [1218, 1252, 1286, 1308], base: 0.42, amp: 0.16 }]);
+
 export const castAt = (f) => {
   const S = shotAt(f), tint = tintFor(S), out = [];
   const std = (id, o, opts, x, z, extra = {}) => out.push({ id, x, y: 0, z, r: 0.32, ground: 0,
     actor: (T) => ({ key: 'pax' + JSON.stringify(o) + JSON.stringify(opts), draw: (p) => T.bodyFront(p, o, opts), x, y: 0, z, ground: 0, tint, ...extra }) });
   const pt = potterAt(f), st = sethAt(f), by = boyAt(f), fa = farmerAt(f);
-  const ptBase = { expr: 'neutral', mode: potterMode(f), phase: q((f * 0.011) % 1, 2), blink: blinkAt(f, 31), seed: 31 };
+  const PP = noBlush(emoPotter.at(f)), SP2 = noBlush(emoSeth.at(f)), BP = noBlush(emoBoy.at(f)),
+    FP = noBlush(emoFarmer.at(f)), P1 = noBlush(emoV1.at(f)), P2 = noBlush(emoV2.at(f)), P3 = noBlush(emoV3.at(f));
+  const potterStd = (opts, extra = {}) => std('potter', OUTFITS.potter, { expr: 'neutral', exprP: PP, blink: blinkAt(f, 31), seed: 31, ...opts }, pt.x, pt.z, extra);
   const bgCast = () => {
-    std('v1', OUTFITS.v1, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 71), seed: 71 }, -5.2, -6.2, { yaw: 0.3 });
-    std('v2', OUTFITS.v2, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 72), seed: 72 }, -9.8, -6.5, { yaw: 0.5 });
-    std('v3', OUTFITS.v3, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 73), seed: 73 }, -10.2, -1.8, { yaw: 0.6 });
+    std('v1', OUTFITS.v1, { expr: 'neutral', exprP: P1, mode: 'stand', blink: blinkAt(f, 71), seed: 71, ...H2(lifeV1, f, 71, { ht: -2, look: 0.2, lookY: -0.1, facing: 0.2 }) }, -5.2, -6.2, { yaw: 0.3 });
+    std('v2', OUTFITS.v2, { expr: 'neutral', exprP: P2, mode: 'stand', blink: blinkAt(f, 72), seed: 72, ...H2(lifeV2, f, 72, { ht: -2, look: 0.3, lookY: -0.1, facing: 0.3 }) }, -9.8, -6.5, { yaw: 0.5 });
+    std('v3', OUTFITS.v3, { expr: 'neutral', exprP: P3, mode: 'stand', blink: blinkAt(f, 73), seed: 73, ...H2(lifeV3, f, 73, { ht: -2, look: 0.3, lookY: -0.1, facing: 0.3 }) }, -10.2, -1.8, { yaw: 0.6 });
   };
-  const arcCast = (exprs) => {
-    std('v1', OUTFITS.v1, { expr: exprs[0], mode: 'stand', blink: blinkAt(f, 71), seed: 71 }, -2.7, 5.0, { yaw: 0.25 });
-    std('v2', OUTFITS.v2, { expr: exprs[1], mode: 'stand', blink: blinkAt(f, 72), seed: 72 }, 0.1, 5.4, { yaw: 0 });
-    std('v3', OUTFITS.v3, { expr: exprs[2], mode: 'stand', blink: blinkAt(f, 73), seed: 73 }, -3.6, 4.6, { yaw: -0.25 });
+  const arcCast = () => {
+    std('v1', OUTFITS.v1, { expr: 'smile', exprP: P1, mode: 'stand', blink: blinkAt(f, 71), seed: 71, ...H2(lifeV1, f, 71, { ht: -2, look: 0.2, lookY: -0.1, facing: 0.2 }) }, -2.7, 5.0, { yaw: 0.25 });
+    std('v2', OUTFITS.v2, { expr: 'smile', exprP: P2, mode: 'stand', blink: blinkAt(f, 72), seed: 72, ...H2(lifeV2, f, 72, { ht: -2, look: 0, lookY: -0.1, facing: 0 }) }, 0.1, 5.4, { yaw: 0 });
+    std('v3', OUTFITS.v3, { expr: 'smile', exprP: P3, mode: 'stand', blink: blinkAt(f, 73), seed: 73, ...H2(lifeV3, f, 73, { ht: -2, look: -0.2, lookY: -0.1, facing: -0.2 }) }, -3.6, 4.6, { yaw: -0.25 });
   };
   switch (S.id) {
-    case 'drone': {
-      std('potter', OUTFITS.potter, { ...ptBase }, pt.x, pt.z, { yaw: -0.4 });
-      std('boy', OUTFITS.boy, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 21), seed: 21 }, by.x, by.z, { s: 0.8, yaw: 0.3 });
-      std('farmer', OUTFITS.farmer, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 41), seed: 41 }, fa.x, fa.z, { yaw: -0.3 });
-      std('seth', OUTFITS.seth, { expr: 'stern', mode: 'stand', blink: blinkAt(f, 51), seed: 51 }, st.x, st.z, { yaw: -0.5 });
+    case 'open': {
+      std('potter', OUTFITS.potter, { expr: 'neutral', exprP: PP, mode: 'stand', blink: blinkAt(f, 31), seed: 31, ...H2(lifePotter, f, 31, { ht: -1.5, look: -0.3, lookY: 0, facing: -0.3 }) }, pt.x, pt.z, { yaw: -0.4 });
+      std('boy', OUTFITS.boy, { expr: 'smile', exprP: BP, mode: 'stand', blink: blinkAt(f, 23), seed: 21, prop: ['point', 0.4], ...H2(lifeBoy, f, 21, { ht: -1.5, look: 0.3, lookY: 0.1, facing: 0.3 }) }, by.x, by.z, { s: 0.8, yaw: 0.3 });
+      std('farmer', OUTFITS.farmer, { expr: 'neutral', exprP: FP, mode: 'stand', blink: blinkAt(f, 41), seed: 41, ...H2(lifeFarmer, f, 41, { ht: -1.5, look: -0.3, lookY: 0, facing: -0.3 }) }, fa.x, fa.z, { yaw: -0.3 });
+      std('seth', OUTFITS.seth, { expr: 'stern', exprP: SP2, mode: 'stand', blink: blinkAt(f, 51), seed: 51, ...H2(lifeSeth, f, 51, { ht: -2, look: -0.4, lookY: 0, facing: -0.4 }) }, st.x, st.z, { yaw: -0.5 });
       bgCast();
       break;
     }
     case 'boy': {
-      std('boy', OUTFITS.boy, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 21), seed: 21, prop: f >= 126 && f <= 148 ? ['point', 0.62] : null }, by.x, by.z, { s: 0.8, yaw: 0.35 });
-      std('farmer', OUTFITS.farmer, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 41), seed: 41 }, fa.x, fa.z, { yaw: -0.35 });
-      std('potter', OUTFITS.potter, { ...ptBase, expr: 'smile_closed' }, pt.x, pt.z, { yaw: -0.4 });
+      // the drop, hands on: his hand closes on the mango and opens
+      // as it arcs into the basket (grip k rides the same frames).
+      const g = gripBoy(f);
+      std('boy', OUTFITS.boy, { expr: 'smile', exprP: BP, mode: 'stand', blink: blinkAt(f, 23), seed: 21, prop: ['point', q(0.15 + 0.5 * g.k, 2)], squash: q(Math.max(g.squash * 0.6, 0), 2), ...H2(lifeBoy, f, 21, { ht: 1.5, look: 0.3, lookY: 0.35, facing: 0.3 }) }, by.x, by.z, { s: 0.8, yaw: 0.35 });
+      std('farmer', OUTFITS.farmer, { expr: 'smile', exprP: FP, mode: 'stand', blink: blinkAt(f, 41), seed: 41, ...H2(lifeFarmer, f, 41, { ht: -1.5, look: -0.35, lookY: 0.1, facing: -0.35 }) }, fa.x, fa.z, { yaw: -0.35 });
+      potterStd({ mode: 'stand', ...H2(lifePotter, f, 31, { ht: -1.5, look: -0.3, lookY: 0, facing: -0.3 }) }, { yaw: -0.4 });
       break;
     }
     case 'boymorn': {
-      std('boy', OUTFITS.boy, { expr: 'laugh', mode: 'stand', blink: blinkAt(f, 21), seed: 21 }, by.x, by.z, { s: 0.8, yaw: 0.3 });
-      std('farmer', OUTFITS.farmer, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 41), seed: 41 }, fa.x, fa.z, { yaw: -0.3 });
+      std('boy', OUTFITS.boy, { expr: 'laugh', exprP: BP, mode: 'stand', blink: blinkAt(f, 23), seed: 21, ...H2(lifeBoy, f, 21, { ht: -3, look: 0.25, lookY: -0.1, facing: 0.25 }) }, by.x, by.z, { s: 0.8, yaw: 0.3 });
+      std('farmer', OUTFITS.farmer, { expr: 'smile', exprP: FP, mode: 'stand', blink: blinkAt(f, 41), seed: 41, ...H2(lifeFarmer, f, 41, { ht: -1.5, look: -0.3, lookY: 0, facing: -0.3 }) }, fa.x, fa.z, { yaw: -0.3 });
       break;
     }
     case 'farmer': {
-      std('farmer', OUTFITS.farmer, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 41), seed: 41, prop: f >= 202 && f <= 223 ? ['point', 0.62] : null }, fa.x, fa.z, { yaw: -0.3 });
-      std('boy', OUTFITS.boy, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 21), seed: 21 }, by.x, by.z, { s: 0.8, yaw: 0.35 });
-      std('potter', OUTFITS.potter, { ...ptBase, expr: 'smile_closed' }, pt.x, pt.z, { yaw: -0.4 });
+      // the coin, in his fingers until the arc takes it (f207-216):
+      // the drawn coin rides his hand while the grip holds.
+      const g = gripFarmer(f);
+      std('farmer', OUTFITS.farmer, { expr: 'neutral', exprP: FP, mode: 'stand', blink: blinkAt(f, 41), seed: 41, prop: f < 207 ? ['coin', q(0.2 + 0.45 * g.k, 2)] : ['point', q(0.15 + 0.4 * g.k, 2)], ...H2(lifeFarmer, f, 41, { ht: 1.5, look: -0.3, lookY: 0.35, facing: -0.3 }) }, fa.x, fa.z, { yaw: -0.3 });
+      std('boy', OUTFITS.boy, { expr: 'smile', exprP: BP, mode: 'stand', blink: blinkAt(f, 23), seed: 21, ...H2(lifeBoy, f, 21, { ht: -1.5, look: 0.35, lookY: 0.1, facing: 0.35 }) }, by.x, by.z, { s: 0.8, yaw: 0.35 });
+      potterStd({ mode: 'stand', ...H2(lifePotter, f, 31, { ht: -1.5, look: -0.3, lookY: 0, facing: -0.3 }) }, { yaw: -0.4 });
       break;
     }
     case 'farmermorn': {
-      std('farmer', OUTFITS.farmer, { expr: 'smile_closed', mode: 'stand', blink: blinkAt(f, 41), seed: 41 }, fa.x, fa.z, { yaw: -0.3 });
-      std('boy', OUTFITS.boy, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 21), seed: 21 }, by.x, by.z, { s: 0.8, yaw: 0.3 });
+      std('farmer', OUTFITS.farmer, { expr: 'smile_closed', exprP: FP, mode: 'stand', blink: blinkAt(f, 41), seed: 41, ...H2(lifeFarmer, f, 41, { ht: -2.5, look: -0.25, lookY: -0.05, facing: -0.25 }) }, fa.x, fa.z, { yaw: -0.3 });
+      std('boy', OUTFITS.boy, { expr: 'smile', exprP: BP, mode: 'stand', blink: blinkAt(f, 23), seed: 21, ...H2(lifeBoy, f, 21, { ht: -1.5, look: 0.3, lookY: 0, facing: 0.3 }) }, by.x, by.z, { s: 0.8, yaw: 0.3 });
       break;
     }
     case 'crowd': {
-      std('boy', OUTFITS.boy, { expr: 'shock', mode: 'stand', blink: blinkAt(f, 21), seed: 21 }, by.x, by.z, { s: 0.8, yaw: 0.3 });
-      std('farmer', OUTFITS.farmer, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 41), seed: 41 }, fa.x, fa.z, { yaw: -0.3 });
-      arcCast(['shock', 'smile', 'shock']);
-      std('potter', OUTFITS.potter, { ...ptBase, expr: 'smile_closed' }, pt.x, pt.z, { yaw: -0.4 });
+      std('boy', OUTFITS.boy, { expr: 'shock', exprP: BP, mode: 'stand', blink: blinkAt(f, 23), seed: 21, ...H2(lifeBoy, f, 21, { ht: -2.5, look: 0.2, lookY: -0.15, facing: 0.2 }) }, by.x, by.z, { s: 0.8, yaw: 0.3 });
+      std('farmer', OUTFITS.farmer, { expr: 'smile', exprP: FP, mode: 'stand', blink: blinkAt(f, 41), seed: 41, ...H2(lifeFarmer, f, 41, { ht: -2, look: -0.2, lookY: -0.1, facing: -0.2 }) }, fa.x, fa.z, { yaw: -0.3 });
+      arcCast();
+      potterStd({ mode: 'stand', ...H2(lifePotter, f, 31, { ht: -1.5, look: -0.3, lookY: 0, facing: -0.3 }) }, { yaw: -0.4 });
       break;
     }
     case 'secret': {
-      std('potter', OUTFITS.potter, { ...ptBase, expr: 'neutral', headTilt: 0.06 }, pt.x, pt.z, { yaw: -0.5 });
-      std('v1', OUTFITS.v1, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 71), seed: 71 }, -5.2, -6.2, { yaw: 0.3 });
-      std('v2', OUTFITS.v2, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 72), seed: 72 }, -9.8, -6.5, { yaw: 0.5 });
+      potterStd({ mode: 'stand', ...H2(lifePotter, f, 31, { ht: 1, look: -0.45, lookY: 0.1, facing: -0.4 }) }, { yaw: -0.5 });
+      std('v1', OUTFITS.v1, { expr: 'neutral', exprP: P1, mode: 'stand', blink: blinkAt(f, 71), seed: 71, ...H2(lifeV1, f, 71, { ht: -2, look: 0.2, lookY: -0.1, facing: 0.2 }) }, -5.2, -6.2, { yaw: 0.3 });
+      std('v2', OUTFITS.v2, { expr: 'neutral', exprP: P2, mode: 'stand', blink: blinkAt(f, 72), seed: 72, ...H2(lifeV2, f, 72, { ht: -2, look: 0.3, lookY: -0.1, facing: 0.3 }) }, -9.8, -6.5, { yaw: 0.5 });
       break;
     }
     case 'tunnel': {
-      std('potter', OUTFITS.potter, { ...ptBase, prop: f >= 536 && f <= 575 ? ['point', 0.7] : null }, pt.x, pt.z, { yaw: 0.4 });
+      potterStd({ mode: potterMode(f), phase: q(potterPh(f), 2), prop: f >= 536 && f <= 575 ? ['point', 0.7] : null, ...H2(lifePotter, f, 31, { ht: 1.5, look: 0.35, lookY: 0.2, facing: 0.3 }) }, { yaw: 0.4 });
       break;
     }
     case 'night': {
-      std('potter', OUTFITS.potter, { ...ptBase, expr: 'neutral', headTilt: f >= 700 ? 0.14 : 0.05, prop: f >= 672 && f <= 700 ? ['point', 0.5] : null }, pt.x, pt.z, { yaw: 0.35 });
+      // the secret kindness, hands on: he lifts the second mango and
+      // sets it into the basket (grip f662-696), then carries the
+      // basket back inside (stroll f700-730).
+      const g = gripPotterNight(f);
+      potterStd({ mode: potterMode(f), phase: q(potterPh(f), 2), prop: f >= 655 && f <= 705 ? ['point', q(0.15 + 0.45 * g.k, 2)] : null, ...H2(lifePotter, f, 31, { ht: f >= 655 && f <= 705 ? 3 : 0.5, look: 0.3, lookY: f >= 655 && f <= 705 ? 0.5 : 0.1, facing: 0.3 }) }, { yaw: 0.35 });
       break;
     }
     case 'why': {
-      std('potter', OUTFITS.potter, { ...ptBase, expr: 'smile_closed', headTilt: -0.05 }, pt.x, pt.z, { yaw: -0.3 });
-      std('boy', OUTFITS.boy, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 21), seed: 21 }, by.x, by.z, { s: 0.8, yaw: 0.3 });
-      std('v1', OUTFITS.v1, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 71), seed: 71 }, -2.7, 5.0, { yaw: 0.25 });
-      std('v3', OUTFITS.v3, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 73), seed: 73 }, -3.6, 4.6, { yaw: -0.25 });
+      potterStd({ mode: 'stand', ...H2(lifePotter, f, 31, { ht: -1, look: -0.25, lookY: -0.05, facing: -0.25 }) }, { yaw: -0.3 });
+      std('boy', OUTFITS.boy, { expr: 'neutral', exprP: BP, mode: 'stand', blink: blinkAt(f, 23), seed: 21, ...H2(lifeBoy, f, 21, { ht: -1.5, look: 0.3, lookY: 0, facing: 0.3 }) }, by.x, by.z, { s: 0.8, yaw: 0.3 });
+      std('v1', OUTFITS.v1, { expr: 'neutral', exprP: P1, mode: 'stand', blink: blinkAt(f, 71), seed: 71, ...H2(lifeV1, f, 71, { ht: -2, look: 0.2, lookY: -0.1, facing: 0.2 }) }, -2.7, 5.0, { yaw: 0.25 });
+      std('v3', OUTFITS.v3, { expr: 'neutral', exprP: P3, mode: 'stand', blink: blinkAt(f, 73), seed: 73, ...H2(lifeV3, f, 73, { ht: -2, look: -0.2, lookY: -0.1, facing: -0.2 }) }, -3.6, 4.6, { yaw: -0.25 });
       break;
     }
     case 'seth': {
-      std('seth', OUTFITS.seth, { expr: 'grin', mode: sethMode(f), phase: q((f * 0.011) % 1, 2), blink: blinkAt(f, 51), seed: 51, prop: f >= 884 && f <= 902 ? ['point', 0.55] : null }, st.x, st.z, { yaw: -0.45 });
-      std('boy', OUTFITS.boy, { expr: 'nervous', mode: 'stand', blink: blinkAt(f, 21), seed: 21 }, by.x, by.z, { s: 0.8, yaw: 0.3 });
-      std('farmer', OUTFITS.farmer, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 41), seed: 41 }, fa.x, fa.z, { yaw: -0.3 });
-      arcCast(['nervous', 'neutral', 'nervous']);
-      std('potter', OUTFITS.potter, { ...ptBase, expr: 'neutral' }, pt.x, pt.z, { yaw: -0.4 });
+      // the brick rides his hand until the release (grip place
+      // f879-888; the 3D ingot arcs f888-898 on brickAt).
+      const g = gripSeth(f);
+      std('seth', OUTFITS.seth, { expr: 'grin', exprP: SP2, mode: sethMode(f), phase: q(sethPh(f), 2), blink: blinkAt(f, 51), seed: 51, prop: f >= 860 && f <= 905 ? ['point', q(0.62 - 0.35 * (1 - g.k), 2)] : null, ...H2(lifeSeth, f, 51, { ht: -2, look: -0.4, lookY: -0.1, facing: -0.4 }) }, st.x, st.z, { yaw: -0.45 });
+      std('boy', OUTFITS.boy, { expr: 'nervous', exprP: BP, mode: 'stand', blink: blinkAt(f, 23), seed: 21, ...H2(lifeBoy, f, 21, { ht: -1.5, look: 0.4, lookY: 0, facing: 0.4 }) }, by.x, by.z, { s: 0.8, yaw: 0.3 });
+      std('farmer', OUTFITS.farmer, { expr: 'neutral', exprP: FP, mode: 'stand', blink: blinkAt(f, 41), seed: 41, ...H2(lifeFarmer, f, 41, { ht: -1.5, look: -0.3, lookY: 0, facing: -0.3 }) }, fa.x, fa.z, { yaw: -0.3 });
+      arcCast();
+      potterStd({ mode: 'stand', ...H2(lifePotter, f, 31, { ht: -1.5, look: 0.4, lookY: 0, facing: 0.35 }) }, { yaw: -0.4 });
       break;
     }
     case 'wait': {
-      std('seth', OUTFITS.seth, { expr: f >= 975 ? 'smile_closed' : 'grin', mode: 'stand', blink: blinkAt(f, 51), seed: 51, headTilt: f >= 960 ? q(smooth(ramp(f, 960, 1000)) * 0.22, 2) : 0 }, st.x, st.z, { yaw: -0.4 });
-      std('potter', OUTFITS.potter, { ...ptBase, expr: 'neutral' }, pt.x, pt.z, { yaw: -0.4 });
-      std('v2', OUTFITS.v2, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 72), seed: 72 }, -9.8, -6.5, { yaw: 0.5 });
+      std('seth', OUTFITS.seth, { expr: 'grin', exprP: SP2, mode: 'stand', blink: blinkAt(f, 51), seed: 51, ...H2(lifeSeth, f, 51, { ht: q(lerp(-1, 4.5, smooth(ramp(f, 960, 1010))), 1), look: -0.2, lookY: 0.3, facing: -0.2 }) }, st.x, st.z, { yaw: -0.4 });
+      potterStd({ mode: 'stand', ...H2(lifePotter, f, 31, { ht: -1, look: 0.3, lookY: 0, facing: 0.3 }) }, { yaw: -0.4 });
+      std('v2', OUTFITS.v2, { expr: 'neutral', exprP: P2, mode: 'stand', blink: blinkAt(f, 72), seed: 72, ...H2(lifeV2, f, 72, { ht: -2, look: 0.3, lookY: -0.1, facing: 0.3 }) }, -9.8, -6.5, { yaw: 0.5 });
       break;
     }
     case 'payoff': {
       const shocked = f >= 1055;
-      std('seth', OUTFITS.seth, { expr: shocked ? (f >= 1090 ? 'dazed' : 'shock') : 'grin', mode: 'stand', blink: blinkAt(f, 51), seed: 51, headTilt: f >= 1090 ? 0.12 : 0 }, st.x, st.z, { yaw: -0.5 });
-      std('boy', OUTFITS.boy, { expr: shocked ? 'laugh' : 'smile', mode: 'stand', blink: blinkAt(f, 21), seed: 21 }, by.x, by.z, { s: 0.8, yaw: 0.3 });
-      std('farmer', OUTFITS.farmer, { expr: shocked ? 'shock' : 'smile', mode: 'stand', blink: blinkAt(f, 41), seed: 41 }, fa.x, fa.z, { yaw: -0.3 });
-      arcCast([shocked ? 'shock' : 'smile', shocked ? 'shock' : 'smile', shocked ? 'shock' : 'neutral']);
-      std('potter', OUTFITS.potter, { ...ptBase, expr: 'smile_closed' }, pt.x, pt.z, { yaw: -0.4 });
+      std('seth', OUTFITS.seth, { expr: shocked ? (f >= 1090 ? 'dazed' : 'shock') : 'grin', exprP: SP2, mode: 'stand', blink: blinkAt(f, 51), seed: 51, ...H2(lifeSeth, f, 51, { ht: shocked ? -3.5 : -2, look: -0.3, lookY: shocked ? -0.2 : 0, facing: -0.3 }) }, st.x, st.z, { yaw: -0.5 });
+      std('boy', OUTFITS.boy, { expr: shocked ? 'laugh' : 'smile', exprP: BP, mode: 'stand', blink: blinkAt(f, 23), seed: 21, ...H2(lifeBoy, f, 21, { ht: shocked ? -3 : -1.5, look: 0.3, lookY: -0.1, facing: 0.3 }) }, by.x, by.z, { s: 0.8, yaw: 0.3 });
+      std('farmer', OUTFITS.farmer, { expr: shocked ? 'shock' : 'smile', exprP: FP, mode: 'stand', blink: blinkAt(f, 41), seed: 41, ...H2(lifeFarmer, f, 41, { ht: -2, look: -0.3, lookY: -0.1, facing: -0.3 }) }, fa.x, fa.z, { yaw: -0.3 });
+      arcCast();
+      potterStd({ mode: 'stand', ...H2(lifePotter, f, 31, { ht: -1.5, look: -0.3, lookY: 0, facing: -0.3 }) }, { yaw: -0.4 });
       break;
     }
     case 'emerge': {
-      std('potter', OUTFITS.potter, { ...ptBase, expr: f >= 1180 ? 'neutral' : 'stern' }, pt.x, pt.z, { yaw: 0.3 });
-      std('seth', OUTFITS.seth, { expr: 'nervous', mode: 'stand', blink: blinkAt(f, 51), seed: 51 }, st.x, st.z, { yaw: -0.5 });
-      std('boy', OUTFITS.boy, { expr: f >= 1180 ? 'smile' : 'shock', mode: 'stand', blink: blinkAt(f, 21), seed: 21 }, by.x, by.z, { s: 0.8, yaw: 0.3 });
-      std('farmer', OUTFITS.farmer, { expr: f >= 1180 ? 'smile' : 'shock', mode: 'stand', blink: blinkAt(f, 41), seed: 41 }, fa.x, fa.z, { yaw: -0.3 });
-      arcCast([f >= 1180 ? 'smile' : 'shock', f >= 1180 ? 'smile' : 'shock', f >= 1180 ? 'smile' : 'neutral']);
+      potterStd({ mode: potterMode(f), phase: q(potterPh(f), 2), ...H2(lifePotter, f, 31, { ht: f >= 1180 ? 0 : -1, look: 0.3, lookY: 0, facing: 0.3 }) }, { yaw: 0.3 });
+      std('seth', OUTFITS.seth, { expr: 'nervous', exprP: SP2, mode: 'stand', blink: blinkAt(f, 51), seed: 51, ...H2(lifeSeth, f, 51, { ht: -2, look: -0.4, lookY: 0, facing: -0.4 }) }, st.x, st.z, { yaw: -0.5 });
+      std('boy', OUTFITS.boy, { expr: f >= 1180 ? 'smile' : 'shock', exprP: BP, mode: 'stand', blink: blinkAt(f, 23), seed: 21, ...H2(lifeBoy, f, 21, { ht: -2, look: 0.3, lookY: -0.1, facing: 0.3 }) }, by.x, by.z, { s: 0.8, yaw: 0.3 });
+      std('farmer', OUTFITS.farmer, { expr: f >= 1180 ? 'smile' : 'shock', exprP: FP, mode: 'stand', blink: blinkAt(f, 41), seed: 41, ...H2(lifeFarmer, f, 41, { ht: -2, look: -0.3, lookY: -0.1, facing: -0.3 }) }, fa.x, fa.z, { yaw: -0.3 });
+      arcCast();
       break;
     }
     case 'dialogue': {
-      // THE dialogue beat: the POTTER performs his line — mouth driven
-      // by the stem inside the speak segment, closed outside it; Seth
+      // THE dialogue beat: the POTTER performs his line — mouth
+      // driven by the stem inside the speak segment, closed outside
+      // it; his free hand gestures with the voice (gestureAt); Seth
       // and the crowd only listen (narration stays voice-over).
-      std('potter', OUTFITS.potter, { mode: 'stand', blink: blinkAt(f, 31), seed: 31, look: 0.12, ...speakFace('smile', f) }, pt.x, pt.z, { yaw: 0.45 });
-      std('seth', OUTFITS.seth, { expr: 'nervous', mode: 'stand', blink: blinkAt(f, 51), seed: 51 }, st.x, st.z, { yaw: -0.5 });
-      std('v1', OUTFITS.v1, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 71), seed: 71 }, -2.7, 5.0, { yaw: 0.25 });
-      std('v2', OUTFITS.v2, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 72), seed: 72 }, 0.1, 5.4, { yaw: 0 });
+      const sp = SPEAK.at(f);
+      const speakP = SPK.applySpeak({ ...PP, cheek: 0.5 }, sp);
+      speakP.blush = 0;
+      std('potter', OUTFITS.potter, { expr: 'smile', exprP: speakP, mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: ['point', q(gestPotter(f).k, 2)], clothShade: true,
+        headTilt: q((sp.nod || 0) + micro(f, 31) + lifePotter(f).sway - 1, 1), look: q(0.12, 2), lookY: q(0.02, 2), facing: q(0.1, 2), tilt: q(lifePotter(f).tilt, 1), breath: Math.round(lifePotter(f).breath / 6) * 6 },
+        pt.x, pt.z, { yaw: 0.45 });
+      std('seth', OUTFITS.seth, { expr: 'nervous', exprP: SP2, mode: 'stand', blink: blinkAt(f, 51), seed: 51, ...H2(lifeSeth, f, 51, { ht: -1.5, look: -0.45, lookY: 0.05, facing: -0.4 }) }, st.x, st.z, { yaw: -0.5 });
+      std('v1', OUTFITS.v1, { expr: 'smile', exprP: P1, mode: 'stand', blink: blinkAt(f, 71), seed: 71, ...H2(lifeV1, f, 71, { ht: -1.5, look: 0.3, lookY: 0, facing: 0.25 }) }, -2.7, 5.0, { yaw: 0.25 });
+      std('v2', OUTFITS.v2, { expr: 'smile', exprP: P2, mode: 'stand', blink: blinkAt(f, 72), seed: 72, ...H2(lifeV2, f, 72, { ht: -1.5, look: -0.3, lookY: 0, facing: -0.25 }) }, 0.1, 5.4, { yaw: 0 });
       break;
     }
     case 'after': {
-      std('potter', OUTFITS.potter, { ...ptBase, expr: 'smile' }, pt.x, pt.z, { yaw: 0.3 });
-      std('boy', OUTFITS.boy, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 21), seed: 21, prop: ['point', 0.5] }, by.x, by.z, { s: 0.8, yaw: 0.3 });
-      std('farmer', OUTFITS.farmer, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 41), seed: 41 }, fa.x, fa.z, { yaw: -0.3 });
-      std('v1', OUTFITS.v1, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 71), seed: 71 }, -2.7, 5.0, { yaw: 0.25 });
-      std('v3', OUTFITS.v3, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 73), seed: 73 }, -3.6, 4.6, { yaw: -0.25 });
-      std('seth', OUTFITS.seth, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 51), seed: 51, headTilt: 0.15 }, st.x, st.z, { yaw: -0.5 });
+      potterStd({ mode: 'stand', ...H2(lifePotter, f, 31, { ht: -2, look: 0.25, lookY: -0.05, facing: 0.25 }) }, { yaw: 0.3 });
+      std('boy', OUTFITS.boy, { expr: 'smile', exprP: BP, mode: 'stand', blink: blinkAt(f, 23), seed: 21, prop: ['point', 0.5], ...H2(lifeBoy, f, 21, { ht: -2, look: 0.3, lookY: -0.05, facing: 0.3 }) }, by.x, by.z, { s: 0.8, yaw: 0.3 });
+      std('farmer', OUTFITS.farmer, { expr: 'smile', exprP: FP, mode: 'stand', blink: blinkAt(f, 41), seed: 41, ...H2(lifeFarmer, f, 41, { ht: -2, look: -0.3, lookY: -0.05, facing: -0.3 }) }, fa.x, fa.z, { yaw: -0.3 });
+      std('v1', OUTFITS.v1, { expr: 'smile', exprP: P1, mode: 'stand', blink: blinkAt(f, 71), seed: 71, ...H2(lifeV1, f, 71, { ht: -2, look: 0.2, lookY: -0.05, facing: 0.2 }) }, -2.7, 5.0, { yaw: 0.25 });
+      std('v3', OUTFITS.v3, { expr: 'smile', exprP: P3, mode: 'stand', blink: blinkAt(f, 73), seed: 73, ...H2(lifeV3, f, 73, { ht: -2, look: -0.2, lookY: -0.05, facing: -0.2 }) }, -3.6, 4.6, { yaw: -0.25 });
+      std('seth', OUTFITS.seth, { expr: 'neutral', exprP: SP2, mode: 'stand', blink: blinkAt(f, 51), seed: 51, ...H2(lifeSeth, f, 51, { ht: 2.5, look: -0.3, lookY: 0.15, facing: -0.3 }) }, st.x, st.z, { yaw: -0.5 });
       break;
     }
-    case 'hookq': case 'hook': break;
+    case 'hookq': case 'hook': {
+      // the film ends on a CHARACTER BEAT — the potter stands in the
+      // foreground pointing up at the hook board behind him; his
+      // head stays right of the board's text band, so the board
+      // remains fully readable at full opacity to the last frame.
+      // Narration only — his mouth is shut (smile, no speak track).
+      std('potter', OUTFITS.potter, { expr: 'grin', exprP: PP, mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: ['point', 0.3], ...H2(lifePotter, f, 31, { ht: -2.5, look: 0.45, lookY: -0.35, facing: 0.45 }) }, HOOK_POTTER.x, HOOK_POTTER.z, { yaw: 0.5 });
+      std('seth', OUTFITS.seth, { expr: 'smile', exprP: SP2, mode: 'stand', blink: blinkAt(f, 51), seed: 51, ...H2(lifeSeth, f, 51, { ht: -2.5, look: 0.4, lookY: -0.35, facing: 0.4 }) }, HOOK_SETH.x, HOOK_SETH.z, { yaw: -0.35 });
+      break;
+    }
   }
   return out;
 };
