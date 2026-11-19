@@ -298,7 +298,7 @@ tubeSeg(new THREE.Vector3(0.02, 0.44, 0), new THREE.Vector3(0.18, 0.52, 0), 0.02
 // The hook board stands before the back wall; its transform is mirrored
 // in boards.json — keep in sync. Position set ONCE here; posts stand
 // OUTSIDE the panel span (panel half-width 1.95, posts at +-2.08).
-const boardHook = textBoard(['लेकिन कल...', 'वह किताब जो खुद', 'बोलकर पढ़ती थी?'], 3.9, 1.6, '#2a1a0c', '#ffe9a8', 900, { pitch: 0.26, dy: 0.03 });
+const boardHook = textBoard(['लेकिन कल...', 'वह किताब जो खुद', 'बोलकर पढ़ती थी?'], 3.9, 1.6, '#2a1a0c', '#ffe9a8', 900, { pitch: 0.26, dy: 0.03, fsMul: 0.55 });
 boardHook.position.set(...BOARD_POS); world.add(boardHook); addBoardOccluder(boardHook, 3.9, 1.6, 'hookK');
 add(tbox(0.09, 2.0, 0.09, 2), MAT.woodDk, BOARD_POS[0] - 2.08, 0.6, BOARD_POS[2] - 0.08, world, { cast: false });
 add(tbox(0.09, 2.0, 0.09, 2), MAT.woodDk, BOARD_POS[0] + 2.08, 0.6, BOARD_POS[2] - 0.08, world, { cast: false });

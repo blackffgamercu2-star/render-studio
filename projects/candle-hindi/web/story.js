@@ -30,7 +30,7 @@
 // graded.
 import { M, blinkAt, q, clamp, lerp, ramp, kf } from './motion.js';
 import { buildRig, pushInCam, keysCam } from './camrig.js';
-import { poseWindows, turnTrack, winkTrack } from './body.js';
+import { poseWindows, turnTrack, winkTrack, emoTrack as kitEmoTrack, lifeAt, gripAt, gestureAt, stridePh, jumpTrack, carryDip } from './body.js';
 import * as SOL from './solid.js';
 import * as T from './toon.js';
 import * as SPK from './speak.js';
@@ -226,40 +226,66 @@ export const heroPosAt = (f) => FOCUS[shotAt(f).id](f);
 // ---------- cameras: EVERY shot is a camrig track on a subject ----------
 const heroPos = (f) => { const h = heroAt(f); return [h.x, h.y || 0, h.z]; };
 const srvPos = (f) => { const h = srvAt(f); return [h.x, h.y || 0, h.z]; };
+// ---------- v4 ACTION CAMERA (Abid's 'v4' standard) ----------
+// Every shot PUNCHES in fast at its action start — the distance move is
+// concentrated in the first ~15 frames — then TRACKS its subject
+// analytically or holds locked on it: no slow drift, no static holds,
+// no whole-shot glides. Impact KICKS are declared to the rig at the
+// coin handoff (f285), the blow landing (f597), the tube snap (f1256)
+// and the flame's death puff (f1264).
+const v4PushCam = ({ subject, dir, a, b, d0, d1, h0, h1, lookOff = [0, 0, 0], fov0 = 40, fov1 = 36, n = 15 }) => (f) => {
+  const s = subject(f), d = dir(f);
+  const u = smooth(ramp(f, a, a + n));            // the punch
+  const v = smooth(ramp(f, a + n, b));            // a small settle creep
+  const dist = lerp(lerp(d0, d1, u), d1 * 0.95, v);
+  const hh = lerp(h0, h1, Math.max(u, v));
+  return { pos: [s[0] + d[0] * dist, s[1] + hh, s[2] + d[1] * dist],
+    look: [s[0] + lookOff[0], s[1] + lookOff[1], s[2] + lookOff[2]], fov: lerp(fov0, fov1, u), roll: 0 };
+};
 const RIG_BY_ID = {
   // hook (R2): opens ON the moneylender BIG from frame 0 — low angle,
   // head ~40%+ of frame width, one hand raised to the eternal flame at
   // his right; the candle glows in frame beside him. Solo hero, like
   // the Salted Mine opening (the devotee handoff gets its own close-up
   // in 'coins').
-  hook: { cut: 'hard', raw: pushInCam({ subject: heroPos, a: 0, b: 123, d0: 3.55, d1: 2.9, h0: 1.3, h1: 1.38, lookOff: [0.32, 1.5, 0], fov0: 39, fov1: 35,
+  hook: { cut: 'hard', raw: v4PushCam({ subject: heroPos, a: 0, b: 123, d0: 3.55, d1: 2.45, h0: 1.3, h1: 1.38, lookOff: [0.32, 1.5, 0], fov0: 39, fov1: 34,
     dir: () => [-0.5, 0.86] }) },
-  claim: { cut: 'hard', raw: pushInCam({ subject: heroPos, a: 124, b: 248, d0: 5.2, d1: 3.25, h0: 1.72, h1: 1.66, lookOff: [0, 1.55, 0], fov0: 40, fov1: 33,
+  claim: { cut: 'hard', raw: v4PushCam({ subject: heroPos, a: 124, b: 248, d0: 5.2, d1: 2.85, h0: 1.72, h1: 1.64, lookOff: [0, 1.55, 0], fov0: 40, fov1: 33, n: 16,
     dir: () => [-0.3, 0.95] }) },
   // coins (R2): front close-up of the handoff itself — the devotee's
   // coin hand and the moneylender's receiving palm meet at frame
   // centre, both faces big above.
   coins: { cut: 'hard', raw: keysCam({ keys: [
     { f: 249, pos: [2.12, 1.32, 0.85], look: [1.97, 1.18, -2.7], fov: 37 },
+    { f: 264, pos: [2.1, 1.29, 0.52], look: [1.98, 1.19, -2.71], fov: 34.5, ease: 'surge' },
     { f: 313, pos: [2.1, 1.28, 0.5], look: [1.99, 1.2, -2.72], fov: 34, ease: 'surge' }] }) },
   // forbidden: low angle UP at the candle on its tall table — the
   // moneylender steps into frame and bars the way.
   forbidden: { cut: 'hard', raw: keysCam({ keys: [
     { f: 314, pos: [0.2, 0.95, 0.9], look: [1.3, 1.5, -3.4], fov: 41 },
+    { f: 330, pos: [0.32, 0.97, 0.55], look: [1.29, 1.51, -3.4], fov: 39, ease: 'surge' },
+    { f: 374, pos: [0.44, 1.0, 0.32], look: [1.28, 1.52, -3.4], fov: 37, ease: 'surge' },
     { f: 421, pos: [0.45, 1.0, 0.3], look: [1.28, 1.52, -3.4], fov: 37, ease: 'surge' }] }) },
   // steady INSERT: the flame fills the frame — no drip, no shrink.
   steady: { cut: 'hard', raw: keysCam({ keys: [
     { f: 422, pos: [0.5, 1.62, -1.5], look: [1.3, 1.42, -3.4], fov: 30 },
+    { f: 437, pos: [0.68, 1.59, -1.72], look: [1.3, 1.43, -3.4], fov: 28.5, ease: 'surge' },
     { f: 527, pos: [0.72, 1.58, -1.75], look: [1.3, 1.43, -3.4], fov: 28, ease: 'surge' }] }) },
   blow: { cut: 'hard', raw: keysCam({ keys: [
     { f: 528, pos: [-1.7, 1.5, 0.7], look: [0.9, 1.3, -3.1], fov: 39 },
+    { f: 544, pos: [-1.38, 1.46, 0.24], look: [0.94, 1.31, -3.14], fov: 36.5, ease: 'surge' },
     { f: 639, pos: [-1.3, 1.45, 0.2], look: [0.95, 1.32, -3.15], fov: 36, ease: 'surge' }] }) },
-  suspect: { cut: 'hard', raw: pushInCam({ subject: srvPos, a: 640, b: 743, d0: 4.6, d1: 3.4, h0: 1.58, h1: 1.5, lookOff: [0, 1.5, 0], fov0: 39, fov1: 34,
+  suspect: { cut: 'hard', raw: v4PushCam({ subject: srvPos, a: 640, b: 743, d0: 4.6, d1: 3.1, h0: 1.58, h1: 1.5, lookOff: [0, 1.5, 0], fov0: 39, fov1: 33,
     dir: () => [-0.25, 0.97] }) },
   // crawl: floor-level POV as the servant slips under the table
-  crawl: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 744, pos: [-1.7, 0.7, 0.6], look: [0.7, 0.45, -3.2], fov: 42 },
-    { f: 822, pos: [-1.3, 0.62, 0.05], look: [0.9, 0.5, -3.25], fov: 39, ease: 'surge' }] }) },
+  // crawl (v4): floor-level TRACKING — the camera slips under the
+  // table WITH the servant at his own speed, punching in over the
+  // first 15 frames, its look riding ahead of his crawl.
+  crawl: { cut: 'hard', raw: (f) => {
+    const s = srvAt(f), u = smooth(ramp(f, 744, 759));
+    const back = lerp(3.9, 3.35, u);
+    return { pos: [s.x - back * 0.52, 0.66, s.z + back * 0.86], look: [s.x + 0.35, 0.48, s.z - 0.15], fov: lerp(42, 39, u), roll: 0 };
+  } },
   // reveal INSERT (R2): PURE object insert, no cast — low three-
   // quarter from the front-left, sliding UNDER the cloth drape's
   // bottom edge (the drape hides the tube's top run — that is its
@@ -268,38 +294,56 @@ const RIG_BY_ID = {
   // (brightest at the source above).
   reveal: { cut: 'hard', raw: keysCam({ keys: [
     { f: 823, pos: [-0.95, 0.5, -3.04], look: [1.28, 0.55, -3.4], fov: 33 },
+    { f: 838, pos: [-0.9, 0.55, -3.05], look: [1.285, 0.59, -3.4], fov: 30.5, ease: 'surge' },
     { f: 941, pos: [-0.88, 0.56, -3.06], look: [1.29, 0.6, -3.4], fov: 30, ease: 'surge' }] }) },
   // oilflow (R2): SIDE PROFILE from the table's left end — the one
   // angle where the tube's whole run is honestly visible — rising
   // with the glint's climb, pot -> wick, assembly filling the frame.
-  oilflow: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 942, pos: [-1.15, 0.55, -3.02], look: [1.3, 0.62, -3.4], fov: 36 },
-    { f: 1029, pos: [-1.05, 1.15, -3.08], look: [1.3, 1.3, -3.4], fov: 32, ease: 'surge' }] }) },
+  // oilflow (v4): the camera RISES WITH the oil glint itself — locked
+  // onto oilPtAt every frame, pot -> wick, at the glint's own speed.
+  oilflow: { cut: 'hard', raw: (f) => {
+    const o = oilPtAt(f), u = smooth(ramp(f, 942, 957));
+    return { pos: [lerp(-1.3, -1.08, u), o[1] + 0.12, -3.04], look: [o[0], o[1] + 0.05, o[2]], fov: lerp(36, 32, u), roll: 0 };
+  } },
   truth: { cut: 'hard', raw: keysCam({ keys: [
     { f: 1030, pos: [0.0, 1.1, 1.0], look: [1.2, 0.95, -3.6], fov: 40 },
+    { f: 1045, pos: [0.22, 1.03, 0.54], look: [1.2, 0.97, -3.58], fov: 37.5, ease: 'surge' },
     { f: 1122, pos: [0.25, 1.02, 0.5], look: [1.2, 0.98, -3.58], fov: 37, ease: 'surge' }] }) },
-  moving: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1123, pos: [-0.4, 1.7, 2.6], look: [-1.2, 1.0, -5.6], fov: 42 },
-    { f: 1224, pos: [-0.1, 1.6, 2.0], look: [-1.0, 1.02, -5.5], fov: 39, ease: 'surge' }] }) },
+  // moving (v4): the camera travels WITH the movers — anchored to
+  // their live midpoint every frame, punching in as the walk starts.
+  moving: { cut: 'hard', raw: (f) => {
+    const sv = srvAt(f), va = vilAAt(f);
+    const u = smooth(ramp(f, 1123, 1138)), v = smooth(ramp(f, 1138, 1224));
+    const mx = (sv.x + va.x) / 2, mz = (sv.z + va.z) / 2;
+    const d = lerp(lerp(8.9, 8.35, u), 7.75, v);
+    return { pos: [mx - 0.65, lerp(1.7, 1.6, Math.max(u, v)), mz + d], look: [mx - 1.45, 1.0, mz + 0.7], fov: lerp(42, 39, u), roll: 0 };
+  } },
   // snap (R2 ACTION BEAT): front three-quarter CLOSE-UP on the table —
   // both men stand at its front corners with their hands ON the front
   // edge and drag WITH it (their anchors ride tableXAt); the candle
   // fills the centre above, the tube joint tears below the top, and
   // the flame sputters and dies in front of everyone. Camera is LOW
   // and in FRONT — never behind the cards.
-  snap: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1225, pos: [0.5, 1.3, 2.15], look: [1.8, 1.06, -2.95], fov: 45 },
-    { f: 1313, pos: [0.62, 1.26, 1.75], look: [1.82, 1.08, -2.98], fov: 43, ease: 'surge' }] }) },
+  // snap (v4 ACTION BEAT): the camera RIDES the drag — its x follows
+  // tableXAt as the table slides, punching in over the first 14
+  // frames; the declared KICKS land at the snap (f1256) and the
+  // flame's death (f1264).
+  snap: { cut: 'hard', raw: (f) => {
+    const tx = tableXAt(f), u = smooth(ramp(f, 1225, 1239));
+    const d = lerp(5.6, 5.05, u);
+    return { pos: [0.95 + tx * 0.85 - d * 0.10, lerp(1.3, 1.27, u), -3.35 + d], look: [1.45 + tx * 0.75, 1.07, -3.3], fov: lerp(45, 43, u), roll: 0 };
+  } },
   // exposed (R2 REACTION): the push-in now lands at >=65% face width —
   // the moneylender's horror as the secret hangs in the air.
-  exposed: { cut: 'hard', raw: pushInCam({ subject: heroPos, a: 1314, b: 1403, d0: 3.6, d1: 2.5, h0: 1.6, h1: 1.55, lookOff: [0, 1.52, 0], fov0: 36, fov1: 30,
+  exposed: { cut: 'hard', raw: v4PushCam({ subject: heroPos, a: 1314, b: 1403, d0: 3.6, d1: 2.42, h0: 1.6, h1: 1.55, lookOff: [0, 1.52, 0], fov0: 36, fov1: 29.5, n: 14,
     dir: () => [0.3, 0.95] }) },
   tag: { cut: 'hard', raw: keysCam({ keys: [
     { f: 1404, pos: [1.1, 1.6, 1.9], look: [1.1, 1.35, -2.5], fov: 39 },
+    { f: 1419, pos: [1.08, 1.56, 1.36], look: [1.12, 1.37, -2.46], fov: 36.5, ease: 'surge' },
     { f: 1466, pos: [1.08, 1.55, 1.3], look: [1.12, 1.38, -2.45], fov: 36, ease: 'surge' }] }) },
   // dialogue: the performed line — a slow push into the moneylender's
   // face; the camera HOLDS on the speaker.
-  dialogue: { cut: 'hard', raw: pushInCam({ subject: heroPos, a: 1467, b: 1574, d0: 3.1, d1: 2.35, h0: 1.6, h1: 1.55, lookOff: [0, 1.52, 0], fov0: 33, fov1: 30,
+  dialogue: { cut: 'hard', raw: v4PushCam({ subject: heroPos, a: 1467, b: 1574, d0: 3.1, d1: 2.42, h0: 1.6, h1: 1.56, lookOff: [0, 1.52, 0], fov0: 33, fov1: 30, n: 12,
     dir: () => [0.35, 0.94] }) },
   // hookboard (R2 FINAL, fixed): character beat + board together,
   // moonrent composition — the board rides high and wide (~84% of
@@ -310,12 +354,13 @@ const RIG_BY_ID = {
   // frame.
   hookboard: { cut: 'hard', raw: keysCam({ keys: [
     { f: 1575, pos: [0.0, 2.3, 2.9], look: [-0.05, 1.5, -8.3], fov: 49 },
+    { f: 1590, pos: [0.0, 2.47, 1.42], look: [0.0, 1.37, -8.3], fov: 47.3, ease: 'surge' },
     { f: 1651, pos: [0.0, 2.5, 1.3], look: [0.0, 1.35, -8.3], fov: 47, ease: 'surge' }] }) },
 };
 const RIG = buildRig({
   total: TOTAL,
   shots: SHOTS.map((s) => ({ a: s.a, b: s.b, ...RIG_BY_ID[s.id] })),
-  kicks: [],
+  kicks: [{ f: 285, a: 0.12 }, { f: 597, a: 0.22 }, { f: 1256, a: 0.35 }, { f: 1264, a: 0.26 }],
   sigma: 2.3, fovSigma: 1.6,
 });
 export const camAt = (f) => ({ ...RIG.camAt(f), flash: 0 });
@@ -374,23 +419,10 @@ export const OUTFITS = {
 };
 
 // ---------- HEAD PERFORMANCE ----------
-const emoTrack = (initial, events) => ({
-  at(f) {
-    let from = T.faceP(initial), to = from, t0 = 0, dur = 0;
-    const seg = (g) => {
-      if (dur <= 0 || g >= t0 + dur) return { ...to };
-      if (g <= t0) return { ...from };
-      const u = (g - t0) / dur, s = u * u * u * (u * (u * 6 - 15) + 10), o = {};
-      for (const k in to) o[k] = from[k] + (to[k] - from[k]) * s;
-      return o;
-    };
-    for (const [ef, name, ed] of events) {
-      if (ef > f) break;
-      from = seg(ef); to = T.faceP(name); t0 = ef; dur = Math.max(1, ed);
-    }
-    return seg(f);
-  },
-});
+// emoTrack comes from kit body.js v2 (the same smootherstep morph
+// algorithm, now the shared implementation); this wrapper keeps the
+// local (initial, events) call shape.
+const emoTrack = (initial, events) => kitEmoTrack(T.faceP, initial, events);
 const emoHero = emoTrack('smile', [
   [124, 'grin', 8], [314, 'smug', 8], [528, 'smug', 8], [1030, 'grin', 8], [1123, 'stern', 8],
   [1225, 'smug', 8], [1282, 'shock', 6], [1340, 'nervous', 9], [1404, 'pained', 9], [1467, 'smile', 8], [1575, 'grin', 8],
@@ -414,12 +446,29 @@ const emoVilC = emoTrack('neutral', [
 const srvPose = poseWindows([{ a: 744, b: 1122, mode: 'kneel1', inF: 8, outF: 6 }]);
 const heroTurn = turnTrack([{ f0: 1418, dur: 12, dir: 1 }]);
 const heroWink = winkTrack([{ a: 208, b: 218 }]);
+// v2 systems: the moneylender's free hand TALKS through his performed
+// line (gesture pulses on the stressed word onsets — अकेली f1489, नहीं
+// f1512, नीचे f1536, घड़ा f1545); both men GRIP the table edge and take
+// its weight through the drag (gripAt + carryDip strain); the flame's
+// death lands as a physical STARTLE hop (jumpTrack, f1280).
+const gestHero = gestureAt([{ a: 1467, b: 1570, beats: [1489, 1512, 1536, 1545], base: 0.42, amp: 0.15 }]);
+const snapGrip = gripAt([{ f0: 1222, dur: 12, type: 'lift' }]);
+const startle = jumpTrack([{ f0: 1280, dur: 10, h: 0.045, back: 5 }]);
 const SPEAK = SPK.makeSpeakPlayer(SPEAK_DATA);
 const micro = (f, seed) => 1.1 * Math.sin((f + seed * 5) * 0.037 + 1);
 const nodAt = (f, f0, n = 9, depth = 0.34) => (f >= f0 && f <= f0 + n ? Math.sin((f - f0) / n * Math.PI) * depth : 0);
-const head = (f, seed, tilt, look, lookY, facing = 0, squash = 0) => ({
-  headTilt: q(tilt + micro(f, seed), 1), look: q(look, 2), lookY: q(lookY, 2), facing: q(facing, 2), squash: q(squash, 2),
-});
+// ANIMATION UPGRADE v2 (kit body.js lifeAt): continuous life for EVERY
+// figure — breathing phase + weight-shift lean + micro sway, keyed by
+// the same per-character seeds the head system already uses. Nobody
+// stands like a post any more, not even while listening.
+const LIFE = { 31: lifeAt({ seed: 31 }), 41: lifeAt({ seed: 41 }), 61: lifeAt({ seed: 61 }), 81: lifeAt({ seed: 81 }), 91: lifeAt({ seed: 91 }) };
+const head = (f, seed, tilt, look, lookY, facing = 0, squash = 0) => {
+  const L = (LIFE[seed] || LIFE[31])(f);
+  return {
+    headTilt: q(tilt + micro(f, seed) + L.sway, 1), tilt: q(L.tilt, 1), breath: Math.round(L.breath / 6) * 6,
+    look: q(look, 2), lookY: q(lookY, 2), facing: q(facing, 2), squash: q(squash, 2),
+  };
+};
 const noBlush = (P) => { P.blush = 0; P.openL = Math.min(1, (P.openL ?? 0.85) * 1.45); P.openR = Math.min(1, (P.openR ?? 0.85) * 1.45); return P; };
 
 export const castAt = (f) => {
@@ -464,9 +513,9 @@ export const castAt = (f) => {
     }
     case 'forbidden': {
       // vilB creeps toward the table; the hero steps in and bars him
-      std('vilB', OUTFITS.vilB, { expr: 'smile', exprP: BP, mode: 'stand', blink: blinkAt(f, 81), seed: 81,
+      std('vilB', OUTFITS.vilB, { expr: 'smile', exprP: BP, mode: (f >= 318 && f <= 362) ? 'march' : 'stand', phase: q(stridePh(2.9, vb.x), 2), blink: blinkAt(f, 81), seed: 81,
         ...head(f, 81, -3.5, -0.3, -0.5, -0.3) }, vb.x, vb.z, { yaw: -0.3 });
-      std('hero', OUTFITS.hero, { expr: 'smile', exprP: HP, mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: ['point', 0.55],
+      std('hero', OUTFITS.hero, { expr: 'smile', exprP: HP, mode: (f >= 330 && f <= 372) ? 'march' : 'stand', phase: q(stridePh(0.15, h.x), 2), blink: blinkAt(f, 31), seed: 31, prop: ['point', 0.55],
         ...head(f, 31, -2, -0.5, -0.3, -0.5) }, h.x, h.z, { yaw: -0.5 });
       std('vilA', OUTFITS.vilA, { expr: 'grin', exprP: AP, mode: 'stand', blink: blinkAt(f, 61), seed: 61,
         ...head(f, 61, -3, 0.4, -0.45, 0.4) }, va.x, va.z, { yaw: 0.35 });
@@ -514,9 +563,9 @@ export const castAt = (f) => {
     }
     case 'moving': {
       const mv = (a, b) => f >= a && f <= b;
-      std('srv', OUTFITS.srv, { expr: 'neutral', exprP: SP, mode: mv(1127, 1180) ? 'march' : 'stand', phase: q((f * 0.016) % 1, 2), blink: blinkAt(f, 41), seed: 41,
+      std('srv', OUTFITS.srv, { expr: 'neutral', exprP: SP, mode: mv(1127, 1180) ? 'march' : 'stand', phase: q(stridePh(-4.7, lerp(-4.7, -3.1, smooth(ramp(f, 1127, 1180)))), 2), blink: blinkAt(f, 41), seed: 41,
         ...head(f, 41, 1, 0.3, 0.3, 0.3) }, sv.x, sv.z, { yaw: 0.3 });
-      std('vilA', OUTFITS.vilA, { expr: 'grin', exprP: AP, mode: mv(1140, 1200) ? 'march' : 'stand', phase: q((f * 0.016 + 0.4) % 1, 2), blink: blinkAt(f, 61), seed: 61,
+      std('vilA', OUTFITS.vilA, { expr: 'grin', exprP: AP, mode: mv(1140, 1200) ? 'march' : 'stand', phase: q(stridePh(5.2, lerp(5.2, 4.2, smooth(ramp(f, 1140, 1200)))), 2), blink: blinkAt(f, 61), seed: 61,
         ...head(f, 61, 1, -0.3, 0.3, -0.3) }, va.x, va.z, { yaw: -0.3 });
       std('vilB', OUTFITS.vilB, { expr: 'smile', exprP: BP, mode: 'stand', blink: blinkAt(f, 81), seed: 81,
         ...head(f, 81, 0.5, 0.4, 0.2, 0.4) }, vb.x, vb.z, { yaw: 0.35 });
@@ -531,10 +580,12 @@ export const castAt = (f) => {
       // it as it slides. Every head snaps UP to the candle the
       // moment the flame dies (f1285).
       const dead = flameOutAt(f);
-      std('vilA', OUTFITS.vilA, { expr: 'grin', exprP: AP, mode: 'stand', blink: blinkAt(f, 61), seed: 61, prop: ['point', 0.95],
-        ...head(f, 61, kf([[1225, 3], [1258, 3.5], [1285, -3.5], [1313, -3.5]], f), -0.4, 0.35 - 0.75 * dead, -0.4) }, va.x, va.z, { yaw: -0.4 });
-      std('hero', OUTFITS.hero, { expr: 'smile', exprP: HP, mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: ['point', 0.95],
-        ...head(f, 31, kf([[1225, 3], [1258, 3.5], [1285, -3], [1313, -3]], f), 0.4, 0.35 - 0.75 * dead, 0.4) }, h.x, h.z, { yaw: 0.4, flip: true });
+      const G = snapGrip(f), J = startle(f);
+      const strain = Math.max(G.squash, (f >= 1228 && f <= 1266) ? carryDip(f, 0.55) : 0, J.squash);
+      std('vilA', OUTFITS.vilA, { expr: 'grin', exprP: AP, mode: 'stand', blink: blinkAt(f, 61), seed: 61, prop: ['point', q(0.72 + 0.24 * G.k, 2)],
+        ...head(f, 61, kf([[1225, 3], [1258, 3.5], [1285, -3.5], [1313, -3.5]], f) - 0.6 * J.lean, -0.4, 0.35 - 0.75 * dead, -0.4, strain) }, va.x, va.z, { yaw: -0.4, y: J.y });
+      std('hero', OUTFITS.hero, { expr: 'smile', exprP: HP, mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: ['point', q(0.72 + 0.24 * G.k, 2)],
+        ...head(f, 31, kf([[1225, 3], [1258, 3.5], [1285, -3], [1313, -3]], f) - 0.6 * J.lean, 0.4, 0.35 - 0.75 * dead, 0.4, strain) }, h.x, h.z, { yaw: 0.4, flip: true, y: J.y });
       break;
     }
     case 'exposed': {
@@ -574,8 +625,10 @@ export const castAt = (f) => {
       const sp = SPEAK.at(f);
       const speakP = SPK.applySpeak({ ...T.faceP('smile'), cheek: 0 }, sp);
       speakP.blush = 0; speakP.openL = Math.min(1, (speakP.openL ?? 0.85) * 1.45); speakP.openR = Math.min(1, (speakP.openR ?? 0.85) * 1.45);
-      std('hero', OUTFITS.hero, { expr: 'smile', exprP: speakP, mode: 'stand', blink: blinkAt(f, 31), seed: 31,
-        headTilt: q((sp.nod || 0) + micro(f, 31) - 1.5, 1), look: q(0.08, 2), lookY: q(0.02, 2), facing: q(0.1, 2), squash: 0 }, h.x, h.z, { yaw: 0.1 });
+      const LH = LIFE[31](f);
+      std('hero', OUTFITS.hero, { expr: 'smile', exprP: speakP, mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: ['point', q(gestHero(f).k, 2)],
+        headTilt: q((sp.nod || 0) + micro(f, 31) + LH.sway - 1.5, 1), tilt: q(LH.tilt, 1), breath: Math.round(LH.breath / 6) * 6,
+        look: q(0.08, 2), lookY: q(0.02, 2), facing: q(0.1, 2), squash: 0 }, h.x, h.z, { yaw: 0.1 });
       std('vilA', OUTFITS.vilA, { expr: 'grin', exprP: AP, mode: 'stand', blink: blinkAt(f, 61), seed: 61,
         ...head(f, 61, -1.5, 0.45, 0.05, 0.45) }, va.x, va.z, { yaw: 0.4 });
       std('vilB', OUTFITS.vilB, { expr: 'smile', exprP: BP, mode: 'stand', blink: blinkAt(f, 81), seed: 81,
