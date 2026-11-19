@@ -1,8 +1,10 @@
-// Shot plan for "The Inn Where Nobody Ever Paid" — inn (LIBRARY v4: speak.js
-// dialogue performance + materials v4, camrig smooth tracking + solid
-// colliders). Batch 8 E2. ONE set: a warm roadside inn yard at golden
-// hour — timber facade, lit windows, story fire, long guest table, the
-// great leather book on its lectern, and the chest of gold at the payoff.
+// Shot plan for "The Inn Where Nobody Ever Paid" — inn (v4 UPGRADE:
+// "v4" ACTION CAMERA + ANIMATION UPGRADE v1+v2, Salted Mine V3 style).
+// Batch 8 E2, picture-only rebuild on the existing stem — stem, script,
+// beat map (TIMING), boards text and mix are UNCHANGED from the v4-line
+// build (web_prev4/). ONE set: a warm roadside inn yard at golden hour —
+// timber facade, lit windows, story fire, long guest table, the great
+// leather book on its lectern, and the chest of gold at the payoff.
 // Voice stem: 55.571 s, 30 fps, TOTAL 1667; timings from faster-whisper
 // base.en word alignment (words.json, match 0.975). Scene changes ONLY
 // at clause boundaries:
@@ -17,8 +19,34 @@
 // changes ONLY on clause boundaries. Signature VFX: fire flames + embers
 // (brightest at source), window/lantern glow, gold sheen sweep on the
 // chest, dust motes in the warm light.
+//
+// v4 CAMERA: every shot is a keysCam track in the valleyfly/fireless
+// grammar — fast eased push-ins land in 12-18f at action starts, tracking
+// keys follow walking subjects at their speed, one authored fast swing
+// inside S9 lands the sailor's shock reaction, a declared kick hits the
+// chest opening (f1430). No slow drift, no static holds, camera never
+// behind the cards (front / front three-quarter only, yaws <= 0.55).
+// R2 FRAMING: opening = keeper BIG from frame 0 (push-in, then a pull-
+// back reveal of the inn + title board); book inserts fill ~85-90% of
+// frame width; dialogue face ~65-68%; final = keeper foreground +
+// hook board together (board ~81% wide, held at full opacity to the
+// literal last frame, keeper's mouth shut — narration + board only).
+//
+// ANIMATION UPGRADE v1+v2 (body.js v2 / toon armPose): EVERY actor gets
+// lifeAt() breathing / weight-shift / head counter-tilt, an emoTrack()
+// face that morphs at the beats, gaze that follows the named subject,
+// distance-based stride phase on every walk (planted steps, no glide),
+// and PHYSICAL GRIPS via gripTrack() -> armPose: the keeper's quill
+// hand writes on the page (the quill is drawn from the same track), he
+// holds the great book open with both hands to read, the rich guest's
+// fingers wrap the purse he offers, the writer's hand lands on the
+// chest as it opens, the keeper points up at the hook board at the end.
+// The one performed line (S7, f789-870, 47-52% of the film — mid-story,
+// END RULE satisfied) is lip-synced via speak.js; after it nobody speaks
+// again and the final frames are narration + board only.
 import { M, blinkAt, q, clamp, lerp, ramp } from './motion.js';
-import { buildRig, pushInCam, staticTrackCam, keysCam } from './camrig.js';
+import { buildRig, keysCam } from './camrig.js';
+import { lifeAt, emoTrack, gazeTrack, winkTrack, gripTrack, gestureAt, carryDip } from './body.js';
 import * as SOL from './solid.js';
 import * as T from './toon.js';
 import * as SPK from './speak.js';
@@ -26,10 +54,6 @@ import { SPEAK_DATA } from './speakdata.js';
 
 // ---------- v4 dialogue performance ----------
 const SPEAK = SPK.makeSpeakPlayer(SPEAK_DATA);
-const speakFace = (baseName, f) => {
-  const s = SPEAK.at(f);
-  return { expr: 'smile', exprP: SPK.applySpeak({ ...T.faceP(baseName), cheek: 0.5 }, s), headTilt: q(s.nod || 0, 2), clothShade: true };
-};
 
 export const FPS = 30, TOTAL = 1667, DECK = 0;
 export const SHOTS = [
@@ -98,7 +122,7 @@ const walkKeys = (keys, f) => {
 };
 const KEEPER_KEYS = [
   [0, -1.6, 1.0], [1213, -1.6, 1.0], [1226, 0.8, 1.2], [1242, 2.6, 4.6], [1260, 1.2, 4.8], [1364, 1.2, 4.8],
-  [1410, 1.0, 4.6], [1666, 1.0, 4.6],
+  [1410, 1.0, 4.6], [1536, 1.0, 4.6], [1562, 0.8, 5.0], [1592, 0.65, 5.3], [1666, 0.65, 5.3],
 ];
 const MERCHANT_KEYS = [
   [889, -9, 11.5], [950, -3.2, 5.0], [1213, -3.2, 5.0],
@@ -113,11 +137,16 @@ export const keeperAt = (f) => { const [x, z] = walkKeys(KEEPER_KEYS, f); return
 export const merchantAt = (f) => { const [x, z] = walkKeys(MERCHANT_KEYS, f); return { x, z }; };
 export const sailorAt = (f) => { const [x, z] = walkKeys(SAILOR_KEYS, f); return { x, z }; };
 export const writerAt = (f) => { const [x, z] = walkKeys(WRITER_KEYS, f); return { x, z }; };
-const strolling = (f, spans) => spans.some(([a, b]) => f >= a && f <= b) ? 1 : 0;
-export const keeperMode = (f) => strolling(f, [[1214, 1260], [1365, 1410]]) ? 'stroll' : 'stand';
-export const merchantMode = (f) => strolling(f, [[889, 950]]) ? 'stroll' : 'stand';
-export const sailorMode = (f) => strolling(f, [[1025, 1075], [1261, 1310]]) ? 'stroll' : 'stand';
-export const writerMode = (f) => strolling(f, [[1214, 1280], [1365, 1410]]) ? 'stroll' : 'stand';
+// travelled-distance stride phase (real planted steps, no glide)
+const distPhase = (raw) => {
+  const D = [0];
+  for (let f = 1; f < TOTAL; f++) { const a = raw(f - 1), b = raw(f); D[f] = D[f - 1] + Math.hypot(b[0] - a[0], b[1] - a[1]); }
+  return { phase: (f) => (D[clamp(f, 0, TOTAL - 1)] / 0.82) % 1, moving: (f) => f > 0 && (D[clamp(f, 0, TOTAL - 1)] - D[clamp(f - 1, 0, TOTAL - 1)]) > 0.004 };
+};
+const keeperMove = distPhase((f) => { const k = keeperAt(f); return [k.x, k.z]; });
+const merchantMove = distPhase((f) => { const m = merchantAt(f); return [m.x, m.z]; });
+const sailorMove = distPhase((f) => { const s = sailorAt(f); return [s.x, s.z]; });
+const writerMove = distPhase((f) => { const w = writerAt(f); return [w.x, w.z]; });
 // the book opens when the keeper reads the sailor's story back (L9)
 export const bookOpenAt = (f) => {
   if (f < 1030) return 0;
@@ -132,10 +161,11 @@ export const chestOpenAt = (f) => {
   if (f <= 1430) return smooth(ramp(f, 1400, 1430));
   return 1;
 };
-// the rich guest's purse: offered in L6, refused, pocketed
+// the rich guest's purse: offered in L6, refused, pocketed. Staged at
+// his left hand (v4 grip staging — his fingers wrap it, see castAt).
 export const purseAt = (f) => {
   const k = f < 670 ? 0 : f <= 700 ? smooth(ramp(f, 670, 700)) : f <= 750 ? 1 : f <= 780 ? 1 - smooth(ramp(f, 750, 780)) : 0;
-  return { k, x: 2.6, y: 1.05, z: 3.6 };
+  return { k, x: 2.88, y: 0.92, z: 4.08 };
 };
 
 // ---------- hero / focus ----------
@@ -145,7 +175,7 @@ const FOCUS = {
   price: () => [-1.6, 1.3, 2.2],
   pay: () => [-2.6, 1.2, 2.6],
   write: () => [-1.6, 1.3, 2.2],
-  purse: () => [2.9, 1.2, 3.9],
+  purse: () => [2.9, 1.05, 4.08],
   dialogue: () => { const k = keeperAt(830); return [k.x, 1.45, k.z]; },
   merchant: () => { const m = merchantAt(960); return [m.x, 1.3, m.z]; },
   book: () => [-1.6, 1.2, 2.2],
@@ -155,56 +185,109 @@ const FOCUS = {
 };
 export const heroPosAt = (f) => FOCUS[shotAt(f).id]();
 
-// ---------- cameras: EVERY shot is a camrig track on a subject ----------
-const keeperPos = (f) => { const k = keeperAt(f); return [k.x, 0, k.z]; };
-const merchantPos = (f) => { const m = merchantAt(f); return [m.x, 0, m.z]; };
-const bookPos = () => [LECTERN.x, LECTERN.top, LECTERN.z];
-const chestPos = () => [CHEST.x, 0.7, CHEST.z];
-const bezierCam = (P, L, a, b, fov0, fov1) => (f) => {
-  const u = M.smooth(ramp(f, a, b));
-  const w0 = (1 - u) ** 3, w1 = 3 * (1 - u) ** 2 * u, w2 = 3 * (1 - u) * u * u, w3 = u ** 3;
-  const mix = (Q) => [0, 1, 2].map((j) => w0 * Q[0][j] + w1 * Q[1][j] + w2 * Q[2][j] + w3 * Q[3][j]);
-  return { pos: mix(P), look: mix(L), fov: lerp(fov0, fov1, u), roll: 0 };
-};
+// ---------- v4 ACTION CAMERA: keysCam tracks on every shot ----------
+const KC = (keys) => keysCam({ keys: keys.map(([f, pos, look, fov]) => ({ f, pos, look, fov, ease: 'io' })) });
 const RIG_BY_ID = {
-  drone: { cut: 'hard', raw: bezierCam(
-    [[24, 14, 30], [14, 8, 21], [9, 4.5, 15.5], [7.2, 3.1, 13.2]],
-    [[0, 3.0, -6], [0, 2.2, -2], [0, 1.2, 1.6], [0, 1.0, 2.4]], 0, 133, 44, 40) },
-  guests: { cut: 'hard', raw: pushInCam({ subject: () => [6.5, 0, 4.5], a: 134, b: 267, d0: 6.4, d1: 4.9, h0: 1.7, h1: 1.5, lookOff: [0, 0.9, 0], fov0: 40, fov1: 35,
-    dir: () => [0.55, 0.8] }) },
-  price: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 268, pos: [4.6, 3.0, 10.4], look: [-1.2, 1.1, 2.6], fov: 42 },
-    { f: 379, pos: [3.6, 2.5, 8.6], look: [-1.5, 1.2, 2.3], fov: 36, ease: 'surge' }] }) },
-  pay: { cut: 'hard', raw: pushInCam({ subject: () => [-2.6, 0, 2.6], a: 380, b: 532, d0: 5.4, d1: 4.2, h0: 1.6, h1: 1.5, lookOff: [0, 1.25, 0], fov0: 38, fov1: 33,
-    dir: () => [-0.5, 0.85] }) },
-  write: { cut: 'hard', raw: pushInCam({ subject: bookPos, a: 533, b: 661, d0: 4.6, d1: 3.4, h0: 1.7, h1: 1.5, lookOff: [0, 0.4, 0], fov0: 36, fov1: 31,
-    dir: () => [0.45, 0.85] }) },
-  purse: { cut: 'hard', raw: staticTrackCam({ pos: [5.6, 2.3, 9.6], subject: () => [2.9, 0, 3.9], lookOff: [0, 1.1, 0], fov: 38 }) },
-  dialogue: { cut: 'hard', raw: pushInCam({ subject: keeperPos, a: 789, b: 888, d0: 3.4, d1: 2.75, h0: 1.58, h1: 1.5, lookOff: [0, 1.45, 0], fov0: 32, fov1: 28,
-    dir: () => [0.45, 0.85] }) },
-  merchant: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 889, pos: [3.4, 2.6, 11.4], look: [-2.4, 1.1, 4.6], fov: 40 },
-    { f: 1024, pos: [2.2, 2.2, 9.2], look: [-3.0, 1.25, 5.0], fov: 34, ease: 'surge' }] }) },
-  book: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1025, pos: [2.0, 3.1, 15.6], look: [0.4, 1.2, 2.1], fov: 48 },
-    { f: 1213, pos: [1.7, 2.9, 14.4], look: [0.4, 1.15, 2.1], fov: 44, ease: 'surge' }] }) },
-  writer: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1214, pos: [7.8, 3.2, 12.4], look: [2.2, 1.1, 5.4], fov: 42 },
-    { f: 1364, pos: [6.2, 2.6, 10.4], look: [1.6, 1.15, 4.9], fov: 36, ease: 'surge' }] }) },
-  chest: { cut: 'hard', raw: pushInCam({ subject: chestPos, a: 1365, b: 1536, d0: 6.0, d1: 4.9, h0: 1.7, h1: 1.5, lookOff: [0, 0.6, 0], fov0: 36, fov1: 32,
-    dir: () => [0.45, 0.85] }) },
-  hookq: { cut: 'blend', blend: 10, raw: keysCam({ keys: [
-    { f: 1537, pos: [5.6, 3.1, 7.8], look: [0.1, 2.9, -5.9], fov: 40 },
-    { f: 1610, pos: [5.1, 3.2, 7.3], look: [0.05, 3.0, -5.95], fov: 37, ease: 'surge' }] }) },
-  hook: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1611, pos: [5.1, 3.2, 7.3], look: [0.05, 3.0, -5.95], fov: 37 },
-    { f: 1666, pos: [4.9, 3.25, 7.1], look: [0.02, 3.05, -5.97], fov: 36, ease: 'surge' }] }) },
+  // OPENING (R2): keeper BIG from frame 0 mid-greeting, snap push-in
+  // f0-16, then a fast pull-back reveal of the inn + title board, and a
+  // travelling wide to the clause end. Never static.
+  drone: { cut: 'hard', raw: KC([
+    [0, [0.0, 1.75, 4.5], [-1.6, 1.3, 1.0], 40],
+    [16, [-0.15, 1.7, 4.05], [-1.6, 1.33, 1.0], 38],
+    [54, [2.0, 2.9, 11.6], [-0.4, 2.35, -3.2], 42],
+    [133, [2.8, 3.1, 12.6], [-0.3, 2.0, -1.6], 40],
+  ]) },
+  guests: { cut: 'hard', raw: KC([
+    [134, [9.3, 1.95, 12.6], [6.4, 0.95, 4.9], 40],
+    [200, [8.2, 1.75, 11.0], [6.5, 1.0, 4.7], 37],
+    [267, [7.5, 1.65, 10.3], [6.6, 1.02, 4.6], 35],
+  ]) },
+  price: { cut: 'hard', raw: KC([
+    [268, [1.9, 1.8, 7.4], [-1.45, 1.25, 2.1], 40],
+    [290, [-0.2, 1.62, 4.9], [-1.6, 1.35, 2.0], 36],
+    [379, [-0.5, 1.6, 4.7], [-1.62, 1.33, 2.05], 35],
+  ]) },
+  pay: { cut: 'hard', raw: KC([
+    [380, [1.3, 1.85, 9.3], [-2.6, 1.2, 2.7], 40],
+    [440, [0.2, 1.7, 7.9], [-2.7, 1.22, 2.6], 37],
+    [532, [-0.9, 1.62, 7.0], [-2.65, 1.18, 2.9], 35],
+  ]) },
+  // the writing INSERT: the great book fills ~85-90% of the frame width
+  write: { cut: 'hard', raw: KC([
+    [533, [-0.9, 2.2, 6.4], [-1.6, 1.25, 2.0], 38],
+    [558, [-1.6, 2.55, 5.3], [-1.6, 1.12, 2.2], 34],
+    [661, [-1.6, 2.5, 5.15], [-1.6, 1.13, 2.2], 33],
+  ]) },
+  // push-in on the rich guest + purse, then a fast swing (f728-745) to
+  // the keeper for the head-shake that refuses it
+  purse: { cut: 'hard', raw: KC([
+    [662, [3.2, 1.9, 11.2], [2.9, 1.1, 4.1], 40],
+    [700, [4.9, 1.68, 8.9], [3.0, 1.08, 4.05], 37],
+    [728, [4.75, 1.66, 8.7], [3.05, 1.08, 4.05], 37],
+    [745, [0.9, 1.66, 5.6], [-1.6, 1.3, 1.05], 36],
+    [788, [0.7, 1.64, 5.4], [-1.6, 1.3, 1.05], 35],
+  ]) },
+  // THE dialogue beat: camera holds on the keeper, face ~65-69%
+  dialogue: { cut: 'hard', raw: KC([
+    [789, [0.2, 1.64, 4.7], [-1.58, 1.4, 1.05], 32],
+    [807, [-0.75, 1.56, 3.3], [-1.6, 1.44, 1.0], 29],
+    [888, [-0.85, 1.55, 3.2], [-1.6, 1.44, 1.0], 29],
+  ]) },
+  // tracking at the merchant's own speed as he strides in from the road
+  merchant: { cut: 'hard', raw: KC([
+    [889, [-4.6, 1.9, 15.9], [-8.7, 1.25, 11.4], 42],
+    [950, [-0.4, 1.75, 9.9], [-3.2, 1.28, 5.0], 38],
+    [978, [-1.0, 1.66, 8.9], [-3.2, 1.3, 5.0], 36],
+    [1024, [-1.3, 1.63, 8.6], [-3.2, 1.3, 5.0], 35],
+  ]) },
+  // book insert, then an authored fast swing (f1088-1100) onto the
+  // sailor's SHOCK reaction face (~66%), hold, swing back to the keeper
+  book: { cut: 'hard', raw: KC([
+    [1025, [-1.0, 2.3, 5.6], [-1.6, 1.18, 2.2], 35],
+    [1060, [-1.6, 2.5, 5.2], [-1.6, 1.13, 2.2], 34],
+    [1088, [-1.6, 2.5, 5.2], [-1.6, 1.13, 2.2], 34],
+    [1100, [3.0, 1.5, 4.3], [2.42, 1.32, 2.02], 34],
+    [1150, [2.95, 1.48, 4.2], [2.42, 1.3, 2.02], 34],
+    [1162, [1.4, 1.8, 6.4], [-1.2, 1.2, 2.2], 36],
+    [1213, [1.1, 1.78, 6.1], [-1.3, 1.2, 2.2], 36],
+  ]) },
+  writer: { cut: 'hard', raw: KC([
+    [1214, [8.6, 2.1, 16.2], [11.5, 1.2, 11.4], 42],
+    [1280, [6.6, 1.85, 12.4], [4.5, 1.22, 7.5], 38],
+    [1302, [5.9, 1.75, 11.5], [4.45, 1.25, 7.5], 36],
+    [1364, [5.6, 1.7, 11.1], [4.4, 1.25, 7.5], 35],
+  ]) },
+  // payoff: fast push-in on the chest as the lid opens (kick f1430),
+  // the chest fills ~85%+; slight pull-back to land both grinning faces
+  chest: { cut: 'hard', raw: KC([
+    [1365, [5.6, 1.95, 12.8], [1.9, 1.0, 6.1], 40],
+    [1412, [4.35, 1.62, 10.7], [2.2, 0.85, 6.2], 36],
+    [1536, [4.9, 1.8, 11.7], [2.0, 1.0, 6.2], 37],
+  ]) },
+  // FINAL (R2): keeper walks into the foreground and points up; the
+  // hook board rises behind him — character + board TOGETHER
+  hookq: { cut: 'blend', blend: 10, raw: KC([
+    [1537, [2.6, 2.35, 13.6], [0.1, 2.75, -5.5], 41],
+    [1610, [1.2, 2.05, 10.4], [0.05, 2.8, -5.7], 39],
+  ]) },
+  hook: { cut: 'hard', raw: KC([
+    [1611, [1.15, 2.05, 10.3], [0.05, 2.8, -5.7], 39],
+    [1666, [0.55, 1.9, 8.6], [0.02, 2.75, -5.9], 38],
+  ]) },
 };
 const RIG = buildRig({
   total: TOTAL,
-  shots: SHOTS.map((s) => ({ a: s.a, b: s.b, ...RIG_BY_ID[s.id] })),
-  kicks: [{ f: 1430, a: 0.03 }],
-  sigma: 2.3, fovSigma: 1.6,
+  // TIMING stays the single beat map; the RIG splits 'book' into three
+  // entries only to DECLARE its two authored in-shot whip reframes
+  // (f1100 onto the sailor, f1157 back to the keeper) — all three share
+  // the same raw track, so the picture is identical (fireless pattern).
+  shots: SHOTS.flatMap((s) => s.id === 'book' ? [
+    { a: 1025, b: 1099, cut: 'hard', raw: RIG_BY_ID.book.raw },
+    { a: 1100, b: 1156, cut: 'whip', blend: 6, raw: RIG_BY_ID.book.raw },
+    { a: 1157, b: 1213, cut: 'whip', blend: 6, raw: RIG_BY_ID.book.raw },
+  ] : [{ a: s.a, b: s.b, ...RIG_BY_ID[s.id] }]),
+  kicks: [{ f: 1430, a: 0.04 }],
+  sigma: 1.7, smoothRadius: 5, fovSigma: 1.1,
 });
 export const camAt = (f) => RIG.camAt(f);
 export const RIG_META = {
@@ -232,7 +315,7 @@ export const worldAt = (f) => {
     purseK: ps.k, purseX: ps.x, purseY: ps.y, purseZ: ps.z,
     dustK: 0.05,
   };
-  if (S.id === 'drone') W.boardTitle = smooth(ramp(f, 24, 38)) * (1 - smooth(ramp(f, 54, 68)));
+  if (S.id === 'drone') W.boardTitle = smooth(ramp(f, 40, 52)) * (1 - smooth(ramp(f, 60, 74)));
   if (S.id === 'hookq') W.boardHook = smooth(ramp(f, 1583, 1607));
   if (S.id === 'hook') W.boardHook = 1;   // held at FULL opacity to the literal last frame
   return W;
@@ -243,98 +326,254 @@ export const fxProfileAt = (f) => {
 };
 export const fxAt = () => [];
 
-// ---------- cast (single source for actors AND colliders) ----------
-const TINT = { warm: '#ffffff', fire: '#ffd9b0', dusk: '#f2ddc4' };
-const tintFor = (S) => TINT[S.light] || '#ffffff';
+// ============================================================
+// CAST + PERFORMANCE — the animation upgrade: every actor gets
+// lifeAt() life, an emoTrack() face, gaze on the named subject,
+// distance stride, and gripTrack() hands for every hold. Nobody is
+// a statue in any frame. Skins are Salted Mine V3 WHITE (#fbf7ef)
+// and cards take NO light tint, so faces stay bright and readable.
+// ============================================================
 export const OUTFITS = {
-  keeper: { jacket: '#8a6a3a', pants: '#4a3a2c', boots: '#2a1c12', hat: 'cap', cap: '#c8a03a', skin: '#c98a5a', moustache: '#3a2a1c' },
-  soldier: { jacket: '#5a3a2e', pants: '#3a2a2a', boots: '#241a12', hat: 'shako', skin: '#a06a3c' },
-  widow: { jacket: '#4a3a5a', pants: '#3a2a4a', boots: '#241a12', hat: 'hair', hair: '#c8c8c8', skin: '#d8a878', dress: true },
-  merchant: { jacket: '#6a2a4a', pants: '#2a2432', boots: '#1c1410', hat: 'cap', cap: '#2a1a3a', skin: '#c98a5a', moustache: '#241a12' },
-  sailor: { jacket: '#2c4a6e', pants: '#2a3242', boots: '#1c1712', hat: 'cap', cap: '#e8e0c8', skin: '#b07848' },
-  writer: { jacket: '#3a4a3a', pants: '#2c2c26', boots: '#1c1712', hat: 'cap', cap: '#3a2a1a', skin: '#c98a5a' },
-  guest1: { jacket: '#4a6a3a', pants: '#33302c', boots: '#241a12', hat: 'hair', hair: '#1c1410', skin: '#8a5a34' },
-  guest2: { jacket: '#2c4a6e', pants: '#2a3242', boots: '#1c1712', hat: 'hair', hair: '#5a3a1a', skin: '#c98a5a' },
-  rich: { jacket: '#7a5a1a', pants: '#3a2a1a', boots: '#1c1410', hat: 'cap', cap: '#e8c84a', skin: '#d8a878' },
+  keeper: { jacket: '#8a6a3a', pants: '#4a3a2c', boots: '#2a1c12', hat: 'cap', cap: '#c8a03a', skin: '#fbf7ef', moustache: '#3a2a1c' },
+  soldier: { jacket: '#5a3a2e', pants: '#3a2a2a', boots: '#241a12', hat: 'shako', skin: '#fbf7ef' },
+  widow: { jacket: '#4a3a5a', pants: '#3a2a4a', boots: '#241a12', hat: 'hair', hair: '#c8c8c8', skin: '#fbf7ef', dress: '#4a3a5a' },
+  merchant: { jacket: '#6a2a4a', pants: '#2a2432', boots: '#1c1410', hat: 'cap', cap: '#2a1a3a', skin: '#fbf7ef', moustache: '#241a12' },
+  sailor: { jacket: '#2c4a6e', pants: '#2a3242', boots: '#1c1712', hat: 'cap', cap: '#e8e0c8', skin: '#fbf7ef' },
+  writer: { jacket: '#3a4a3a', pants: '#2c2c26', boots: '#1c1712', hat: 'cap', cap: '#3a2a1a', skin: '#fbf7ef' },
+  guest1: { jacket: '#4a6a3a', pants: '#33302c', boots: '#241a12', hat: 'hair', hair: '#1c1410', skin: '#fbf7ef' },
+  guest2: { jacket: '#2c4a6e', pants: '#2a3242', boots: '#1c1712', hat: 'hair', hair: '#5a3a1a', skin: '#fbf7ef' },
+  rich: { jacket: '#7a5a1a', pants: '#3a2a1a', boots: '#1c1410', hat: 'cap', cap: '#e8c84a', skin: '#fbf7ef' },
 };
+// ---- expression morph tracks (the face matches the beat) ----
+const keeperEmo = emoTrack([[0, 'smile'], [268, 'proud'], [533, 'smile'], [662, 'smile'], [692, 'stern'], [762, 'smile'], [789, 'proud'], [889, 'neutral'], [1025, 'proud'], [1214, 'smile'], [1365, 'grin'], [1537, 'smile']], 31);
+const soldierEmo = emoTrack([[0, 'neutral'], [380, 'grin'], [470, 'determined'], [533, 'smile']], 41);
+const widowEmo = emoTrack([[0, 'smile'], [400, 'smile'], [462, 'sad'], [524, 'smile']], 42);
+const sailorEmo = emoTrack([[0, 'smile'], [889, 'neutral'], [1025, 'neutral'], [1088, 'shock'], [1170, 'relief'], [1214, 'smile'], [1365, 'grin']], 43);
+const merchantEmo = emoTrack([[0, 'grin'], [1025, 'nervous'], [1214, 'grin']], 71);
+const richEmo = emoTrack([[0, 'grin'], [745, 'nervous'], [789, 'neutral']], 61);
+const writerEmo = emoTrack([[0, 'wonder'], [1300, 'smile'], [1365, 'grin'], [1537, 'smile']], 81);
+const guestEmo = (seed) => emoTrack([[0, 'smile'], [150, seed === 52 ? 'laugh' : 'smile'], [240, 'smile'], [380, 'wonder'], [470, 'smile']], seed);
+// ---- gaze tracks (eyes follow the named subject) ----
+const keeperGaze = gazeTrack([{ f: 0, look: 0.2, lookY: 0.05 }, { f: 268, look: 0.3 }, { f: 533, look: 0.1, lookY: -0.35 }, { f: 662, look: 0.45 }, { f: 789, look: 0.35 }, { f: 1025, look: 0.1, lookY: -0.3 }, { f: 1214, look: 0.4 }, { f: 1365, look: 0.3, lookY: -0.2 }, { f: 1537, look: 0.1, lookY: 0.35 }]);
+const sailorGaze = gazeTrack([{ f: 0, look: -0.3 }, { f: 1025, look: -0.35, lookY: -0.2 }, { f: 1090, look: -0.4, lookY: 0.1 }, { f: 1214, look: 0.2 }]);
+const writerGaze = gazeTrack([{ f: 1214, look: -0.3 }, { f: 1365, look: -0.35, lookY: -0.25 }, { f: 1537, look: -0.2 }]);
+// ---- GRIP TRACKS (card units; hang = L(190,730) R(410,730)) ----
+const GT = (ks) => gripTrack(ks.map(([f, x, y, g]) => ({ f, x, y, grip: g })));
+// the keeper's quill hand: lands on the page and SCRIBBLES (micro keys)
+const quillR = GT([[533, 410, 730, 0], [546, 396, 478, 0.85], [560, 390, 470, 0.85], [575, 398, 476, 0.85], [590, 389, 469, 0.85], [605, 397, 475, 0.85], [620, 390, 471, 0.85], [640, 396, 477, 0.8], [655, 410, 730, 0]]);
+// the rich guest's left hand wraps the purse while he offers it (L6)
+const purseL = GT([[662, 190, 730, 0], [678, 172, 612, 0.85], [745, 172, 612, 0.85], [764, 190, 730, 0]]);
+// the writer's right hand lands on the chest as the lid opens (L11)
+const chestR = GT([[1365, 410, 730, 0], [1398, 398, 602, 0.6], [1432, 398, 602, 0.6], [1452, 410, 730, 0]]);
+const keeperWink = winkTrack([{ a: 1458, b: 1480 }]);
+
+const AP = (L, R) => {
+  const o = {};
+  if (L) o.L = { hand: [Math.round(L.x), Math.round(L.y)], grip: q(L.grip, 2), front: true };
+  if (R) o.R = { hand: [Math.round(R.x), Math.round(R.y)], grip: q(R.grip, 2), front: true };
+  return Object.keys(o).length ? o : undefined;
+};
+// redraw a gripping hand OVER its object (fingertips + palm dot)
+const gripHand = (p, hx, hy, skin) => {
+  p.ell(hx, hy, 9.5, 9.5, skin, 2.2);
+  for (const [dx, dy] of [[-8, -5], [0, -8], [8, -5]]) p.ell(hx + dx, hy + dy, 4.2, 4.2, skin, 1.6);
+};
+
 export const castAt = (f) => {
-  const S = shotAt(f), tint = tintFor(S), out = [];
-  const std = (id, o, opts, x, z, extra = {}) => out.push({ id, x, y: 0, z, r: 0.32, ground: 0,
-    actor: (T) => ({ key: 'pax' + JSON.stringify(o) + JSON.stringify(opts), draw: (p) => T.bodyFront(p, o, opts), x, y: 0, z, ground: 0, tint, ...extra }) });
+  const S = shotAt(f), out = [];
+  const add = (id, outfit, o, extra = {}) => out.push({
+    id, x: o.x, y: o.y || 0, z: o.z, r: 0.32, ground: 0,
+    actor: (TT) => ({
+      key: id + JSON.stringify(outfit) + JSON.stringify(o.opts) + (extra.ov || ''),
+      draw: (p) => { TT.bodyFront(p, outfit, o.opts); if (extra.drawOv) extra.drawOv(p); },
+      x: o.x, y: o.y || 0, z: o.z, ground: 0, tint: '#ffffff', yaw: extra.yaw || 0, s: extra.s,
+    }),
+  });
+  const base = (seed, lifeAmp = 1) => {
+    const L = lifeAt(f, seed);
+    return { seed, blink: blinkAt(f, seed), breath: L.breath, tilt: q(L.tilt * lifeAmp, 2), headTilt: q(L.headTilt, 2), squashL: L.squash };
+  };
+  const std = (B, exprP, G, extra = {}) => ({
+    phase: extra.phase || 0, mode: extra.mode || 'stand', expr: extra.expr || 'smile', exprP, blink: B.blink, seed: B.seed,
+    breath: B.breath, tilt: q(B.tilt + (extra.tiltAdd || 0), 2), headTilt: q(B.headTilt + (G ? G.tilt : 0) + (extra.headTiltAdd || 0), 2),
+    look: q(G ? G.look : (extra.look || 0), 2), lookY: q(G ? G.lookY : (extra.lookY || 0), 2), facing: q(G ? G.facing : 0, 2),
+    squash: q(Math.max(B.squashL, extra.dip || 0), 3), armPose: extra.armPose, clothShade: true,
+  });
   const k = keeperAt(f), m = merchantAt(f), sl = sailorAt(f), w = writerAt(f);
-  const kBase = { expr: 'smile', mode: 'stand', blink: blinkAt(f, 31), seed: 31 };
+
+  // ---------- KEEPER (appears in every shot but 'merchant'-only beats) ----------
+  const keeper = (mode, hands = {}) => {
+    const B = base(31), G = keeperGaze(f);
+    let exprP = keeperEmo(f);
+    let headTiltAdd = 0;
+    if (S.id === 'dialogue') {
+      const s = SPEAK.at(f);
+      exprP = SPK.applySpeak({ ...exprP, cheek: 0.5 }, s);
+      headTiltAdd = q(s.nod || 0, 2);
+    }
+    const wk = keeperWink(f);
+    if (wk > 0) exprP = T.blendFaceP(exprP, T.faceP('wink'), wk);
+    let hL = hands.L || null, hR = hands.R || null, drawOv = hands.drawOv || null, ov = hands.ov || '', dip = hands.dip || 0;
+    if (S.id === 'dialogue' && !hL) { const g = gestureAt(f, 5, SPEAK.at(f).nod); hL = { x: 206 + g.dx, y: 600 + g.dy, grip: 0.15 }; }
+    add('keeper', OUTFITS.keeper, {
+      x: k.x, z: k.z, opts: std(B, exprP, G, {
+        mode, phase: keeperMove.phase(f), expr: 'smile', headTiltAdd,
+        armPose: AP(hL, hR), dip, tiltAdd: S.id === 'dialogue' ? gestureAt(f, 5, SPEAK.at(f).nod).sway : 0,
+      }),
+    }, { yaw: 0.5, ov, drawOv });
+  };
+  // ---------- SAILOR ----------
+  const sailor = (mode) => {
+    const B = base(43), G = sailorGaze(f);
+    add('sailor', OUTFITS.sailor, {
+      x: sl.x, z: sl.z, opts: std(B, sailorEmo(f), G, { mode, phase: sailorMove.phase(f), expr: 'smile' }),
+    }, { yaw: -0.55 });
+  };
+  // ---------- WIDOW ----------
+  const widow = () => {
+    const B = base(42);
+    add('widow', OUTFITS.widow, {
+      x: -2.6, z: 3.5, opts: std(B, widowEmo(f), null, { mode: 'sit', expr: 'smile', look: 0.3 }),
+    }, { yaw: 0.55 });
+  };
+  // ---------- SOLDIER ----------
+  const soldier = (id, x, z, yaw) => {
+    const B = base(41);
+    add(id, OUTFITS.soldier, {
+      x, z, opts: std(B, soldierEmo(f), null, { mode: 'stand', expr: 'neutral', look: -0.2 }),
+    }, { yaw });
+  };
+  // ---------- GUESTS at the table ----------
+  const guest = (id, outfit, seed, x, z, hands = {}) => {
+    const B = base(seed);
+    let hL = hands.L || null, hR = hands.R || null;
+    add(id, outfit, {
+      x, z, opts: std(B, guestEmo(seed)(f), null, { mode: 'sit', expr: 'smile', look: 0.15, armPose: AP(hL, hR) }),
+    }, { yaw: 0 });
+  };
+  // ---------- RICH GUEST ----------
+  const rich = () => {
+    const B = base(61);
+    const inPurse = S.id === 'purse';
+    const hL = inPurse ? purseL(f) : null;
+    add('rich', OUTFITS.rich, {
+      x: 3.2, z: 4.2, opts: std(B, richEmo(f), null, {
+        mode: 'stand', expr: 'grin', look: -0.3, armPose: AP(hL, null),
+        dip: inPurse && hL && hL.grip > 0.3 ? carryDip(f, 0.25) : 0,
+      }),
+    }, { yaw: -0.5 });
+  };
+  // ---------- MERCHANT ----------
+  const merchant = () => {
+    const B = base(71);
+    const moving = merchantMove.moving(f);
+    let hR = null;
+    if (S.id === 'merchant' && !moving) { const g = gestureAt(f, 7, 0.35); hR = { x: 428 + g.dx, y: 516 + g.dy, grip: 0.1 }; }
+    add('merchant', OUTFITS.merchant, {
+      x: m.x, z: m.z, opts: std(B, merchantEmo(f), null, {
+        mode: moving ? 'march' : 'stand', phase: merchantMove.phase(f), expr: 'grin', look: -0.25, armPose: AP(null, hR),
+      }),
+    }, { yaw: -0.5 });
+  };
+  // ---------- WRITER ----------
+  const writer = () => {
+    const B = base(81), G = writerGaze(f);
+    const moving = writerMove.moving(f);
+    const hR = S.id === 'chest' ? chestR(f) : null;
+    add('writer', OUTFITS.writer, {
+      x: w.x, z: w.z, opts: std(B, writerEmo(f), G, {
+        mode: moving ? 'march' : 'stand', phase: writerMove.phase(f), expr: 'smile', armPose: AP(null, hR),
+        dip: S.id === 'chest' && hR && hR.grip > 0.3 ? carryDip(f, 0.3) : 0,
+      }),
+    }, { yaw: -0.5 });
+  };
+
   switch (S.id) {
     case 'drone': {
-      std('keeper', OUTFITS.keeper, { ...kBase }, k.x, k.z, { yaw: 0.5 });
-      std('soldier', OUTFITS.soldier, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 41), seed: 41 }, -2.8, 1.6, { yaw: -0.4 });
-      std('widow', OUTFITS.widow, { expr: 'smile', mode: 'sit', blink: blinkAt(f, 42), seed: 42 }, -2.6, 3.5, { yaw: 0.9 });
-      std('sailor', OUTFITS.sailor, { expr: 'smile', mode: 'sit', blink: blinkAt(f, 43), seed: 43 }, sl.x, sl.z, { yaw: -0.9 });
-      std('guest1', OUTFITS.guest1, { expr: 'smile', mode: 'sit', blink: blinkAt(f, 51), seed: 51 }, 5.4, 5.7, { yaw: 0 });
-      std('guest2', OUTFITS.guest2, { expr: 'smile', mode: 'sit', blink: blinkAt(f, 52), seed: 52 }, 7.6, 5.7, { yaw: 0 });
+      keeper(keeperMove.moving(f) ? 'march' : 'stand');
+      soldier('soldier', -2.8, 1.6, -0.4);
+      widow();
+      sailor('sit');
+      guest('guest1', OUTFITS.guest1, 51, 5.4, 5.7);
+      guest('guest2', OUTFITS.guest2, 52, 7.6, 5.7);
       break;
     }
     case 'guests': {
-      std('keeper', OUTFITS.keeper, { ...kBase }, k.x, k.z, { yaw: 0.5 });
-      std('guest1', OUTFITS.guest1, { expr: 'smile', mode: 'sit', blink: blinkAt(f, 51), seed: 51, prop: ['point', 0.4] }, 5.4, 5.7, { yaw: 0 });
-      std('guest2', OUTFITS.guest2, { expr: 'laugh', mode: 'sit', blink: blinkAt(f, 52), seed: 52 }, 7.6, 5.7, { yaw: 0 });
-      std('guest3', OUTFITS.soldier, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 53), seed: 53 }, 8.8, 3.6, { yaw: -0.7 });
+      keeper('stand');
+      guest('guest1', OUTFITS.guest1, 51, 5.4, 5.7, { R: { x: 392, y: 636, grip: 0.5 } });   // hand wraps his bowl
+      guest('guest2', OUTFITS.guest2, 52, 7.6, 5.7);
+      soldier('guest3', 8.8, 3.6, -0.55);
       break;
     }
     case 'price': {
-      std('keeper', OUTFITS.keeper, { ...kBase, prop: ['point', 0.7] }, k.x, k.z, { yaw: 0.5 });
-      std('guest1', OUTFITS.guest1, { expr: 'smile', mode: 'sit', blink: blinkAt(f, 51), seed: 51 }, 5.4, 5.7, { yaw: 0 });
-      std('guest2', OUTFITS.guest2, { expr: 'smile', mode: 'sit', blink: blinkAt(f, 52), seed: 52 }, 7.6, 5.7, { yaw: 0 });
+      keeper('stand', { R: { x: 430, y: 520, grip: 0.1 } });   // open-palm gesture: "the price is a story"
+      guest('guest1', OUTFITS.guest1, 51, 5.4, 5.7);
+      guest('guest2', OUTFITS.guest2, 52, 7.6, 5.7);
       break;
     }
     case 'pay': {
-      std('soldier', OUTFITS.soldier, { expr: 'grin', mode: 'stand', blink: blinkAt(f, 41), seed: 41, prop: ['point', 0.8] }, -2.8, 1.6, { yaw: -0.4 });
-      std('widow', OUTFITS.widow, { expr: 'smile', mode: 'sit', blink: blinkAt(f, 42), seed: 42 }, -2.6, 3.5, { yaw: 0.9 });
-      std('keeper', OUTFITS.keeper, { ...kBase }, k.x, k.z, { yaw: 0.5 });
+      soldier('soldier', -2.8, 1.6, -0.4);
+      widow();
+      keeper('stand');
       break;
     }
     case 'write': {
-      std('keeper', OUTFITS.keeper, { ...kBase, headTilt: 0.16, prop: ['point', 0.3] }, k.x, k.z, { yaw: 0.5 });
-      std('sailor', OUTFITS.sailor, { expr: 'smile', mode: 'sit', blink: blinkAt(f, 43), seed: 43 }, sl.x, sl.z, { yaw: -0.9 });
+      // quill grip: the hand + the quill move in the same frames
+      const hR = quillR(f);
+      keeper('stand', {
+        L: { x: 218, y: 520, grip: 0.45 }, R: hR,
+        ov: hR && hR.grip > 0.25 ? `quill${q(hR.x, 1)}:${q(hR.y, 1)}` : '',
+        drawOv: hR && hR.grip > 0.25 ? (p) => {
+          p.band([[hR.x - 5, hR.y + 15], [hR.x + 3, hR.y - 12]], '#e8e0c8', 3, 0);
+          p.ell(hR.x + 9, hR.y - 20, 9, 15, '#f4f1e8', 0);
+          gripHand(p, hR.x, hR.y, OUTFITS.keeper.skin);
+        } : null,
+      });
+      sailor('sit');
       break;
     }
     case 'purse': {
-      std('rich', OUTFITS.rich, { expr: 'grin', mode: 'stand', blink: blinkAt(f, 61), seed: 61, prop: ['point', 0.75] }, 3.2, 4.2, { yaw: -0.6 });
-      std('keeper', OUTFITS.keeper, { expr: 'stern', mode: 'stand', blink: blinkAt(f, 31), seed: 31, headTilt: 0.08 }, k.x, k.z, { yaw: 0.5 });
+      rich();
+      keeper('stand');
       break;
     }
     case 'dialogue': {
-      // THE dialogue beat: the keeper PERFORMS his line — mouth driven by
-      // the stem inside the speak segment, closed outside it; the rich
-      // guest only listens (his mouth never opens: narration is voice-over).
-      std('keeper', OUTFITS.keeper, { mode: 'stand', blink: blinkAt(f, 31), seed: 31, look: 0.15, ...speakFace('smile', f) }, k.x, k.z, { yaw: 0.5 });
-      std('rich', OUTFITS.rich, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 61), seed: 61 }, 3.2, 4.2, { yaw: -0.5 });
+      keeper('stand');
+      rich();
       break;
     }
     case 'merchant': {
-      std('merchant', OUTFITS.merchant, { expr: 'grin', mode: merchantMode(f), phase: q((f * 0.011) % 1, 2), blink: blinkAt(f, 71), seed: 71, prop: ['point', 0.85] }, m.x, m.z, { yaw: -0.5 });
-      std('keeper', OUTFITS.keeper, { ...kBase, expr: 'neutral' }, k.x, k.z, { yaw: 0.5 });
-      std('sailor', OUTFITS.sailor, { expr: 'neutral', mode: 'sit', blink: blinkAt(f, 43), seed: 43 }, sl.x, sl.z, { yaw: -0.9 });
+      merchant();
+      keeper('stand');
+      sailor('sit');
       break;
     }
     case 'book': {
-      std('keeper', OUTFITS.keeper, { ...kBase, headTilt: 0.14, prop: ['point', 0.5] }, k.x, k.z, { yaw: 0.5 });
-      std('sailor', OUTFITS.sailor, { expr: f >= 1090 ? 'shock' : 'neutral', mode: sailorMode(f), phase: q((f * 0.011) % 1, 2), blink: blinkAt(f, 43), seed: 43 }, sl.x, sl.z, { yaw: -0.6 });
-      std('merchant', OUTFITS.merchant, { expr: 'nervous', mode: 'stand', blink: blinkAt(f, 71), seed: 71 }, m.x, m.z, { yaw: 0.4 });
+      // both hands hold the great book open while he reads it back
+      keeper('stand', { L: { x: 218, y: 505, grip: 0.7 }, R: { x: 382, y: 505, grip: 0.7 } });
+      sailor(sailorMove.moving(f) ? 'march' : 'stand');
+      merchant();
       break;
     }
     case 'writer': {
-      std('writer', OUTFITS.writer, { expr: 'smile', mode: writerMode(f), phase: q((f * 0.011) % 1, 2), blink: blinkAt(f, 81), seed: 81 }, w.x, w.z, { yaw: -0.5 });
-      std('keeper', OUTFITS.keeper, { ...kBase }, k.x, k.z, { yaw: 0.5 });
-      std('sailor', OUTFITS.sailor, { expr: 'smile', mode: 'sit', blink: blinkAt(f, 43), seed: 43 }, sl.x, sl.z, { yaw: -0.9 });
-      std('widow', OUTFITS.widow, { expr: 'smile', mode: 'sit', blink: blinkAt(f, 42), seed: 42 }, -2.6, 3.5, { yaw: 0.9 });
+      writer();
+      keeper(keeperMove.moving(f) ? 'march' : 'stand');
+      sailor('sit');
+      widow();
       break;
     }
     case 'chest': {
-      std('writer', OUTFITS.writer, { expr: 'grin', mode: 'stand', blink: blinkAt(f, 81), seed: 81, prop: ['point', 0.7] }, w.x, w.z, { yaw: -0.4 });
-      std('keeper', OUTFITS.keeper, { ...kBase, expr: 'grin' }, k.x, k.z, { yaw: 0.5 });
+      writer();
+      keeper('stand', { L: { x: 224, y: 610, grip: 0.5 } });   // keeper's hand rests on the chest edge
       break;
     }
-    case 'hookq': case 'hook': break;
+    case 'hookq': case 'hook': {
+      // END RULE: narration + board only — the keeper walks into the
+      // foreground, stops, and POINTS up at the board; his mouth is shut.
+      const moving = keeperMove.moving(f);
+      keeper(moving ? 'march' : 'stand', !moving && f >= 1596 ? { R: { x: 448, y: 330, grip: 0.15 } } : {});
+      break;
+    }
   }
   return out;
 };

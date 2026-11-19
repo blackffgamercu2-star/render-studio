@@ -5,6 +5,7 @@ import * as FX from './fx.js';
 import * as PR from './props.js';
 import * as M4 from './materials.js';
 import { TOTAL, shotAt, camAt, dofAt, lightFor, actorsAt, worldAt, fxAt, fxProfileAt, BOARD_POS, FIRE, LECTERN, TABLE, CHEST, ROAD } from './story.js';
+import { WORDS } from './words.js';
 
 const W = 1080, H = 1920;
 const canvas = document.getElementById('c');
@@ -284,7 +285,7 @@ const bookG = new THREE.Group(); bookG.position.set(LECTERN.x, LECTERN.top, LECT
 const lecternG = new THREE.Group(); lecternG.position.set(LECTERN.x, 0, LECTERN.z); lecternG.rotation.y = LECTERN.ry; world.add(lecternG);
 add(tbox(0.5, 1.0, 0.4, 2), MAT.woodDk, 0, 0.5, 0, lecternG, { cast: false });
 add(tbox(1.3, 0.08, 0.95, 2), MAT.wood, 0, 1.02, 0, lecternG, { cast: false }).rotation.x = -0.28;
-const bookBase = new THREE.Group(); bookBase.position.set(0, 1.08, 0); bookBase.rotation.x = -0.28; bookG.add(bookBase);
+const bookBase = new THREE.Group(); bookBase.position.set(0, 0.0, 0); bookBase.rotation.x = -0.28; bookG.add(bookBase);
 add(tbox(1.05, 0.06, 0.75, 2), MAT.leather, 0, 0, 0, bookBase, { cast: false });
 const pageL = add(tbox(0.48, 0.05, 0.68, 2), MAT.pages, -0.25, 0.05, 0, bookBase, { cast: false });
 const pageR = new THREE.Group(); pageR.position.set(0.48, 0.05, 0); bookBase.add(pageR);
@@ -438,6 +439,37 @@ const dofScene = fs(new THREE.ShaderMaterial({ uniforms: dofU, vertexShader: `va
     gl_FragColor = linearToOutputTexel(vec4(acc/max(wsum,1e-3), 1.)); }` }));
 dofScene.children[0].material.toneMapped = false;
 
+// ---------- V3 word-by-word captions ----------
+const capCanvas = document.createElement('canvas'); capCanvas.width = W; capCanvas.height = H;
+const capG = capCanvas.getContext('2d');
+const capTex = new THREE.CanvasTexture(capCanvas); capTex.colorSpace = THREE.SRGBColorSpace;
+const capScene = fs(new THREE.MeshBasicMaterial({ map: capTex, transparent: true, toneMapped: false }));
+let capKey = null;
+const drawCaption = (f) => {
+  const t = f / 30;
+  let i = -1;
+  for (let k = 0; k < WORDS.length; k++) { if (t >= WORDS[k].s) i = k; else break; }
+  let word = '';
+  if (i >= 0) {
+    const gap = t - WORDS[i].e;
+    const next = WORDS[i + 1];
+    if (!(gap > 0.34 && (!next || next.s - t > 0.05))) word = WORDS[i].w;
+  }
+  if (word === capKey) return;
+  capKey = word;
+  capG.clearRect(0, 0, W, H);
+  if (word) {
+    capG.font = '900 74px Arial, Helvetica, sans-serif';
+    capG.textAlign = 'center'; capG.textBaseline = 'middle'; capG.lineJoin = 'round';
+    capG.lineWidth = 17; capG.strokeStyle = '#000000';
+    const y = Math.round(H * 0.76);
+    capG.strokeText(word, W / 2, y);
+    capG.fillStyle = '#ffffff';
+    capG.fillText(word, W / 2, y);
+  }
+  capTex.needsUpdate = true;
+};
+
 // ---------- per-frame state ----------
 const tmpV = new THREE.Vector3();
 function applyLight(L, f) {
@@ -527,6 +559,8 @@ window.renderFrame = (f) => {
   renderer.setRenderTarget(rtInk); renderer.render(inkScene, fsCam);
   dofU.focus.value = D.focus; dofU.cinf.value = D.cinf; dofU.near.value = D.near ?? 1;
   renderer.setRenderTarget(null); renderer.render(dofScene, fsCam);
+  drawCaption(f);
+  renderer.autoClear = false; renderer.render(capScene, fsCam); renderer.autoClear = true;
   return true;
 };
 window.TOTAL = TOTAL;
