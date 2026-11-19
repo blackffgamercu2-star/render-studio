@@ -406,7 +406,7 @@ const flipPage = (() => {
 // The hook board: next story's question, standing in the square. Its
 // transform is mirrored in boards.json — keep in sync. It rises at the
 // start of the final shot and HOLDS at full opacity to the last frame.
-const boardHook = textBoard(['लेकिन कल...', 'वह हलवाई जिसकी मिठाई', 'की थाली कभी खाली', 'नहीं होती थी?'], 3.9, 1.75, '#2a1a0c', '#ffe9a8', 900, { pitch: 0.185, dy: 0.01 });
+const boardHook = textBoard(['लेकिन कल...', 'वह हलवाई जिसकी मिठाई', 'की थाली कभी खाली', 'नहीं होती थी?'], 3.9, 1.75, '#2a1a0c', '#ffe9a8', 900, { pitch: 0.185, dy: 0.01, fsMul: 0.65 });
 boardHook.position.set(...BOARD_POS); world.add(boardHook); addBoardOccluder(boardHook, 3.9, 1.75, 'hookK');
 add(tbox(0.09, 2.0, 0.09, 2), MAT.woodDk, -1.7, 0.6, -8.28, world, { cast: false });
 add(tbox(0.09, 2.0, 0.09, 2), MAT.woodDk, 1.7, 0.6, -8.28, world, { cast: false });
