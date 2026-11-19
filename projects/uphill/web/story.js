@@ -1,6 +1,9 @@
 // Shot plan for "The Night the River Flowed Uphill" — uphill (Batch 8 E4,
-// Mirror Trick Tales). LIBRARY v4: speak.js dialogue performance +
-// materials v4, camrig smooth tracking + solid colliders.
+// Mirror Trick Tales). v4 UPGRADE (2026-11-19): ACTION CAMERA + ANIMATION
+// UPGRADE v1+v2 (body.js: lifeAt / emoTrack / gazeTrack / gestureAt /
+// gripTrack / jumpTrack / carryDip) + Salted Mine V3 style (round WHITE
+// heads, word-by-word captions in main.js). Picture-only rebuild on the
+// EXISTING stem — beat map, clause timings, boards and mix UNCHANGED.
 // ONE set: a riverbank at dusk + the canal LOCK climbing the hill west.
 // A boat sails into the lock, the chamber fills, the boat rises a full
 // house high, and sails out on water that was above its head. The miller
@@ -20,13 +23,26 @@
 //   L10 truth     the miller comes down, wiping his hands, tells the truth
 //   L11 dialogue  "Water never climbs, friends. It only waits to be lifted."
 //   L12 hookq/hook  the king who woke up with no voice at all? (hook board)
+// v4 CAMERA: push-ins land in 12–18f at action starts, tracking keys ride
+// at subject speed (the run, the boat, the rising chamber, the miller's
+// walk down), impact kicks on the nets drop (f28), the gate slam (f947),
+// the sluice surge (f966) and the exit gates (f1100); no slow drift, no
+// static holds, camera never behind the cards. R2 framing: opening hero
+// BIG mid-action, inserts fill the frame, dialogue face ~70%, final =
+// miller + fisherman foreground with the hook board (board ~85%).
 // GRADE (FILTER_VFX_LIGHTING pack): Monsoon Grey throughout — desaturated
 // blue-grey, soft contrast, wet sheen; the miller supper beat warms under
 // a lamp pool, the hook beat warms toward dusk. Grade changes ONLY on
 // clause boundaries. Signature VFX: the rising chamber water + sluice
 // pour, wet sheen on the bank, mist over the river at dusk.
+// NOTE (END RULE): the one performed dialogue line sits at f1354–1450 of
+// 1595 (85–91%) — inside the final quarter. That placement is baked into
+// the stem's beat map and the stem may not be re-timed; after the line
+// ends NOBODY speaks again — hookq/hook are narration + board only, all
+// mouths closed, final frame included.
 import { M, blinkAt, q, clamp, lerp, ramp } from './motion.js';
-import { buildRig, pushInCam, staticTrackCam, keysCam } from './camrig.js';
+import { buildRig, pushInCam, keysCam } from './camrig.js';
+import { lifeAt, emoTrack, gazeTrack, gestureAt, jumpTrack, carryDip } from './body.js';
 import * as SOL from './solid.js';
 import * as T from './toon.js';
 import * as SPK from './speak.js';
@@ -34,10 +50,6 @@ import { SPEAK_DATA } from './speakdata.js';
 
 // ---------- v4 dialogue performance ----------
 const SPEAK = SPK.makeSpeakPlayer(SPEAK_DATA);
-const speakFace = (baseName, f) => {
-  const s = SPEAK.at(f);
-  return { expr: 'smile', exprP: SPK.applySpeak({ ...T.faceP(baseName), cheek: 0.5 }, s), headTilt: q(s.nod || 0, 2), clothShade: true };
-};
 
 export const FPS = 30, TOTAL = 1595, DECK = 0;
 // Shot boundaries (frames) — snapped to timing.json phrase starts.
@@ -164,6 +176,21 @@ export const fish2Mode = (f) => strolling(f, [[B('drone') + 26, B('drone') + 104
 export const runnerMode = (f) => strolling(f, [[B('omen') + 8, B('omen') + 78]]) ? 'stroll' : 'stand';
 export const priestMode = (f) => strolling(f, [[B('omen') + 70, E('omen')]]) ? 'stroll' : 'stand';
 export const millerMode = (f) => strolling(f, [[B('truth') - 10, B('truth') + 84]]) ? 'stroll' : (f < B('truth') - 10 ? 'sit' : 'stand');
+// travelled-distance stride phase (real planted steps, no glide) — the
+// phase advances with the distance the walk keys actually cover.
+const distPhase = (raw) => {
+  const D = [0];
+  for (let f = 1; f < TOTAL; f++) { const a = raw(f - 1), b = raw(f); D[f] = D[f - 1] + Math.hypot(b[0] - a[0], b[1] - a[1]); }
+  return { phase: (f) => (D[clamp(Math.round(f), 0, TOTAL - 1)] / 0.82) % 1, moving: (f) => f > 0 && (D[clamp(Math.round(f), 0, TOTAL - 1)] - D[clamp(Math.round(f) - 1, 0, TOTAL - 1)]) > 0.004 };
+};
+const fish1Move = distPhase((f) => { const p = fish1At(f); return [p.x, p.z]; });
+const fish2Move = distPhase((f) => { const p = fish2At(f); return [p.x, p.z]; });
+const runnerMove = distPhase((f) => { const p = runnerAt(f); return [p.x, p.z]; });
+const priestMove = distPhase((f) => { const p = priestAt(f); return [p.x, p.z]; });
+const millerMove = distPhase((f) => { const p = millerAt(f); return [p.x, p.z]; });
+// the fishermen's startle as the nets drop (L1): a hop back + lean
+const netFlinch = jumpTrack([{ f0: 26, dur: 11, h: 0.1, back: 8 }]);
+const netFlinch2 = jumpTrack([{ f0: 29, dur: 11, h: 0.08, back: 6 }]);
 
 // ---------- the hero boat ----------
 export const boatAt = (f) => {
@@ -195,89 +222,132 @@ export const boat2At = (f) => {
   }
   return { x: 0.5, y: -0.3, z: -13.5, ry: -0.08 };
 };
-// the miller's wiping cloth: in his hands while he comes down (L10)
-export const clothAt = (f) => {
-  if (shotAt(f).id !== 'truth') return { x: 0, y: -5, z: 0, k: 0 };
-  const m = millerAt(f);
-  return { x: m.x + 0.18, y: 1.05, z: m.z + 0.3, k: 1 };
-};
+// the miller's wiping cloth: drawn IN THE CARD OVERLAY between his
+// gripping hands on the truth beat (see castAt 'truth'), so hand and
+// cloth move in the same frames from every camera angle — the old 3D
+// plane sat offset from the card-space hands and read as a stiff card.
+// k stays 0 so main.js keeps the 3D cloth hidden.
+export const clothAt = (f) => ({ x: 0, y: -5, z: 0, k: 0 });
 
 // ---------- hero / focus ----------
 const FOCUS = {
-  drone: () => [-4, 1.6, -6],
-  creep: () => [0, 0.4, -12],
-  crowd: () => [4, 1.2, -4],
-  omen: () => [-2, 1.3, -3],
-  miller: () => [TABLE.x, 1.1, TABLE.z],
-  lock: () => [-10, 2.6, -9],
-  enter: () => { const bp = boatAt(950); return [bp.x, 0.8, bp.z]; },
-  rise: () => [-10, 2.6, -9],
-  exit: () => [-16, 5.2, -9],
-  truth: () => { const m = millerAt(1250); return [m.x, 1.4, m.z]; },
-  dialogue: () => { const m = millerAt(1400); return [m.x, 1.45, m.z]; },
+  drone: (f) => { const p = fish1At(f); return [p.x, 1.5, p.z]; },
+  creep: (f) => { const bp = boat2At(f); return [bp.x, 0.5, bp.z]; },
+  crowd: () => [4, 1.3, -4],
+  omen: (f) => { const p = runnerAt(f); return [p.x, 1.3, p.z]; },
+  miller: () => [5.6, 1.2, 1.0],
+  lock: () => [-10, 2.8, -9],
+  enter: (f) => { const bp = boatAt(f); return [bp.x, 0.8, bp.z]; },
+  rise: (f) => [-10, 1.2 + waterLevelAt(f), -9],
+  exit: (f) => { const bp = boatAt(f); return [bp.x, bp.y + 0.6, bp.z]; },
+  truth: (f) => { const m = millerAt(f); return [m.x, 1.4, m.z]; },
+  dialogue: (f) => { const m = millerAt(f); return [m.x, 1.45, m.z]; },
   hookq: () => BOARD_POS, hook: () => BOARD_POS,
 };
-export const heroPosAt = (f) => FOCUS[shotAt(f).id]();
+export const heroPosAt = (f) => FOCUS[shotAt(f).id](f);
 
-// ---------- cameras: EVERY shot is a camrig track on a subject ----------
-const bezierCam = (P, L, a, b, fov0, fov1) => (f) => {
-  const u = M.smooth(ramp(f, a, b));
-  const w0 = (1 - u) ** 3, w1 = 3 * (1 - u) ** 2 * u, w2 = 3 * (1 - u) * u * u, w3 = u ** 3;
-  const mix = (Q) => [0, 1, 2].map((j) => w0 * Q[0][j] + w1 * Q[1][j] + w2 * Q[2][j] + w3 * Q[3][j]);
-  return { pos: mix(P), look: mix(L), fov: lerp(fov0, fov1, u), roll: 0 };
-};
+// ---------- v4 ACTION CAMERA: keysCam grammar, subject-speed tracking ----------
+const KC = (keys) => keysCam({ keys: keys.map(([f, pos, look, fov]) => ({ f, pos, look, fov, ease: 'io' })) });
 const millerPos = (f) => { const m = millerAt(f); return [m.x, 0, m.z]; };
-const fish1Pos = (f) => { const w = fish1At(f); return [w.x, 0, w.z]; };
-const boatPos = (f) => { const bp = boatAt(f); return [bp.x, bp.y, bp.z]; };
 const RIG_BY_ID = {
-  drone: { cut: 'hard', raw: bezierCam(
-    [[16, 10, 16], [11.5, 6.8, 14], [8.5, 4.4, 13], [7.2, 3.0, 12.4]],
-    [[-5.5, 2.6, -8], [-4.5, 2.2, -7], [-2.5, 2.4, -6.2], [-1.0, 2.6, -6.0]], B('drone'), E('drone'), 46, 41) },
-  creep: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('creep'), pos: [6.5, 2.2, 4], look: [0, 0.3, -12], fov: 42 },
-    { f: E('creep'), pos: [5.6, 1.9, 2.6], look: [0.2, 0.4, -12.5], fov: 37, ease: 'surge' }] }) },
-  crowd: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('crowd'), pos: [8, 2.4, 3], look: [3.5, 1.2, -4.5], fov: 44 },
-    { f: E('crowd'), pos: [7.2, 2.2, 2.2], look: [3.8, 1.2, -4.5], fov: 39, ease: 'surge' }] }) },
-  omen: { cut: 'hard', raw: pushInCam({ subject: () => [-2, 0, -3], a: B('omen'), b: E('omen'), d0: 6.0, d1: 4.6, h0: 1.7, h1: 1.55, lookOff: [0, 1.3, 0], fov0: 40, fov1: 34,
-    dir: () => [0.55, 0.8] }) },
-  miller: { cut: 'hard', raw: pushInCam({ subject: () => [TABLE.x, 0, TABLE.z], a: B('miller'), b: E('miller'), d0: 4.6, d1: 3.5, h0: 1.6, h1: 1.45, lookOff: [0, 1.1, 0], fov0: 38, fov1: 32,
-    dir: () => [-0.5, 0.82] }) },
-  lock: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('lock'), pos: [2, 6.0, 12], look: [-10, 2.4, -8], fov: 48 },
-    { f: E('lock'), pos: [0, 5.0, 10], look: [-10.5, 2.6, -8], fov: 42, ease: 'surge' }] }) },
-  enter: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('enter'), pos: [8, 2.6, 2.5], look: [6, 0.6, -14], fov: 42 },
-    { f: B('enter') + 40, pos: [-2, 3.5, 1.5], look: [-5, 0.6, -14], fov: 38 },
-    { f: B('enter') + 97, pos: [-8, 5.0, 1.5], look: [-10, 0.6, -12.5], fov: 37 },
-    { f: E('enter'), pos: [-10, 5.0, 1.5], look: [-10, 0.8, -9], fov: 36, ease: 'io' }] }) },
-  rise: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('rise'), pos: [-10, 4.5, 5.5], look: [-10, 1.2, -9], fov: 40 },
-    { f: E('rise'), pos: [-10, 7.0, 4.0], look: [-10, 4.6, -9], fov: 34, ease: 'io' }] }) },
-  exit: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('exit'), pos: [-8, 7.0, 4.0], look: [-11, 4.6, -9], fov: 40 },
-    { f: E('exit'), pos: [-14, 7.5, 2.0], look: [-19, 4.8, -9], fov: 36, ease: 'io' }] }) },
-  truth: { cut: 'hard', raw: pushInCam({ subject: millerPos, a: B('truth'), b: E('truth'), d0: 5.2, d1: 4.0, h0: 1.7, h1: 1.55, lookOff: [0, 1.4, 0], fov0: 38, fov1: 33,
-    dir: () => [0.5, 0.82] }) },
-  dialogue: { cut: 'hard', raw: pushInCam({ subject: millerPos, a: B('dialogue'), b: E('dialogue'), d0: 3.3, d1: 2.7, h0: 1.58, h1: 1.5, lookOff: [0, 1.45, 0], fov0: 32, fov1: 28,
+  // L1: tight on fisherman 1 at the nets (head ~42%), push-in as the nets
+  // drop, then the camera rides the run at the runners' speed and pulls
+  // back to the wide board framing for the title (board fully in frame).
+  drone: { cut: 'hard', raw: KC([
+    [0, [5.05, 1.42, -6.95], [6, 1.5, -10], 40],
+    [30, [5.15, 1.42, -6.9], [6, 1.5, -10], 38],
+    [62, [6.8, 1.7, -0.6], [4.9, 1.3, -3.6], 40],
+    [88, [5.4, 2.2, 3.2], [2.2, 1.9, -2.6], 42],
+    [110, [2.6, 3.1, 5.6], [0.8, 2.3, -5.2], 43],
+    [144, [1.5, 3.4, 6.5], [0, 2.7, -6], 42]]) },
+  // L2: the camera tracks the creeping boat at its own slow surge speed,
+  // pushing in as it rides toward the bank.
+  creep: { cut: 'hard', raw: KC([
+    [145, [3.4, 1.7, -7.6], [-1.6, 0.5, -17.5], 40],
+    [200, [3.6, 1.55, -8.6], [-0.6, 0.5, -15.5], 38],
+    [268, [3.9, 1.45, -9.6], [0.4, 0.55, -13.6], 36]]) },
+  // L3: reaction close-up on fisherman 1 first (face ~70%), then the
+  // camera widens across the whole crowd on the bank.
+  crowd: { cut: 'hard', raw: KC([
+    [269, [5.05, 1.55, -1.55], [4, 1.5, -3.5], 37],
+    [318, [5.2, 1.58, -1.35], [4.05, 1.48, -3.52], 37],
+    [360, [6.6, 1.85, -0.4], [5.0, 1.4, -3.85], 40],
+    [412, [7.6, 2.05, 0.8], [5.0, 1.35, -3.8], 42]]) },
+  // L4a: tight on the pointing old man (see OMEN_B for the whip track).
+  omen: { cut: 'hard', raw: KC([
+    [413, [-0.9, 1.55, -1.0], [-2, 1.5, -3], 37],
+    [447, [-0.55, 1.6, -0.65], [-2.1, 1.5, -3], 36]]) },
+  // L5: lamp-lit push-in on the laughing miller at his supper.
+  miller: { cut: 'hard', raw: pushInCam({ subject: () => [5.6, 0, 1.0], a: B('miller'), b: E('miller'), d0: 3.4, d1: 2.15, h0: 1.62, h1: 1.5, lookOff: [0, 1.15, 0], fov0: 36, fov1: 30,
+    dir: () => [-0.55, 0.8] }) },
+  // L6: push-in along the staircase of stone chambers.
+  lock: { cut: 'hard', raw: KC([
+    [665, [-2.2, 3.4, 2.2], [-10, 3.2, -9], 44],
+    [730, [-3.4, 3.7, 0.6], [-10.3, 3.0, -9], 41],
+    [802, [-4.6, 4.0, -0.6], [-10.5, 2.9, -9], 38]]) },
+  // L7: the camera tracks the boat in at its sailing speed, swinging
+  // south through the gate gap view as the gates close behind it.
+  enter: { cut: 'hard', raw: KC([
+    [803, [10.6, 2.1, -5.6], [6.2, 0.7, -14], 41],
+    [850, [3.0, 2.5, -4.6], [-3, 0.7, -14], 39],
+    [905, [-5.5, 3.4, -1.0], [-9.8, 0.8, -12.5], 37],
+    [957, [-7.5, 4.2, -0.5], [-10, 1.0, -10], 36]]) },
+  // L8: the camera RISES with the boat, locked to the chamber water.
+  rise: { cut: 'hard', raw: KC([
+    [958, [-9.2, 2.0, 1.2], [-10, 1.1, -9], 40],
+    [1020, [-9.6, 3.6, 0.8], [-10, 2.8, -9], 38],
+    [1095, [-10, 5.6, 0.2], [-10, 4.7, -9], 35]]) },
+  // L9: the camera tracks west with the boat out onto the higher water.
+  exit: { cut: 'hard', raw: KC([
+    [1096, [-5.6, 5.8, 1.0], [-11, 4.9, -9], 39],
+    [1160, [-9.5, 6.0, 0.2], [-15.5, 5.0, -9], 37],
+    [1226, [-13.5, 6.2, -0.6], [-19.5, 5.0, -9], 36]]) },
+  // L10: the camera walks down with the miller, pushing in as he stops
+  // before the crowd and faces them.
+  truth: { cut: 'hard', raw: KC([
+    [1227, [8.8, 1.75, 3.2], [5.6, 1.4, 1.0], 38],
+    [1271, [8.2, 1.7, 0.6], [5.5, 1.4, -1.0], 37],
+    [1311, [5.4, 1.6, -0.9], [2.3, 1.45, -3.6], 35],
+    [1353, [4.35, 1.55, -1.7], [1.9, 1.45, -4.2], 33]]) },
+  // L11: the performed line — the camera HOLDS on the miller, pushing in
+  // slowly; he does the talking.
+  dialogue: { cut: 'hard', raw: pushInCam({ subject: millerPos, a: B('dialogue'), b: E('dialogue'), d0: 2.7, d1: 2.05, h0: 1.56, h1: 1.5, lookOff: [0, 1.45, 0], fov0: 31, fov1: 28,
     dir: () => [0.45, 0.85] }) },
-  hookq: { cut: 'blend', blend: 10, raw: keysCam({ keys: [
-    { f: B('hookq'), pos: [5.4, 3.9, 7.6], look: [0.1, 2.75, -5.9], fov: 40 },
-    { f: E('hookq'), pos: [5.2, 3.9, 7.4], look: [0.05, 2.78, -5.95], fov: 37, ease: 'surge' }] }) },
-  hook: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('hook'), pos: [5.2, 3.9, 7.4], look: [0.05, 2.78, -5.95], fov: 37 },
-    { f: E('hook'), pos: [5.0, 3.95, 7.2], look: [0.02, 2.8, -5.97], fov: 36, ease: 'surge' }] }) },
+  // L12: settle onto the hook framing — board ~85% wide, fully inside;
+  // the miller + fisherman stand foreground (see cast), nobody speaks.
+  hookq: { cut: 'hard', raw: KC([
+    [1451, [3.4, 3.3, 4.6], [0.3, 2.8, -6], 41],
+    [1472, [1.7, 3.4, 6.9], [0.05, 2.76, -6], 40],
+    [1519, [1.5, 3.4, 7.3], [0, 2.78, -6], 41]]) },
+  hook: { cut: 'hard', raw: KC([
+    [1520, [1.5, 3.4, 7.3], [0, 2.78, -6], 41],
+    [1594, [1.35, 3.45, 7.5], [0, 2.8, -6], 40]]) },
 };
+// L4b: the whip reframe (6f, declared) off the old man onto the runner,
+// then a track east at the runner's sprint speed, settling toward the
+// priest's door as he arrives.
+const OMEN_B = KC([
+  [448, [4.2, 1.85, 2.5], [10.6, 1.25, 2.3], 42],
+  [470, [7.5, 1.9, 4.4], [13.5, 1.3, 3.2], 41],
+  [491, [11.2, 1.85, 6.6], [14.6, 1.35, 3.8], 40],
+  [513, [11.8, 1.8, 7.2], [15.0, 1.4, 5.2], 38]]);
+const RIG_SHOTS = [];
+for (const s of SHOTS) {
+  if (s.id === 'omen') {
+    RIG_SHOTS.push({ a: s.a, b: 447, ...RIG_BY_ID.omen });
+    RIG_SHOTS.push({ a: 448, b: s.b, cut: 'whip', blend: 6, raw: OMEN_B });
+  } else RIG_SHOTS.push({ a: s.a, b: s.b, ...RIG_BY_ID[s.id] });
+}
 const RIG = buildRig({
   total: TOTAL,
-  shots: SHOTS.map((s) => ({ a: s.a, b: s.b, ...RIG_BY_ID[s.id] })),
-  kicks: [{ f: B('rise') + 10, a: 0.03 }, { f: B('enter') + 60, a: 0.03 }],
-  sigma: 2.3, fovSigma: 1.6,
+  shots: RIG_SHOTS,
+  kicks: [{ f: 28, a: 0.22 }, { f: 947, a: 0.26 }, { f: 966, a: 0.22 }, { f: 1100, a: 0.2 }],
+  sigma: 1.7, smoothRadius: 5, fovSigma: 1.1,
 });
 export const camAt = (f) => RIG.camAt(f);
 export const RIG_META = {
   kicks: RIG.declared.kicks, hardCuts: RIG.declared.hardCuts,
-  blends: SHOTS.filter((s) => RIG_BY_ID[s.id].cut === 'blend').map((s) => ({ a: s.a - Math.floor(RIG_BY_ID[s.id].blend / 2), b: s.a + Math.ceil(RIG_BY_ID[s.id].blend / 2) })),
+  blends: [],
   whips: RIG.declared.whips,
   samples: RIG.samples,
 };
@@ -302,7 +372,9 @@ export const worldAt = (f) => {
     clothX: clothAt(f).x, clothY: clothAt(f).y, clothZ: clothAt(f).z, clothK: clothAt(f).k,
     dustK: 0.05,
   };
-  if (S.id === 'drone') W.boardTitle = smooth(ramp(f, 34, 48)) * (1 - smooth(ramp(f, 60, 74)));
+  // the title board fades in only once the drone pull-back has settled
+  // into the wide framing that holds the whole board (f110+).
+  if (S.id === 'drone') W.boardTitle = smooth(ramp(f, 114, 128));
   if (S.id === 'hookq') W.boardHook = smooth(ramp(f, B('hookq') + 44, B('hookq') + 68));
   if (S.id === 'hook') W.boardHook = 1;   // held at FULL opacity to the literal last frame
   return W;
@@ -313,97 +385,168 @@ export const fxProfileAt = (f) => {
 };
 export const fxAt = () => [];
 
-// ---------- cast (single source for actors AND colliders) ----------
-const TINT = { grey: '#ffffff', lamp: '#f2ddc4', dusk: '#f2ddc4' };
-const tintFor = (S) => S.id === 'miller' ? TINT.lamp : (S.id === 'hook' || S.id === 'hookq' ? TINT.dusk : TINT.grey);
+// ---------- cast: outfits (Salted Mine V3 — round WHITE heads, detailed
+// costumes per role; NO card tint in any light) ----------
 export const OUTFITS = {
-  miller: { jacket: '#e8e0cc', pants: '#4a3a28', boots: '#241a12', hat: 'cap', cap: '#6d4c2e', skin: '#c98a5a', moustache: '#8a6a4a' },
-  fish1: { jacket: '#2c4a6e', pants: '#2a3242', boots: '#1c1712', hat: 'cap', cap: '#a34a3a', skin: '#a06a3c' },
-  fish2: { jacket: '#4a6a3a', pants: '#33302c', boots: '#241a12', hat: 'cap', cap: '#3a5a6a', skin: '#8a5a34', moustache: '#241a12' },
-  old1: { jacket: '#7a6a4a', pants: '#3a3230', boots: '#201812', hat: 'hair', hair: '#e8e4da', skin: '#d9b48f', moustache: '#e8e4da' },
-  old2: { jacket: '#6a5a3a', pants: '#33302c', boots: '#201812', hat: 'hair', hair: '#d8d2c2', skin: '#c9a06a' },
-  priest: { jacket: '#f2ead8', pants: '#e8e0cc', boots: '#3a2c1c', hat: 'cap', cap: '#f2ead8', skin: '#b98a5a', moustache: '#e8e4da' },
-  crowd1: { jacket: '#8a6f42', pants: '#3a3230', boots: '#201812', hat: 'hair', hair: '#2c1a10', skin: '#c98a5a' },
-  crowd2: { jacket: '#5d6a8a', pants: '#2a3242', boots: '#1c1712', hat: 'cap', cap: '#4a3a28', skin: '#a06a3c' },
+  miller: { jacket: '#e8e0cc', pants: '#4a3a28', boots: '#241a12', hat: 'cap', cap: '#6d4c2e', skin: '#fbf7ef', moustache: '#8a6a4a' },
+  fish1: { jacket: '#2c4a6e', pants: '#2a3242', boots: '#1c1712', hat: 'cap', cap: '#a34a3a', skin: '#fbf7ef' },
+  fish2: { jacket: '#4a6a3a', pants: '#33302c', boots: '#241a12', hat: 'cap', cap: '#3a5a6a', skin: '#fbf7ef', moustache: '#241a12' },
+  old1: { jacket: '#7a6a4a', pants: '#3a3230', boots: '#201812', hat: 'hair', hair: '#e8e4da', skin: '#fbf7ef', moustache: '#e8e4da' },
+  old2: { jacket: '#6a5a3a', pants: '#33302c', boots: '#201812', hat: 'hair', hair: '#d8d2c2', skin: '#fbf7ef' },
+  priest: { jacket: '#f2ead8', pants: '#e8e0cc', boots: '#3a2c1c', hat: 'cap', cap: '#f2ead8', skin: '#fbf7ef', moustache: '#e8e4da' },
+  crowd1: { jacket: '#8a6f42', pants: '#3a3230', boots: '#201812', hat: 'hair', hair: '#2c1a10', skin: '#fbf7ef' },
+  crowd2: { jacket: '#5d6a8a', pants: '#2a3242', boots: '#1c1712', hat: 'cap', cap: '#4a3a28', skin: '#fbf7ef' },
 };
+// ---------- expression morph tracks (the face matches the beat) ----------
+const millerEmo = emoTrack([[0, 'smile'], [514, 'laugh'], [665, 'smile'], [1227, 'smile'], [1354, 'proud'], [1451, 'smile']], 41);
+const fish1Emo = emoTrack([[0, 'shock'], [413, 'nervous'], [665, 'wonder'], [1227, 'nervous'], [1354, 'relief'], [1451, 'smile']], 31);
+const fish2Emo = emoTrack([[0, 'shock'], [413, 'nervous'], [1227, 'nervous'], [1354, 'relief']], 51);
+const old1Emo = emoTrack([[0, 'stern'], [269, 'shock'], [413, 'stern'], [665, 'wonder'], [1227, 'nervous']], 52);
+const old2Emo = emoTrack([[0, 'nervous'], [413, 'nervous']], 53);
+const priestEmo = emoTrack([[0, 'neutral'], [413, 'stern'], [665, 'wonder'], [1227, 'smile'], [1354, 'smile']], 61);
+const crowd1Emo = emoTrack([[0, 'shock'], [1227, 'nervous'], [1354, 'relief']], 55);
+const crowd2Emo = emoTrack([[0, 'shock'], [1227, 'nervous'], [1354, 'relief']], 56);
+const runnerEmo = emoTrack([[0, 'nervous'], [413, 'nervous']], 54);
+// gaze: the miller's eyes follow the story (crowd -> board at the end)
+const millerGaze = gazeTrack([{ f: 0, look: 0.1, lookY: 0.05 }, { f: 1227, look: 0.15 }, { f: 1354, look: 0.05, lookY: 0.05 }, { f: 1451, look: 0.3, lookY: 0.35 }]);
+const AP = (L, R) => {
+  const o = {};
+  if (L) o.L = { hand: [Math.round(L.x), Math.round(L.y)], grip: q(L.grip, 2), front: true };
+  if (R) o.R = { hand: [Math.round(R.x), Math.round(R.y)], grip: q(R.grip, 2), front: true };
+  return Object.keys(o).length ? o : undefined;
+};
+
+// ---------- cast (single source for actors AND colliders) ----------
 export const castAt = (f) => {
-  const S = shotAt(f), tint = tintFor(S), out = [];
+  const S = shotAt(f), out = [];
   const std = (id, o, opts, x, z, extra = {}) => out.push({ id, x, y: extra.y ?? 0, z, r: 0.32, ground: extra.ground ?? 0,
-    actor: (T) => ({ key: 'pax' + JSON.stringify(o) + JSON.stringify(opts), draw: (p) => T.bodyFront(p, o, opts), x, y: extra.y ?? 0, z, ground: extra.ground ?? 0, tint, ...extra }) });
+    actor: (TT) => ({ key: id + JSON.stringify(o) + JSON.stringify(opts) + (extra.ov || ''), draw: (p) => { TT.bodyFront(p, o, opts); if (extra.drawOv) extra.drawOv(p); }, x, y: extra.y ?? 0, z, ground: extra.ground ?? 0, tint: '#ffffff', ...extra }) });
+  const base = (seed, amp = 1) => {
+    const L = lifeAt(f, seed);
+    return { seed, blink: new T.Blink(seed).at(f), breath: L.breath, tilt: q(L.tilt * amp, 2), headTilt: q(L.headTilt, 2), squashL: L.squash };
+  };
   const f1 = fish1At(f), f2 = fish2At(f), rn = runnerAt(f), pr = priestAt(f), ml = millerAt(f);
-  const M_ = { expr: 'smile', mode: millerMode(f), phase: q((f * 0.011) % 1, 2), blink: blinkAt(f, 41), seed: 41 };
-  const F1_ = { expr: 'shock', mode: fish1Mode(f), phase: q((f * 0.011) % 1, 2), blink: blinkAt(f, 31), seed: 31 };
-  const F2_ = { expr: 'shock', mode: fish2Mode(f), phase: q((f * 0.011) % 1, 2), blink: blinkAt(f, 51), seed: 51 };
-  const O1_ = { expr: 'stern', mode: 'stand', blink: blinkAt(f, 52), seed: 52 };
-  const O2_ = { expr: 'nervous', mode: 'stand', blink: blinkAt(f, 53), seed: 53 };
-  const P_ = { expr: 'neutral', mode: priestMode(f), blink: blinkAt(f, 61), seed: 61 };
-  const R_ = { expr: 'nervous', mode: runnerMode(f), phase: q((f * 0.013) % 1, 2), blink: blinkAt(f, 54), seed: 54 };
-  const C1_ = { expr: 'shock', mode: 'stand', blink: blinkAt(f, 55), seed: 55 };
-  const C2_ = { expr: 'nervous', mode: 'stand', blink: blinkAt(f, 56), seed: 56 };
+  const stdOpts = (B_, emo, move, extra = {}) => ({
+    phase: move.phase(f), mode: move.moving(f) ? 'march' : (extra.mode ?? 'stand'),
+    exprP: emo(f), blink: B_.blink, seed: B_.seed, breath: B_.breath,
+    tilt: q(B_.tilt + (extra.tilt ?? 0), 2), headTilt: q(B_.headTilt + (extra.headTilt ?? 0), 2),
+    look: q(extra.look ?? 0.1, 2), lookY: q(extra.lookY ?? 0, 2),
+    squash: q(Math.max(B_.squashL, extra.dip ?? 0), 3), armPose: extra.armPose,
+  });
   switch (S.id) {
     case 'drone': {
-      std('fish1', OUTFITS.fish1, { ...F1_, expr: 'shock' }, f1.x, f1.z, { yaw: 0.5 });
-      std('fish2', OUTFITS.fish2, { ...F2_, expr: 'shock' }, f2.x, f2.z, { yaw: 0.4 });
-      std('miller', OUTFITS.miller, { ...M_, expr: 'smile', mode: 'sit' }, ml.x, ml.z, { yaw: -0.5 });
-      std('crowd1', OUTFITS.crowd1, { ...C1_, expr: 'neutral' }, 7, -3, { yaw: -0.3 });
+      // fishermen at the nets: startle (jumpTrack) as the nets drop, arms
+      // thrown up mid-gesture, then they RUN — real distance stride.
+      const j1 = netFlinch(f), j2 = netFlinch2(f);
+      const g1 = gestureAt(f, 31, 0.6), g2 = gestureAt(f, 51, 0.5);
+      const arms1 = f < 70 ? AP({ x: 168 - g1.dx, y: 500 + g1.dy, grip: 0.05 }, { x: 432 + g1.dx, y: 500 + g1.dy, grip: 0.05 }) : undefined;
+      const arms2 = f < 70 ? AP({ x: 172 - g2.dx, y: 512 + g2.dy, grip: 0.05 }, { x: 428 + g2.dx, y: 512 + g2.dy, grip: 0.05 }) : undefined;
+      std('fish1', OUTFITS.fish1, stdOpts(base(31), fish1Emo, fish1Move, { armPose: arms1, tilt: j1.lean, look: 0.2 }), f1.x, f1.z, { yaw: 0.5, y: j1.y });
+      std('fish2', OUTFITS.fish2, stdOpts(base(51), fish2Emo, fish2Move, { armPose: arms2, tilt: j2.lean, look: 0.15 }), f2.x, f2.z, { yaw: 0.4, y: j2.y });
+      std('miller', OUTFITS.miller, { ...stdOpts(base(41), millerEmo, millerMove, {}), mode: 'sit' }, ml.x, ml.z, { yaw: -0.5 });
+      std('crowd1', OUTFITS.crowd1, stdOpts(base(55), crowd1Emo, { phase: () => 0, moving: () => false }, { look: -0.2 }), 7, -3, { yaw: -0.3 });
       break;
     }
     case 'creep': {
-      std('fish1', OUTFITS.fish1, { ...F1_, expr: 'shock', headTilt: 0.08 }, f1.x, f1.z, { yaw: 0.6 });
-      std('fish2', OUTFITS.fish2, { ...F2_, expr: 'shock' }, f2.x, f2.z, { yaw: 0.45 });
-      std('crowd1', OUTFITS.crowd1, { ...C1_ }, 7, -3, { yaw: -0.3 });
+      std('fish1', OUTFITS.fish1, stdOpts(base(31), fish1Emo, fish1Move, { headTilt: 2, look: 0.25 }), f1.x, f1.z, { yaw: 0.6 });
+      std('fish2', OUTFITS.fish2, stdOpts(base(51), fish2Emo, fish2Move, { look: 0.2 }), f2.x, f2.z, { yaw: 0.45 });
+      std('crowd1', OUTFITS.crowd1, stdOpts(base(55), crowd1Emo, { phase: () => 0, moving: () => false }, {}), 7, -3, { yaw: -0.3 });
       break;
     }
     case 'crowd': {
-      std('fish1', OUTFITS.fish1, { ...F1_, expr: 'shock' }, f1.x, f1.z, { yaw: 0.6 });
-      std('fish2', OUTFITS.fish2, { ...F2_, expr: 'shock' }, f2.x, f2.z, { yaw: 0.45 });
-      std('crowd1', OUTFITS.crowd1, { ...C1_, expr: 'shock' }, 7, -3, { yaw: -0.4 });
-      std('crowd2', OUTFITS.crowd2, { ...C2_, expr: 'shock' }, 9.5, -4, { yaw: -0.5 });
-      std('old1', OUTFITS.old1, { ...O1_ }, -2, -3, { yaw: 0.5 });
-      std('priest', OUTFITS.priest, { ...P_ }, pr.x, pr.z, { yaw: -0.4 });
+      // fisherman 1 points up the slope at the climbing river
+      const pt = AP(null, { x: 446, y: 306, grip: 0.1 });
+      std('fish1', OUTFITS.fish1, stdOpts(base(31), fish1Emo, fish1Move, { armPose: pt, look: 0.3, lookY: 0.2 }), f1.x, f1.z, { yaw: 0.6 });
+      std('fish2', OUTFITS.fish2, stdOpts(base(51), fish2Emo, fish2Move, { look: 0.25 }), f2.x, f2.z, { yaw: 0.45 });
+      std('crowd1', OUTFITS.crowd1, stdOpts(base(55), crowd1Emo, { phase: () => 0, moving: () => false }, { look: 0.2 }), 7, -3, { yaw: -0.4 });
+      std('crowd2', OUTFITS.crowd2, stdOpts(base(56), crowd2Emo, { phase: () => 0, moving: () => false }, { look: 0.2 }), 9.5, -4, { yaw: -0.5 });
+      std('old1', OUTFITS.old1, stdOpts(base(52), old1Emo, { phase: () => 0, moving: () => false }, { look: 0.25 }), -2, -3, { yaw: 0.5 });
+      std('priest', OUTFITS.priest, stdOpts(base(61), priestEmo, priestMove, { look: -0.2 }), pr.x, pr.z, { yaw: -0.4 });
       break;
     }
     case 'omen': {
-      std('old1', OUTFITS.old1, { ...O1_, expr: 'stern', prop: ['point', 0.8] }, -2, -3, { yaw: 0.5 });
-      std('old2', OUTFITS.old2, { ...O2_, expr: 'nervous' }, -4, -2, { yaw: 0.4 });
-      std('runner', OUTFITS.crowd2, { ...R_ }, rn.x, rn.z, { yaw: 0.7 });
-      std('priest', OUTFITS.priest, { ...P_ }, pr.x, pr.z, { yaw: -0.4 });
-      std('fish1', OUTFITS.fish1, { ...F1_, expr: 'nervous' }, f1.x, f1.z, { yaw: 0.6 });
+      // old man 1 POINTS at the river (the omen); old man 2 clasps his
+      // hands; the runner sprints past them to the priest's door.
+      const pt = AP(null, { x: 452, y: 330, grip: 0.1 });
+      const clasp = AP({ x: 262, y: 640, grip: 0.5 }, { x: 338, y: 640, grip: 0.5 });
+      std('old1', OUTFITS.old1, stdOpts(base(52), old1Emo, { phase: () => 0, moving: () => false }, { armPose: pt, look: 0.3, lookY: 0.15 }), -2, -3, { yaw: 0.5 });
+      std('old2', OUTFITS.old2, stdOpts(base(53), old2Emo, { phase: () => 0, moving: () => false }, { armPose: clasp, look: 0.2 }), -4, -2, { yaw: 0.4 });
+      std('runner', OUTFITS.crowd2, stdOpts(base(54), runnerEmo, runnerMove, { look: 0.3 }), rn.x, rn.z, { yaw: 0.7 });
+      std('priest', OUTFITS.priest, stdOpts(base(61), priestEmo, priestMove, { look: -0.25 }), pr.x, pr.z, { yaw: -0.4 });
+      std('fish1', OUTFITS.fish1, stdOpts(base(31), fish1Emo, fish1Move, { look: 0.2 }), f1.x, f1.z, { yaw: 0.6 });
       break;
     }
     case 'miller': {
-      // the miller at his supper, laughing — lamp-lit, flour-dusted apron
-      std('miller', OUTFITS.miller, { expr: 'laugh', mode: 'sit', blink: blinkAt(f, 41), seed: 41, headTilt: -0.06 }, ml.x, ml.z, { yaw: -0.5 });
+      // the miller at his supper, laughing — lamp-lit; both hands grip
+      // the table edge / bowl as he rocks with laughter.
+      const tableHands = AP({ x: 222, y: 690, grip: 0.55 }, { x: 378, y: 690, grip: 0.55 });
+      const Bm = base(41);
+      std('miller', OUTFITS.miller, { ...stdOpts(Bm, millerEmo, millerMove, { armPose: tableHands, headTilt: -3.5, look: 0 }), mode: 'sit' }, ml.x, ml.z, { yaw: -0.5 });
       break;
     }
     case 'lock': {
-      std('fish1', OUTFITS.fish1, { ...F1_, expr: 'neutral' }, f1.x, f1.z, { yaw: 0.6 });
-      std('crowd1', OUTFITS.crowd1, { ...C1_, expr: 'neutral' }, 7, -3, { yaw: -0.4 });
-      std('old1', OUTFITS.old1, { ...O1_, expr: 'neutral' }, -2, -3, { yaw: 0.5 });
+      std('fish1', OUTFITS.fish1, stdOpts(base(31), fish1Emo, fish1Move, { look: -0.3, lookY: 0.15 }), f1.x, f1.z, { yaw: 0.6 });
+      std('crowd1', OUTFITS.crowd1, stdOpts(base(55), crowd1Emo, { phase: () => 0, moving: () => false }, { look: -0.3 }), 7, -3, { yaw: -0.4 });
+      std('old1', OUTFITS.old1, stdOpts(base(52), old1Emo, { phase: () => 0, moving: () => false }, { look: -0.25, lookY: 0.15 }), -2, -3, { yaw: 0.5 });
       break;
     }
     case 'enter': case 'rise': case 'exit': break;   // the boat + water carry these beats
     case 'truth': {
-      // the miller comes down wiping his hands (cloth prop in his hands),
-      // faces the frightened crowd
-      std('miller', OUTFITS.miller, { expr: 'smile', mode: millerMode(f), blink: blinkAt(f, 41), seed: 41 }, ml.x, ml.z, { yaw: 0.5 });
-      std('fish1', OUTFITS.fish1, { ...F1_, expr: 'nervous' }, f1.x, f1.z, { yaw: 0.6 });
-      std('fish2', OUTFITS.fish2, { ...F2_, expr: 'nervous' }, f2.x, f2.z, { yaw: 0.45 });
-      std('crowd1', OUTFITS.crowd1, { ...C1_, expr: 'nervous' }, 7, -3, { yaw: -0.4 });
-      std('priest', OUTFITS.priest, { ...P_, expr: 'neutral' }, pr.x, pr.z, { yaw: -0.4 });
+      // the miller comes down WIPING HIS HANDS — both hands grip the
+      // cloth (the 3D cloth prop rides at clothAt) and rub against each
+      // other as he walks; a light carryDip sells the motion's weight.
+      const rub = Math.sin(f * 0.45) * 13, rubY = Math.cos(f * 0.45) * 7;
+      const clothGrip = AP({ x: 300 - 38 + rub, y: 636 + rubY, grip: 0.85 }, { x: 300 + 38 - rub, y: 636 - rubY, grip: 0.85 });
+      const dip = millerMove.moving(f) ? carryDip(f, 0.18) : 0;
+      const G = millerGaze(f);
+      // the cloth itself, drawn in the overlay BETWEEN the gripping
+      // hands (same rub phase) — hand and cloth in the same frames;
+      // sized to read as a draped cloth, wavy hem, vertical folds
+      const clothOv = (p) => {
+        const cx = 300 + rub * 0.4, cy = 636 + rubY * 0.4;
+        p.poly([[cx - 58, cy - 14], [cx + 58, cy - 18], [cx + 64, cy + 52], [cx + 30, cy + 66], [cx, cy + 54], [cx - 30, cy + 66], [cx - 64, cy + 52]], '#efe6cf', 2.5);
+        p.band([[cx - 34, cy - 12], [cx - 30, cy + 52]], '#cbbd97', 3, 0);
+        p.band([[cx + 6, cy - 14], [cx + 10, cy + 50]], '#cbbd97', 3, 0);
+        p.band([[cx + 40, cy - 14], [cx + 42, cy + 44]], '#cbbd97', 3, 0);
+      };
+      std('miller', OUTFITS.miller, stdOpts(base(41), millerEmo, millerMove, { armPose: clothGrip, dip, look: G.look, lookY: G.lookY, headTilt: G.tilt }), ml.x, ml.z, { yaw: 0.5, ov: `cloth${q(rub, 1)}`, drawOv: clothOv });
+      std('fish1', OUTFITS.fish1, stdOpts(base(31), fish1Emo, fish1Move, { look: 0.2 }), f1.x, f1.z, { yaw: 0.6 });
+      std('fish2', OUTFITS.fish2, stdOpts(base(51), fish2Emo, fish2Move, { look: 0.15 }), f2.x, f2.z, { yaw: 0.45 });
+      std('crowd1', OUTFITS.crowd1, stdOpts(base(55), crowd1Emo, { phase: () => 0, moving: () => false }, { look: 0.15 }), 7, -3, { yaw: -0.4 });
+      std('priest', OUTFITS.priest, stdOpts(base(61), priestEmo, priestMove, { look: -0.15 }), pr.x, pr.z, { yaw: -0.4 });
       break;
     }
     case 'dialogue': {
       // THE dialogue beat: the miller PERFORMS his line — mouth driven by
-      // the stem inside the speak segment, closed outside it; the crowd
-      // only listens (their mouths never open).
-      std('miller', OUTFITS.miller, { mode: 'stand', blink: blinkAt(f, 41), seed: 41, look: 0.12, ...speakFace('smile', f) }, ml.x, ml.z, { y: 0, ground: 0, yaw: 0.5 });
-      std('fish1', OUTFITS.fish1, { ...F1_, mode: 'stand', expr: 'relief' }, f1.x, f1.z, { yaw: -0.4 });
-      std('fish2', OUTFITS.fish2, { ...F2_, mode: 'stand', expr: 'relief' }, f2.x, f2.z, { yaw: -0.3 });
-      std('priest', OUTFITS.priest, { ...P_, mode: 'stand', expr: 'smile' }, pr.x, pr.z, { yaw: -0.4 });
+      // the stem inside the speak segment, closed outside it; he gestures
+      // with his free hand on the nod pulses while the other keeps the
+      // cloth; the crowd only listens (their mouths never open).
+      const s = SPEAK.at(f);
+      let exprP = millerEmo(f);
+      exprP = SPK.applySpeak(exprP, s);
+      const g = gestureAt(f, 41, s.nod || 0);
+      const gest = AP({ x: 215, y: 690, grip: 0.6 }, { x: 428 + g.dx, y: 520 + g.dy, grip: 0.12 });
+      const Bm = base(41), G = millerGaze(f);
+      std('miller', OUTFITS.miller, {
+        phase: 0, mode: 'stand', exprP, blink: Bm.blink, seed: 41, breath: Bm.breath,
+        tilt: Bm.tilt, headTilt: q(Bm.headTilt + G.tilt + q(s.nod || 0, 2), 2),
+        look: q(G.look, 2), lookY: q(G.lookY, 2), squash: q(Bm.squashL, 3), armPose: gest,
+      }, ml.x, ml.z, { yaw: 0.5 });
+      std('fish1', OUTFITS.fish1, stdOpts(base(31), fish1Emo, fish1Move, { look: -0.2 }), f1.x, f1.z, { yaw: -0.4 });
+      std('fish2', OUTFITS.fish2, stdOpts(base(51), fish2Emo, fish2Move, { look: -0.15 }), f2.x, f2.z, { yaw: -0.3 });
+      std('priest', OUTFITS.priest, stdOpts(base(61), priestEmo, priestMove, { look: -0.2 }), pr.x, pr.z, { yaw: -0.4 });
       break;
     }
-    case 'hookq': case 'hook': break;
+    case 'hookq': case 'hook': {
+      // FINAL BEAT (END RULE): narration + hook board only — the miller
+      // points up at the board, the fisherman looks up beside him; both
+      // mouths CLOSED (plain emo faces, no speak track applied).
+      const pt = AP({ x: 204, y: 700, grip: 0.3 }, { x: 448, y: 318, grip: 0.15 });
+      const G = millerGaze(f);
+      std('miller', OUTFITS.miller, stdOpts(base(41), millerEmo, { phase: () => 0, moving: () => false }, { armPose: pt, look: G.look, lookY: G.lookY, headTilt: G.tilt }), 1.25, -2.0, { yaw: 0.15, s: 1.5 });
+      std('fish1', OUTFITS.fish1, stdOpts(base(31), fish1Emo, { phase: () => 0, moving: () => false }, { look: -0.25, lookY: 0.35 }), -0.85, -2.85, { yaw: -0.15, s: 1.25 });
+      break;
+    }
   }
   return out;
 };
@@ -436,6 +579,6 @@ export const dynamicsAt = (f) => {
 };
 export const groundItemsAt = (f) => {
   const items = [];
-  for (const a of castAt(f)) items.push({ id: a.id, y: a.y, ground: a.ground ?? 0, maxHover: 0.06 });
+  for (const a of castAt(f)) items.push({ id: a.id, y: a.y, ground: a.ground ?? 0, maxHover: a.y > 0.01 ? 0.16 : 0.06 });
   return items;
 };
