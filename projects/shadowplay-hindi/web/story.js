@@ -21,7 +21,7 @@
 // against deep-blue night; boards/text never graded.
 import { M, blinkAt, q, clamp, lerp, ramp, kf } from './motion.js';
 import { buildRig, pushInCam, keysCam } from './camrig.js';
-import { poseWindows, turnTrack, winkTrack } from './body.js';
+import { poseWindows, turnTrack, winkTrack, lifeAt, gripAt, gestureAt, stridePh } from './body.js';
 import * as SOL from './solid.js';
 import * as T from './toon.js';
 import * as SPK from './speak.js';
@@ -149,110 +149,157 @@ const FOCUS = {
 };
 export const heroPosAt = (f) => FOCUS[shotAt(f).id]();
 
-// ---------- cameras: EVERY shot is a camrig track on a subject ----------
+// ---------- cameras: v4 ACTION LEVEL — every shot travels ----------
+// Punch grammar (fireless/waterrun reference): each shot opens on its
+// start key, PUNCHES to near-final framing on a surge key ~15 frames
+// later (subject scale jumps at the action start), then keeps tracking
+// / settling to the R2-approved end framing — the camera never drifts
+// slowly and never freezes. Impact KICKS are declared in buildRig at
+// the roars, the lamp flare, the coin beats, the cloth tear, the
+// reveal and the bows. Head-width maths (card head ~0.61 m):
+// % = 0.61 / (2*d*tan(fov/2)*0.5625).
 const heroPos = (f) => { const h = heroAt(f); return [h.x, h.y || 0, h.z]; };
 const RIG_BY_ID = {
-  // hook (R2 OPENING): the hero himself fills frame 0 — LOW camera
-  // over the mats, the tall man BIG in front of the glowing screen,
-  // arm raised at the demon shadow looming on the cloth behind him;
-  // the push-in runs from the first frame (V3 grammar).
+  // hook (OPENING): the hero himself fills frame 0 — LOW camera over
+  // the mats, the tall man BIG in front of the glowing screen, arm
+  // raised at the demon shadow looming on the cloth behind him; the
+  // punch lands by f15 (head ~40% -> ~55%), kicks on both roars.
   hook: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 0, pos: [0.52, 0.92, -4.65], look: [-0.7, 1.62, -7.7], fov: 39 },
-    { f: 108, pos: [0.38, 1.0, -4.95], look: [-0.72, 1.66, -7.7], fov: 36, ease: 'surge' }] }) },
+    { f: 0, pos: [0.72, 0.88, -4.15], look: [-0.72, 1.6, -7.7], fov: 40 },
+    { f: 15, pos: [0.42, 0.97, -5.05], look: [-0.72, 1.64, -7.7], fov: 36, ease: 'surge' },
+    { f: 60, pos: [0.38, 1.0, -5.0], look: [-0.72, 1.66, -7.7], fov: 36, ease: 'surge' },
+    { f: 108, pos: [0.36, 1.02, -4.92], look: [-0.72, 1.66, -7.7], fov: 36, ease: 'surge' }] }) },
   // tall: the laziest man in the village, leaning on the screen pole,
-  // half asleep while everyone else works — push-in on the yawn, his
-  // face growing past half the frame width (R2 scale).
-  tall: { cut: 'hard', raw: pushInCam({ subject: heroPos, a: 109, b: 209, d0: 4.4, d1: 3.05, h0: 1.62, h1: 1.55, lookOff: [0, 1.58, 0], fov0: 38, fov1: 33,
-    dir: () => [0.5, 0.87] }) },
-  // arrival: the puppeteer enters with his basket, measuring the tall
-  // man's shadow against the screen — camera tracks his walk-in at
-  // medium-close (R2 tightening).
+  // half asleep — a FAST punch onto the yawn (was a full-shot glide),
+  // his face growing past half the frame width, then a live settle.
+  tall: { cut: 'hard', raw: keysCam({ keys: [
+    { f: 109, pos: [-1.55, 1.64, -4.15], look: [-3.85, 1.56, -8.15], fov: 39 },
+    { f: 124, pos: [-2.25, 1.56, -5.37], look: [-3.85, 1.58, -8.15], fov: 34, ease: 'surge' },
+    { f: 209, pos: [-2.37, 1.54, -5.58], look: [-3.85, 1.59, -8.15], fov: 33, ease: 'surge' }] }) },
+  // arrival: the puppeteer enters with his basket — the camera
+  // PUNCHES in as he strides, then TRACKS at his walking speed to his
+  // stop beside the tall man (keys ride his walk path).
   arrival: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 210, pos: [3.2, 1.55, 0.4], look: [5.0, 1.42, -5.4], fov: 39 },
-    { f: 372, pos: [2.4, 1.5, -1.2], look: [3.9, 1.48, -6.85], fov: 35, ease: 'surge' }] }) },
-  // deal: behind the screen's edge — a handshake and the first coin in
-  // warm lamp light, pushed closer than v1.
+    { f: 210, pos: [3.6, 1.6, 1.3], look: [5.6, 1.4, -5.0], fov: 40 },
+    { f: 228, pos: [3.1, 1.55, 0.2], look: [5.2, 1.44, -5.6], fov: 36, ease: 'surge' },
+    { f: 291, pos: [2.6, 1.52, -0.8], look: [4.4, 1.47, -6.8], fov: 35, ease: 'surge' },
+    { f: 372, pos: [2.4, 1.5, -1.25], look: [3.9, 1.48, -6.85], fov: 35, ease: 'surge' }] }) },
+  // deal: behind the screen's edge — a handshake and the first coin
+  // in warm lamp light; punch in by f388, kick on the coin beat.
   deal: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 373, pos: [5.45, 1.7, -13.9], look: [2.68, 1.33, -9.68], fov: 38 },
-    { f: 492, pos: [5.21, 1.65, -13.52], look: [2.66, 1.31, -9.68], fov: 37, ease: 'surge' }] }) },
+    { f: 373, pos: [5.9, 1.85, -14.6], look: [2.7, 1.36, -9.68], fov: 40 },
+    { f: 388, pos: [5.3, 1.68, -13.7], look: [2.67, 1.32, -9.68], fov: 37, ease: 'surge' },
+    { f: 492, pos: [5.18, 1.64, -13.45], look: [2.66, 1.31, -9.68], fov: 36, ease: 'surge' }] }) },
   // lamp INSERT (R2): behind the screen — starts on the hero kneeling
   // to light the great lamp, then pushes PAST him until the lamp alone
   // fills the frame. No face survives at any edge: the hero stands
   // left of the lamp and exits frame-left as the push tightens (the
   // v1 half-crop at f560 is fixed by geometry, not by hope).
   lamp: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 493, pos: [2.9, 1.7, -13.6], look: [-0.45, 1.35, -10.3], fov: 39 },
+    { f: 493, pos: [3.3, 1.8, -14.1], look: [-0.6, 1.3, -10.2], fov: 40 },
+    { f: 511, pos: [2.2, 1.68, -13.6], look: [-0.2, 1.45, -10.55], fov: 35, ease: 'surge' },
     { f: 611, pos: [1.15, 1.6, -13.3], look: [0.05, 1.6, -10.8], fov: 31, ease: 'surge' }] }) },
-  // perform (R2 ACTION): FRONT close on the cloth — the demon shadow
-  // huge as it waves, turns, roars; audience backs ride as a dark
-  // strip along the bottom of the frame.
+  // perform (ACTION): FRONT close on the cloth — the demon shadow
+  // huge as it waves, turns, roars; the punch lands by f627 and a
+  // kick rides each roar; audience backs are a dark strip below.
   perform: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 612, pos: [-0.5, 1.78, -1.5], look: [0.08, 2.32, -9], fov: 40 },
-    { f: 718, pos: [-0.32, 1.7, -2.95], look: [0.03, 2.38, -9], fov: 34.5, ease: 'surge' }] }) },
-  // housefull (R2 REACTION): the push-in lives on kid1's face ALONE —
-  // shock melting into laughter, the face growing past 65% of frame
-  // width. The rest of the crowd is seated out of the tight cone
+    { f: 612, pos: [-0.62, 1.86, -0.7], look: [0.1, 2.3, -9], fov: 42 },
+    { f: 627, pos: [-0.4, 1.74, -2.5], look: [0.04, 2.36, -9], fov: 36, ease: 'surge' },
+    { f: 718, pos: [-0.3, 1.7, -3.0], look: [0.03, 2.38, -9], fov: 34.5, ease: 'surge' }] }) },
+  // housefull (REACTION): the punch lives on kid1's face ALONE —
+  // shock melting into laughter, the face past 65% of frame width
+  // by f734. The rest of the crowd is seated out of the tight cone
   // (v1 framed a giant cropped head at the right edge).
   housefull: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 719, pos: [1.45, 0.95, -7.1], look: [0.24, 0.8, -4.72], fov: 37 },
-    { f: 805, pos: [0.78, 0.88, -6.38], look: [0.21, 0.79, -4.7], fov: 31, ease: 'surge' }] }) },
-  // rent: the month's shadow-rent counted coin by coin into his palm —
-  // a tighter two-shot than v1.
+    { f: 719, pos: [1.7, 1.0, -7.6], look: [0.26, 0.82, -4.72], fov: 39 },
+    { f: 734, pos: [0.9, 0.9, -6.55], look: [0.21, 0.79, -4.7], fov: 32, ease: 'surge' },
+    { f: 805, pos: [0.76, 0.88, -6.35], look: [0.21, 0.79, -4.7], fov: 31, ease: 'surge' }] }) },
+  // rent: the month's shadow-rent counted coin by coin into his
+  // palm — punch in by f821, kick on the handover.
   rent: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 806, pos: [0.7, 1.52, -3.85], look: [2.8, 1.14, -7.55], fov: 37 },
-    { f: 934, pos: [0.85, 1.5, -4.1], look: [2.82, 1.12, -7.55], fov: 35, ease: 'surge' }] }) },
+    { f: 806, pos: [0.45, 1.6, -3.2], look: [2.78, 1.18, -7.55], fov: 39 },
+    { f: 821, pos: [0.78, 1.52, -3.95], look: [2.81, 1.13, -7.55], fov: 36, ease: 'surge' },
+    { f: 934, pos: [0.88, 1.5, -4.15], look: [2.82, 1.12, -7.55], fov: 35, ease: 'surge' }] }) },
   // puppet INSERT (R2): the wooden demon ALONE on its crate — built
   // screen-size (s 0.72), painted, jointed, utterly stiff. A pure
   // object insert like V3's dynamite frame: no character in frame
   // (v1 had the puppeteer's cropped torso slab down the left edge).
   puppet: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 935, pos: [2.45, 1.42, -5.15], look: [3.95, 1.28, -8.33], fov: 32 },
-    { f: 1038, pos: [2.62, 1.34, -5.6], look: [3.95, 1.3, -8.33], fov: 30, ease: 'surge' }] }) },
+    { f: 935, pos: [2.2, 1.5, -4.5], look: [3.95, 1.24, -8.33], fov: 34 },
+    { f: 950, pos: [2.55, 1.36, -5.5], look: [3.95, 1.29, -8.33], fov: 30.5, ease: 'surge' },
+    { f: 1038, pos: [2.64, 1.33, -5.65], look: [3.95, 1.3, -8.33], fov: 30, ease: 'surge' }] }) },
   // flop: a TINY stiff shadow stands frozen mid-screen; bored backs,
-  // empty mats — the camera drifts like the crowd's attention. The
-  // wide emptiness is the joke; kept near v1, a touch tighter.
+  // empty mats. The wide emptiness is the joke — but the camera still
+  // punches in fast at the cut, then settles (no slow drift).
   flop: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1039, pos: [-0.7, 1.6, -1.6], look: [0.1, 2.08, -9], fov: 39 },
-    { f: 1130, pos: [-0.2, 1.54, -2.2], look: [0.05, 2.05, -9], fov: 36, ease: 'surge' }] }) },
-  // recall: the puppeteer on his knees at the bench, TWO coin stacks —
-  // the lazy man sits up, interested at last. Tighter than v1.
+    { f: 1039, pos: [-0.85, 1.66, -1.2], look: [0.1, 2.06, -9], fov: 41 },
+    { f: 1054, pos: [-0.35, 1.57, -2.05], look: [0.06, 2.05, -9], fov: 37, ease: 'surge' },
+    { f: 1130, pos: [-0.18, 1.54, -2.25], look: [0.05, 2.05, -9], fov: 36, ease: 'surge' }] }) },
+  // recall: the puppeteer on his knees at the bench, TWO coin
+  // stacks — the lazy man sits up, interested at last. Punch in by
+  // f1146, kick on the sit-up beat.
   recall: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1131, pos: [-2.35, 1.48, -3.35], look: [-4.5, 1.0, -6.1], fov: 38 },
-    { f: 1232, pos: [-2.7, 1.42, -3.9], look: [-4.52, 1.02, -6.08], fov: 34, ease: 'surge' }] }) },
-  // wind: the show again — then the gust. The camera holds the screen
-  // as the cloth billows, tears free and sails out of frame.
+    { f: 1131, pos: [-2.0, 1.58, -2.8], look: [-4.48, 1.04, -6.1], fov: 40 },
+    { f: 1146, pos: [-2.6, 1.44, -3.75], look: [-4.51, 1.01, -6.09], fov: 35, ease: 'surge' },
+    { f: 1232, pos: [-2.72, 1.42, -3.95], look: [-4.52, 1.02, -6.08], fov: 34, ease: 'surge' }] }) },
+  // wind: the show again — then the gust. Punch in by f1248; a kick
+  // on the roar and the biggest kick as the cloth tears free.
   wind: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1233, pos: [0.45, 1.72, -1.1], look: [0, 2.28, -9], fov: 40 },
-    { f: 1325, pos: [0.28, 1.64, -2.2], look: [0, 2.3, -9], fov: 36, ease: 'surge' }] }) },
+    { f: 1233, pos: [0.6, 1.8, -0.5], look: [0, 2.26, -9], fov: 42 },
+    { f: 1248, pos: [0.34, 1.68, -1.95], look: [0, 2.3, -9], fov: 37, ease: 'surge' },
+    { f: 1325, pos: [0.26, 1.63, -2.3], look: [0, 2.3, -9], fov: 36, ease: 'surge' }] }) },
   // reveal (R2): no cloth, no demon — just the lazy man himself, BIG
   // between the bare poles (he fills ~85% of frame height by the end),
   // the crowd's backs turning up at him along the bottom.
   reveal: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1326, pos: [-0.45, 1.68, -2.1], look: [0, 1.9, -9.66], fov: 38 },
-    { f: 1411, pos: [-0.3, 1.6, -3.55], look: [0, 1.86, -9.68], fov: 30, ease: 'surge' }] }) },
+    { f: 1326, pos: [-0.6, 1.76, -1.3], look: [0, 1.94, -9.66], fov: 41 },
+    { f: 1341, pos: [-0.36, 1.63, -3.2], look: [0, 1.88, -9.68], fov: 32, ease: 'surge' },
+    { f: 1411, pos: [-0.3, 1.6, -3.6], look: [0, 1.86, -9.68], fov: 30, ease: 'surge' }] }) },
   // tickets: the secret is out and the bowl still fills — the hero
-  // takes a bow, the puppeteer counts, everyone laughs. Tighter.
+  // takes a bow, the puppeteer counts, everyone laughs. Punch in by
+  // f1427, kicks on both bows.
   tickets: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1412, pos: [1.55, 1.55, -2.35], look: [1.55, 1.29, -7.55], fov: 38 },
-    { f: 1538, pos: [1.55, 1.52, -2.7], look: [1.55, 1.28, -7.55], fov: 38, ease: 'surge' }] }) },
-  tag: { cut: 'hard', raw: pushInCam({ subject: heroPos, a: 1539, b: 1586, d0: 3.3, d1: 2.5, h0: 1.6, h1: 1.56, lookOff: [0, 1.52, 0], fov0: 34, fov1: 30,
-    dir: () => [0.4, 0.92] }) },
-  // dialogue: the performed line — a slow push into the hero's face
-  // (ends ~70% of frame width); the camera HOLDS on the speaker.
-  dialogue: { cut: 'hard', raw: pushInCam({ subject: heroPos, a: 1587, b: 1690, d0: 3.2, d1: 2.45, h0: 1.6, h1: 1.55, lookOff: [0, 1.52, 0], fov0: 33, fov1: 30,
-    dir: () => [0.38, 0.93] }) },
-  // hookboard (R2): the camera is v1's — its board framing is proven
-  // (whole panel + margins, PARTIAL=0). The R2 change is the CAST:
-  // the hero kneels in the foreground pointing up at the board, and
-  // the two figures v1 cropped at the frame edges are gone.
+    { f: 1412, pos: [1.55, 1.62, -1.8], look: [1.55, 1.32, -7.55], fov: 40 },
+    { f: 1427, pos: [1.55, 1.54, -2.55], look: [1.55, 1.29, -7.55], fov: 38, ease: 'surge' },
+    { f: 1538, pos: [1.55, 1.52, -2.75], look: [1.55, 1.28, -7.55], fov: 37, ease: 'surge' }] }) },
+  // tag: the puppeteer's tag line lands — a 13-frame punch onto the
+  // hero as he turns to face the crowd (was a full-shot glide).
+  tag: { cut: 'hard', raw: keysCam({ keys: [
+    { f: 1539, pos: [2.3, 1.62, -4.35], look: [0.9, 1.52, -7.55], fov: 35 },
+    { f: 1552, pos: [1.95, 1.57, -5.15], look: [0.9, 1.52, -7.55], fov: 31, ease: 'surge' },
+    { f: 1586, pos: [1.88, 1.56, -5.28], look: [0.9, 1.52, -7.55], fov: 30, ease: 'surge' }] }) },
+  // dialogue: THE LINE, performed — the push lands FAST (by f1602,
+  // face ~70% of frame width) and then the camera HOLDS on the
+  // speaker with a micro-settle; it never leaves him mid-line.
+  dialogue: { cut: 'hard', raw: keysCam({ keys: [
+    { f: 1587, pos: [2.2, 1.62, -4.4], look: [0.9, 1.52, -7.55], fov: 34 },
+    { f: 1602, pos: [1.88, 1.56, -5.18], look: [0.9, 1.52, -7.55], fov: 30.5, ease: 'surge' },
+    { f: 1690, pos: [1.82, 1.55, -5.3], look: [0.9, 1.52, -7.55], fov: 30, ease: 'surge' }] }) },
+  // hookboard (FINAL): character beat + hook board together — the
+  // hero kneels in the foreground pointing up at the board. The end
+  // framing is the proven one (whole panel + margins, PARTIAL=0);
+  // v4 adds the approach: a fast push from f1691 landing by f1706
+  // as the board rises, then a live settle to the last frame.
   hookboard: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1691, pos: [-1.8, 2.0, 6.1], look: [-3.32, 1.92, -5.95], fov: 46 },
+    { f: 1691, pos: [-1.72, 2.04, 6.9], look: [-3.32, 1.92, -5.95], fov: 47 },
+    { f: 1706, pos: [-1.94, 1.97, 5.2], look: [-3.31, 1.94, -5.93], fov: 44.5, ease: 'surge' },
     { f: 1815, pos: [-1.98, 1.95, 4.9], look: [-3.3, 1.95, -5.92], fov: 44, ease: 'surge' }] }) },
 };
 const RIG = buildRig({
   total: TOTAL,
   shots: SHOTS.map((s) => ({ a: s.a, b: s.b, ...RIG_BY_ID[s.id] })),
-  kicks: [],
+  // Impact kicks (4–7 frame jolts, applied live by the rig): the
+  // demon's roars, the lamp flare, the coin beats, the gasp, the
+  // sit-up, the cloth tearing free, the reveal shock, the bows.
+  kicks: [
+    { f: 40, a: 0.12 }, { f: 88, a: 0.12 },
+    { f: 445, a: 0.1 }, { f: 548, a: 0.12 },
+    { f: 648, a: 0.13 }, { f: 690, a: 0.13 },
+    { f: 722, a: 0.08 }, { f: 865, a: 0.1 },
+    { f: 1196, a: 0.1 }, { f: 1258, a: 0.12 },
+    { f: 1295, a: 0.16 }, { f: 1328, a: 0.12 },
+    { f: 1432, a: 0.09 }, { f: 1492, a: 0.09 },
+  ],
   sigma: 2.3, fovSigma: 1.6,
 });
 export const camAt = (f) => ({ ...RIG.camAt(f), flash: 0 });
@@ -473,9 +520,25 @@ const heroWink = winkTrack([{ a: 876, b: 886 }, { a: 1216, b: 1226 }]);
 const SPEAK = SPK.makeSpeakPlayer(SPEAK_DATA);
 const micro = (f, seed) => 1.1 * Math.sin((f + seed * 5) * 0.037 + 1);
 const nodAt = (f, f0, n = 9, depth = 0.34) => (f >= f0 && f <= f0 + n ? Math.sin((f - f0) / n * Math.PI) * depth : 0);
-const head = (f, seed, tilt, look, lookY, facing = 0, squash = 0) => ({
+// ---------- v2 ANIMATION (kit body.js): continuous life + grips ----------
+// lifeAt on EVERY figure (keyed by the actor's seed): breathing phase
+// + weight-shift tilt folded into every head() call, so no character
+// ever stands like a post — the body sways and settles continuously
+// and the hair/head ride the same motion.
+const LIFE = { 31: lifeAt({ seed: 31 }), 51: lifeAt({ seed: 51 }), 41: lifeAt({ seed: 41 }), 43: lifeAt({ seed: 43 }), 61: lifeAt({ seed: 61 }), 71: lifeAt({ seed: 71 }) };
+const lifeOf = (seed, f) => (LIFE[seed] ? LIFE[seed](f) : { tilt: 0, breath: 0 });
+// Physical coin grips: the puppeteer TAKES the first coin in the deal
+// (lift, with weight squash + settle) and PAYS the month's rent over
+// (place); the hero's palm receives the rent (lift).
+const gripPupp = gripAt([{ f0: 438, dur: 14, type: 'lift', settle: 8 }, { f0: 856, dur: 16, type: 'place', settle: 9 }]);
+const gripHero = gripAt([{ f0: 858, dur: 14, type: 'lift', settle: 8 }]);
+// The performed line: the hero's free hand talks with the voice —
+// speech-rhythm oscillation plus emphasis pulses on the word stresses.
+const gestHero = gestureAt([{ a: 1597, b: 1672, beats: [1606, 1624, 1643, 1661], base: 0.42, amp: 0.15 }]);
+const head = (f, seed, tilt, look, lookY, facing = 0, squash = 0) => { const L = lifeOf(seed, f); return {
   headTilt: q(tilt + micro(f, seed), 1), look: q(look, 2), lookY: q(lookY, 2), facing: q(facing, 2), squash: q(squash, 2),
-});
+  tilt: q(L.tilt, 1), breath: Math.round(L.breath / 6) * 6,
+}; };
 const noBlush = (P) => { P.blush = 0; P.openL = Math.min(1, (P.openL ?? 0.85) * 1.45); P.openR = Math.min(1, (P.openR ?? 0.85) * 1.45); return P; };
 
 export const castAt = (f) => {
@@ -549,7 +612,10 @@ export const castAt = (f) => {
       std('hero', OUTFITS.hero, { expr: 'smile', exprP: HP, mode: 'stand', blink: blinkAt(f, 31), seed: 31,
         ...head(f, 31, 3.5, -0.4, 0.3, -0.4) }, h.x, h.z, { yaw: -0.4 });
       const walking = f < 291;
-      std('pupp', OUTFITS.pupp, { expr: 'grin', exprP: PP, mode: walking ? 'stroll' : 'stand', phase: q((f * 0.016) % 1, 2), blink: blinkAt(f, 51), seed: 51, prop: walking ? null : ['point', 0.3],
+      // stride phase from DISTANCE travelled along the walk path
+      // (stridePh): feet plant with the ground, no glide.
+      const walkPh = stridePh(0, smooth(ramp(f, 210, 291)) * 3.083, 1.05);
+      std('pupp', OUTFITS.pupp, { expr: 'grin', exprP: PP, mode: walking ? 'stroll' : 'stand', phase: q(walkPh, 2), blink: blinkAt(f, 51), seed: 51, prop: walking ? null : ['point', 0.3],
         ...head(f, 51, -1.5, 0.45, -0.1, 0.45) }, pp.x, pp.z, { yaw: 0.4 });
       std('old', OUTFITS.old, { expr: 'neutral', exprP: OP, mode: 'sit', blink: blinkAt(f, 71), seed: 71,
         ...head(f, 71, -1.5, -0.3, 0, -0.3) }, -5.35, -6.35, { yaw: -0.3, y: 0.42, ground: 0.42, grp: 'bench' });
@@ -559,7 +625,7 @@ export const castAt = (f) => {
       std('hero', OUTFITS.hero, { expr: 'smile', exprP: HP, mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: ['point', 0.5],
         ...head(f, 31, -1.5, 0.5, 0.1 + nodAt(f, 445), 0.5) }, h.x, h.z, { yaw: 0.5, y: h.y, ground: h.ground, grp: 'stage' });
       std('pupp', OUTFITS.pupp, { expr: 'grin', exprP: PP, mode: 'stand', blink: blinkAt(f, 51), seed: 51, prop: ['coin', 0.5],
-        ...head(f, 51, -1, -0.5, 0.15, -0.5) }, pp.x, pp.z, { yaw: -0.5, y: pp.y, ground: pp.ground, grp: 'stage' });
+        ...head(f, 51, -1, -0.5, 0.15, -0.5), squash: q(gripPupp(f).squash, 2) }, pp.x, pp.z, { yaw: -0.5, y: pp.y, ground: pp.ground, grp: 'stage' });
       break;
     }
     case 'lamp': {
@@ -599,9 +665,9 @@ export const castAt = (f) => {
     }
     case 'rent': {
       std('hero', OUTFITS.hero, { expr: 'smile', exprP: HP, mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: ['point', 0.8],
-        ...head(f, 31, -1, 0.45, 0.3 + nodAt(f, 865), 0.45) }, h.x, h.z, { yaw: 0.45 });
+        ...head(f, 31, -1, 0.45, 0.3 + nodAt(f, 865), 0.45), squash: q(gripHero(f).squash, 2) }, h.x, h.z, { yaw: 0.45 });
       std('pupp', OUTFITS.pupp, { expr: 'grin', exprP: PP, mode: 'stand', blink: blinkAt(f, 51), seed: 51, prop: ['coin', 0.5],
-        ...head(f, 51, -1, -0.5, 0.3, -0.5) }, pp.x, pp.z, { yaw: -0.45 });
+        ...head(f, 51, -1, -0.5, 0.3, -0.5), squash: q(gripPupp(f).squash, 2) }, pp.x, pp.z, { yaw: -0.45 });
       break;
     }
     case 'puppet': {
@@ -675,8 +741,13 @@ export const castAt = (f) => {
       const sp = SPEAK.at(f);
       const speakP = SPK.applySpeak({ ...T.faceP('smile'), cheek: 0 }, sp);
       speakP.blush = 0; speakP.openL = Math.min(1, (speakP.openL ?? 0.85) * 1.45); speakP.openR = Math.min(1, (speakP.openR ?? 0.85) * 1.45);
+      // his free hand GESTURES with the voice (gestureAt) and his body
+      // rides lifeAt while he speaks; every other mouth stays shut.
+      const LH = lifeOf(31, f);
       std('hero', OUTFITS.hero, { expr: 'smile', exprP: speakP, mode: 'stand', blink: blinkAt(f, 31), seed: 31,
-        headTilt: q((sp.nod || 0) + micro(f, 31) - 1.5, 1), look: q(0.08, 2), lookY: q(0.02, 2), facing: q(0.1, 2), squash: 0 }, h.x, h.z, { yaw: 0.1 });
+        prop: ['point', q(gestHero(f).k, 2)],
+        headTilt: q((sp.nod || 0) + micro(f, 31) - 1.5, 1), look: q(0.08, 2), lookY: q(0.02, 2), facing: q(0.1, 2), squash: 0,
+        tilt: q(LH.tilt, 1), breath: Math.round(LH.breath / 6) * 6 }, h.x, h.z, { yaw: 0.1 });
       std('pupp', OUTFITS.pupp, { expr: 'grin', exprP: PP, mode: 'stand', blink: blinkAt(f, 51), seed: 51,
         ...head(f, 51, -1.5, -0.4, 0.05, -0.4) }, pp.x, pp.z, { yaw: -0.35 });
       std('vilA', OUTFITS.vilA, { expr: 'smile', exprP: VA, mode: 'stand', blink: blinkAt(f, 61), seed: 61,

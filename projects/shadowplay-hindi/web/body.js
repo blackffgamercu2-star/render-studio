@@ -112,3 +112,168 @@ export const pointLook = (dir = 1, k = 0.8) => ({
   prop: ['point', dir * k],
   look: dir * 0.55, facing: dir * 0.30, lookY: 0.15,
 });
+
+// ============================================================
+// ANIMATION UPGRADE v2 (2026-11-18 — Abid's order: "character robot
+// jaisa khada hoke na bole" — nobody stands like a robot, not even
+// while speaking; expressions, body movement, leg movement and
+// hand/object grips must all read physical and real). Four systems,
+// all pure functions of the frame, inherited by every future build:
+//
+//   emoTrack(faceP, initial, events) — emotion morphs at story beats
+//       (smootherstep blends between named faces; moved here from the
+//       story layer so every build shares one implementation).
+//       events: [[frame, faceName, morphFrames], ...]
+//       Usage: const P = emo.at(f); opts.exprP = P.
+//
+//   lifeAt({ seed, shift, swayAmp }) — CONTINUOUS LIFE for any figure
+//       standing in frame: at(f) -> { breath, tilt, sway }.
+//       breath: pass straight to bodyFront's breath opt (chest/head
+//       settle on a ~108-frame cycle, phase-offset per seed).
+//       tilt: a slow weight-shift lean (degrees) foot to foot — feed
+//       into the actor's head()/tilt so the body never locks.
+//       sway: a smaller faster torso sway, add to tilt for speakers.
+//
+//   gripAt(events) — PHYSICAL GRIPS with weight. events:
+//       [{ f0, dur, type: 'lift' | 'place', settle }]
+//       at(f) -> { k, squash, holding }.
+//       k: 0 = object down / hand low, 1 = object up / hand on. Feed
+//       the SAME k into the arm prop (['kind', k] / carry) and into
+//       the object's own world track — hand and object then move in
+//       the same frames. A lift strains (squash swells mid-lift as
+//       the body takes the weight, then a settle pulse at the top);
+//       a place ends with a contact settle pulse (the landing dip).
+//       holding: 1 while the object is carried between lift & place.
+//
+//   gestureAt(events) — DIALOGUE GESTURE: while a character performs
+//       a spoken line, the free hand talks with the voice: k rides a
+//       speech-rhythm oscillation plus emphasis pulses at `beats`
+//       frames (word stresses). events: [{ a, b, beats, base, amp }]
+//       at(f) -> { k, on }. Outside events: { k: base rest, on: 0 }.
+//
+//   stridePh(x0, x, stride) — march/stroll phase from distance
+//       travelled (shared form of the story-level run() helper), so
+//       feet plant with the ground: no glide.
+// ============================================================
+
+/** Emotion morph track: smootherstep blends between named faces. */
+export const emoTrack = (faceP, initial, events) => ({
+  at(f) {
+    let from = faceP(initial), to = from, t0 = 0, dur = 0;
+    const seg = (g) => {
+      if (dur <= 0 || g >= t0 + dur) return { ...to };
+      if (g <= t0) return { ...from };
+      const u = (g - t0) / dur, s = u * u * u * (u * (u * 6 - 15) + 10), o = {};
+      for (const k in to) o[k] = from[k] + (to[k] - from[k]) * s;
+      return o;
+    };
+    for (const [ef, name, ed] of events) {
+      if (ef > f) break;
+      from = seg(ef); to = faceP(name); t0 = ef; dur = Math.max(1, ed);
+    }
+    return seg(f);
+  },
+});
+
+/** Continuous life: breathing + weight shift + micro sway. */
+export const lifeAt = ({ seed = 1, shift = 1.4, swayAmp = 0.7 } = {}) => (f) => ({
+  breath: f + seed * 41,
+  tilt: shift * Math.sin(f * 0.011 + seed * 2.3) + swayAmp * Math.sin(f * 0.023 + seed * 1.7),
+  sway: 0.6 * Math.sin(f * 0.017 + seed * 1.7),
+});
+
+/** Physical grips: lift / place / hold with weight and settle. */
+export const gripAt = (events) => {
+  const evs = [...events].sort((a, b) => a.f0 - b.f0);
+  return (f) => {
+    let k = 0, squash = 0, holding = 0;
+    for (const e of evs) {
+      const dur = e.dur || 16, end = e.f0 + dur, settle = e.settle ?? 8;
+      if (f < e.f0) break;
+      if (e.type === 'lift') {
+        if (f <= end) {
+          const u = clamp((f - e.f0) / dur);
+          k = smooth(u); holding = u > 0.85 ? 1 : 0;
+          squash = Math.max(squash, 0.10 * Math.sin(Math.PI * Math.min(1, u * 1.12)));
+        } else {
+          k = 1; holding = 1;
+          if (f <= end + settle) squash = Math.max(squash, 0.07 * Math.sin(Math.PI * (f - end) / settle));
+        }
+      } else { // place
+        if (f <= end) {
+          const u = clamp((f - e.f0) / dur);
+          k = 1 - smooth(u); holding = u < 0.9 ? 1 : 0;
+        } else {
+          k = 0; holding = 0;
+          if (f <= end + settle) squash = Math.max(squash, 0.13 * Math.sin(Math.PI * (f - end) / settle));
+        }
+      }
+    }
+    return { k, squash, holding };
+  };
+};
+
+/** Dialogue gesture: the free hand talks with the voice. */
+export const gestureAt = (events) => (f) => {
+  for (const e of events) {
+    if (f >= e.a && f <= e.b) {
+      const base = e.base ?? 0.45, amp = e.amp ?? 0.16;
+      let k = base + amp * Math.sin((f - e.a) * 0.62) * (0.4 + 0.6 * Math.abs(Math.sin((f - e.a) * 0.09 + 1)));
+      for (const bf of e.beats || []) {
+        const d = Math.abs(f - bf);
+        if (d <= 5) k += 0.22 * (1 - d / 5);
+      }
+      return { k: clamp(k, 0.05, 0.95), on: 1 };
+    }
+  }
+  return { k: 0.5, on: 0 };
+};
+
+/** March/stroll phase from distance travelled — feet plant, no glide. */
+export const stridePh = (x0, x, stride = 1.05) => Math.abs(x - x0) / stride % 1;
+
+// ============================================================
+// APPENDED from the fireless EN build (2026-11-18) — the two v2
+// systems the Hindi upgrade did not include (merged into the kit
+// 2026-11-18 so both builds' systems survive in one file):
+//   jumpTrack(events) — physical HOPS: jump-back from a steam burst,
+//       startle flinches, shove displacements.
+//   carryDip(f, load) — the body's weight dip under a carried load.
+// (The EN build's gripTrack/lifeAt/emoTrack/gestureAt are its own
+// variants of the systems above and are NOT duplicated here.)
+// ============================================================
+
+/**
+ * PHYSICAL HOPS — jump-back startles, flinches, little leaps.
+ * events: [{ f0, dur=11, h=0.16 (world lift), dx=0 (world lateral),
+ *            back=0 (lean-back degrees at the peak) }]
+ * Returns { y, dx, squash, lean }: y follows a gravity arc, squash
+ * peaks in the frames AFTER touchdown, lean peaks mid-air. Overlapping
+ * events take the max.
+ */
+export const jumpTrack = (events) => (f) => {
+  let y = 0, dx = 0, squash = 0, lean = 0;
+  for (const e of events) {
+    const dur = e.dur ?? 11, h = e.h ?? 0.16;
+    const u = (f - e.f0) / dur;
+    if (u < 0) continue;
+    dx += (e.dx ?? 0) * M.easeOut(clamp(u * 1.15));   // displacement PERSISTS after the hop
+    if (u > 1.35) continue;
+    if (u <= 1) {
+      const arc = Math.sin(Math.PI * Math.pow(u, 0.9));
+      y = Math.max(y, h * arc);
+      lean = Math.max(lean, (e.back ?? 0) * Math.sin(Math.PI * u));
+    }
+    const land = clamp((u - 0.92) / 0.28);                    // touchdown squash
+    if (u > 0.85) squash = Math.max(squash, 0.15 * Math.sin(Math.PI * clamp(land)));
+  }
+  return { y, dx, squash, lean };
+};
+
+/**
+ * WEIGHT while carrying. load 0..1 (jug of water ~0.45, box ~0.8).
+ * Returns the squash to ADD while the load is held: a constant dip plus
+ * an effort bob at sway frequency — the body works under the load.
+ */
+export const carryDip = (f, load = 0.5) => load <= 0 ? 0 :
+  load * 0.055 + load * 0.018 * Math.sin(f * 0.31);

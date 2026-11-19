@@ -357,7 +357,7 @@ const starPts = (() => {
 // The hook board stands by the entrance; its transform is mirrored in
 // boards.json — keep in sync. It rises at the start of the final shot
 // and HOLDS at full opacity to the last frame.
-const boardHook = textBoard(['लेकिन कल...', 'वह मोमबत्ती जो', 'कभी बुझती ही', 'नहीं थी?'], 3.9, 1.75, '#2a1a0c', '#ffe9a8', 900, { pitch: 0.22, dy: 0.032, fsMul: 0.74 });
+const boardHook = textBoard(['लेकिन कल...', 'वह मोमबत्ती जो', 'कभी बुझती ही', 'नहीं थी?'], 3.9, 1.75, '#2a1a0c', '#ffe9a8', 900, { pitch: 0.22, dy: 0.032, fsMul: 0.5 });
 boardHook.position.set(...BOARD_POS); world.add(boardHook); addBoardOccluder(boardHook, 3.9, 1.75, 'hookK');
 add(tbox(0.09, 2.0, 0.09, 2), MAT.woodDk, BOARD_POS[0] - 2.2, 0.6, BOARD_POS[2] - 0.08, world, { cast: false });
 add(tbox(0.09, 2.0, 0.09, 2), MAT.woodDk, BOARD_POS[0] + 2.2, 0.6, BOARD_POS[2] - 0.08, world, { cast: false });
