@@ -8,6 +8,12 @@
 // face ≥65% wide (the bookmaker at the finish post as the no-name horse
 // wins), and the FINAL is a character beat + hook board together (the
 // gambler kneels in the foreground pointing up at the board).
+// v4 UPGRADE (2026-11-19, Abid's order — picture only; stem/script/beat
+// map/boards/mix/speakdata untouched): camera rebuilt to the v4 ACTION
+// style (see the camera section), kit body.js v2 animation (continuous
+// life via lifeAt in head()/speakFace, gripAt physical grips at the
+// exchange beats, gestureAt dialogue hand). The follow shot is now a
+// FRONT three-quarter retreat track (faces read; R2 trailed behind).
 // Sets: the village SQUARE (bookmaker's stall + champion ring), the distant
 // RACECOURSE, the STREET to the gambler's house (porch, roof platform,
 // DOVECOTE), and the open SKY for the pigeon's flight home.
@@ -35,7 +41,7 @@
 // Grade changes ONLY on clause boundaries; boards never graded.
 import { M, blinkAt, q, clamp, lerp, ramp, kf } from './motion.js';
 import { buildRig, keysCam } from './camrig.js';
-import { poseWindows, turnTrack, gazeTrack, winkTrack } from './body.js';
+import { poseWindows, turnTrack, gazeTrack, winkTrack, lifeAt, gestureAt, gripAt } from './body.js';
 import * as SOL from './solid.js';
 import * as T from './toon.js';
 import * as SPK from './speak.js';
@@ -45,7 +51,8 @@ import { SPEAK_DATA } from './speakdata.js';
 const SPEAK = SPK.makeSpeakPlayer(SPEAK_DATA);
 const speakFace = (baseName, f) => {
   const s = SPEAK.at(f);
-  return { expr: 'smile', exprP: SPK.applySpeak({ ...T.faceP(baseName), cheek: 0.5 }, s), headTilt: q(s.nod || 0, 2), clothShade: true };
+  const L = lifeAt({ seed: 11 })(f);   // v4: the speaker's body sways with the line — never a statue
+  return { expr: 'smile', exprP: SPK.applySpeak({ ...T.faceP(baseName), cheek: 0.5 }, s), headTilt: q((s.nod || 0) + L.tilt + L.sway, 2), clothShade: true, breath: L.breath };
 };
 
 export const FPS = 30, TOTAL = 1700, DECK = 0;
@@ -178,6 +185,14 @@ export const riderAt = (f) => {
 
 // ---------- body.js performance tracks ----------
 const gamblerWink = winkTrack([{ a: 1118, b: 1130 }]);                 // end of the laugh, into the answer
+// v4 physical grips + dialogue gesture (kit body.js v2): hands take and
+// release real weight at the exchange beats; the speaker's free hand
+// talks with the voice (beats = stressed words of L11).
+const payoutGripG = gripAt([{ f0: 18, dur: 22, type: 'lift' }]);      // gambler takes the pouch
+const payoutGripB = gripAt([{ f0: 12, dur: 20, type: 'place' }]);     // bookmaker pushes it across
+const sonGrip = gripAt([{ f0: 1256, dur: 40, type: 'lift' }]);        // son's hands work the capsule on
+const perchGrip = gripAt([{ f0: 1550, dur: 26, type: 'place' }]);     // gambler works the capsule off
+const dialogueGesture = gestureAt([{ a: 1145, b: 1234, beats: [1151, 1169, 1198, 1226], base: 0.5, amp: 0.18 }]);
 const sonPose = poseWindows([{ a: 1250, b: 1302, mode: 'kneel1', inF: 6, outF: 7 }]);   // ties the capsule on
 const gamblerPlatPose = poseWindows([{ a: 1540, b: 1588, mode: 'kneel1', inF: 6, outF: 7 }]); // takes the capsule off
 const gamblerHookPose = poseWindows([{ a: 1608, b: 1699, mode: 'kneel1', inF: 6, outF: 1 }]); // R2 final: kneels before the hook board, pointing up at it
@@ -193,9 +208,16 @@ const sonGaze = gazeTrack([
   { f: 1310, look: -0.2, lookY: 0.6 },      // up, following the pigeon away
 ]);
 const micro = (f, seed) => 1.1 * Math.sin((f + seed * 5) * 0.037 + 1);
-const head = (f, seed, tilt, look, lookY, facing = 0, squash = 0) => ({
-  headTilt: q(tilt + micro(f, seed), 1), look: q(look, 2), lookY: q(lookY, 2), facing: q(facing, 2), squash: q(squash, 2),
-});
+// v4 ANIMATION UPGRADE: continuous life — every headed actor breathes
+// (bodyFront breath opt, ~108f cycle) and shifts weight foot to foot
+// (lifeAt tilt folded into headTilt) so nobody stands like a post.
+const head = (f, seed, tilt, look, lookY, facing = 0, squash = 0) => {
+  const L = lifeAt({ seed })(f);
+  return {
+    headTilt: q(tilt + micro(f, seed) + L.tilt, 1), look: q(look, 2), lookY: q(lookY, 2), facing: q(facing, 2), squash: q(squash, 2),
+    breath: L.breath,
+  };
+};
 
 // ---------- hero / focus ----------
 const FOCUS = {
@@ -217,106 +239,182 @@ const FOCUS = {
 };
 export const heroPosAt = (f) => FOCUS[shotAt(f).id]();
 
-// ---------- cameras: EVERY shot is a camrig track on a subject ----------
-const raceKeys = () => {
+// ---------- cameras: v4 ACTION RIG — every move keyed to the subject ----------
+// (v4 upgrade 2026-11-19, valleyfly/fireless pattern: each shot OPENS on
+// its subject already big, PUNCHES IN over 11–16 frames at the action
+// start (subject scale ×~1.5), then TRACKS at the subject's own speed on
+// subject-keyed keys; impacts get declared kicks; reframes happen only
+// as clause-boundary hard cuts. The rig runs a tight smoothing pass —
+// sigma 2.0 / radius 6 vs the R2 build's 3.6 / 14 — so the authored
+// speed survives to the screen. No slow drift, no static holds.
+// Moving-subject shots (race/luckiest/follow/flight) are ANALYTIC
+// tracks — pure functions of the subject's own path — so the camera
+// matches subject acceleration exactly.)
+const raceTrackRaw = () => {
   const a = B('race');
-  // R2: track the no-name grey (xs[2]) past the finish post, then swing off
-  // the track onto the bookmaker at the post — his stunned face ends the
-  // shot at reaction scale (≥65% of frame width).
-  const track = [0, 11, 22, 34, 45].map((d, i) => {
-    const h = horsesAt(a + d);
-    return { f: a + d, pos: [h.xs[2] - 3.2, 1.7, 7.6], look: [h.xs[2] + 0.8, 1.25, 0], fov: 40 - i * 0.6, ease: 'linear' };
-  });
-  const h52 = horsesAt(a + 52);
-  return [...track,
-    { f: a + 52, pos: [h52.xs[2] - 3.0, 1.68, 7.5], look: [h52.xs[2] + 1.4, 1.3, 1.2], fov: 37, ease: 'linear' },
-    { f: a + 61, pos: [2.6, 1.64, 7.1], look: [4.6, 1.42, 3.2], fov: 34.5, ease: 'linear' },
-    { f: a + 71, pos: [4.3, 1.55, 6.15], look: [5.45, 1.48, 3.65], fov: 32, ease: 'linear' },
-    { f: a + 82, pos: [4.5, 1.52, 5.75], look: [5.58, 1.5, 3.62], fov: 30, ease: 'linear' },
+  // v4: ANALYTIC side-track on the no-name grey (xs[2]) — the camera is
+  // a pure function of the horse's own path every frame (a 13-frame
+  // punch-in envelope over a constant riding offset), so it matches the
+  // horse's acceleration exactly instead of chasing keyframes.
+  return (f) => {
+    const h = horsesAt(f);
+    const s = smooth(ramp(f, a, a + 13));
+    return {
+      pos: [h.xs[2] - lerp(3.9, 2.7, s), lerp(1.7, 1.58, s), lerp(7.6, 6.9, s)],
+      look: [h.xs[2] + 0.8, 1.25, 0],
+      fov: lerp(41, 33.5, s), roll: 0,
+    };
+  };
+};
+const raceReactKeys = () => {
+  const a = B('race');
+  // v4: entered on a declared WHIP from the track — the camera swings
+  // off the winning grey onto the bookmaker at the finish post and
+  // lands on his stunned face at reaction scale (≥65% of frame width).
+  return [
+    { f: a + 54, pos: [-2.5, 1.6, 6.85], look: [1.2, 1.3, 0.6], fov: 33 },
+    { f: a + 63, pos: [2.6, 1.64, 7.1], look: [4.6, 1.42, 3.2], fov: 32, ease: 'io' },
+    { f: a + 68, pos: [3.55, 1.6, 6.6], look: [5.05, 1.45, 3.42], fov: 31.2, ease: 'io' },
+    { f: a + 73, pos: [4.3, 1.55, 6.15], look: [5.45, 1.48, 3.65], fov: 30.5, ease: 'io' },
+    { f: a + 84, pos: [4.5, 1.52, 5.75], look: [5.58, 1.5, 3.62], fov: 29.5, ease: 'io' },
     { f: a + 91, pos: [4.42, 1.51, 5.6], look: [5.6, 1.51, 3.6], fov: 29, ease: 'io' }];
 };
-const flightKeys = () => {
-  const a = B('flight');
-  return [0, 13, 26, 39, 52, 65, 78, 91, 104].map((d, i) => {
-    const p = flightPigPos(a + d);
-    return { f: a + d, pos: [p[0] - 2.9, p[1] + 1.15, p[2] + 3.5], look: [p[0], p[1], p[2]], fov: 36 - i * 0.4, ...(i === 8 ? { ease: 'io' } : { ease: 'linear' }) };
-  });
+const flightRaw = () => {
+  const a = B('flight'), e = E('flight');
+  // v4: ANALYTIC chase — the camera rides a fixed offset from the
+  // pigeon's own arc every frame (10-frame punch envelope, then the
+  // offset holds while the fov tightens down the flight).
+  return (f) => {
+    const p = flightPigPos(f);
+    const s = smooth(ramp(f, a, a + 10));
+    return {
+      pos: [p[0] + lerp(-2.9, -2.55, s), p[1] + lerp(1.15, 0.95, s), p[2] + lerp(3.5, 3.0, s)],
+      look: [p[0], p[1], p[2]],
+      fov: lerp(36, 30.6, smooth(ramp(f, a, e))), roll: 0,
+    };
+  };
 };
-const luckKeys = () => {
-  const a = B('luckiest');
-  return [0, 42, 84, 126].map((d, i) => {
-    const w = gamblerWalk(a + d);
-    return { f: a + d, pos: [w.x + 2.7, 1.7, w.z + 3.6], look: [w.x, 1.3, w.z], fov: 37 - i * 1.8, ...(i === 3 ? { ease: 'io' } : { ease: 'linear' }) };
-  });
+const luckRaw = () => {
+  const a = B('luckiest'), e = E('luckiest');
+  // v4: ANALYTIC front three-quarter track on the strolling gambler —
+  // 14-frame punch-in envelope, then the offset tightens slowly for
+  // the whole walk, at exactly his speed.
+  return (f) => {
+    const w = gamblerWalk(f);
+    const s = smooth(ramp(f, a, a + 14)), t = smooth(ramp(f, a, e));
+    return {
+      pos: [w.x + lerp(lerp(3.15, 2.55, s), 2.45, t), 1.7, w.z + lerp(lerp(4.15, 3.35, s), 3.25, t)],
+      look: [w.x, 1.3, w.z],
+      fov: lerp(lerp(39, 35, s), 31, t), roll: 0,
+    };
+  };
 };
-const followKeys = () => {
-  const a = B('follow');
-  return [0, 36, 72, 110].map((d, i) => {
-    const g = followG(a + d), b = followB(a + d);
+const followRaw = () => {
+  const a = B('follow'), e = E('follow');
+  // v4: FRONT three-quarter retreat track — the pair walks north up the
+  // lane TOWARD the camera, which backs away at exactly their speed
+  // (faces read the whole way; the R2 build trailed behind them). The
+  // pair walks ~1.1 apart in x and ~2.8 apart in depth, so the retreat
+  // rides ~6.5 ahead of their midpoint (projection-checked: both heads
+  // stay fully inside the 9:16 frame at every frame). 14-frame
+  // punch-in, then the retreat tightens as dusk falls.
+  return (f) => {
+    const g = followG(f), b = followB(f);
     const mx = (g.x + b.x) / 2, mz = (g.z + b.z) / 2;
-    // behind-and-beside tracking: the pair walks NORTH up the lane
-    // (x ~ 0..1.25, z increasing) — camera trails 3.55 behind + 0.85 east,
-    // looking past them up the lane so both stack in depth in the 9:16 frame
-    return { f: a + d, pos: [mx + 0.85, 1.82, mz - 3.55], look: [mx - 0.1, 1.3, mz + 1.2], fov: 38 - i * 1.8, ...(i === 3 ? { ease: 'io' } : { ease: 'linear' }) };
-  });
+    const s = smooth(ramp(f, a, a + 14)), t = smooth(ramp(f, a, e));
+    return {
+      pos: [mx + lerp(0.62, 0.5, s), 1.82, mz + lerp(lerp(7.4, 6.6, s), 6.5, t)],
+      look: [mx - 0.42, 1.32, mz - 0.2],
+      fov: lerp(lerp(39, 38, s), 36.5, t), roll: 0,
+    };
+  };
 };
 const RIG_BY_ID = {
   payout: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('payout'), pos: [-0.35, 1.32, 2.05], look: [-2.22, 1.42, -0.85], fov: 36 },
-    { f: B('payout') + 70, pos: [-0.55, 1.36, 1.8], look: [-2.24, 1.44, -0.9], fov: 34 },
-    { f: E('payout'), pos: [-0.72, 1.4, 1.6], look: [-2.26, 1.46, -0.95], fov: 32, ease: 'io' }] }) },
-  race: { cut: 'hard', raw: keysCam({ keys: raceKeys() }) },
+    { f: B('payout'), pos: [-0.13, 1.3, 2.38], look: [-2.22, 1.42, -0.85], fov: 37 },
+    { f: B('payout') + 14, pos: [-0.72, 1.35, 1.5], look: [-2.23, 1.44, -0.88], fov: 33, ease: 'io' },
+    { f: B('payout') + 70, pos: [-0.83, 1.36, 1.34], look: [-2.25, 1.45, -0.92], fov: 31.5, ease: 'io' },
+    { f: E('payout'), pos: [-0.87, 1.37, 1.28], look: [-2.26, 1.46, -0.95], fov: 31, ease: 'io' }] }) },
   champion: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('champion'), pos: [1.3, 2.0, 7.2], look: [3.38, 0.98, 2.6], fov: 36 },
-    { f: E('champion'), pos: [1.8, 1.8, 6.5], look: [3.4, 1.0, 2.6], fov: 32, ease: 'io' }] }) },
-  luckiest: { cut: 'hard', raw: keysCam({ keys: luckKeys() }) },
+    { f: B('champion'), pos: [1.15, 2.05, 7.5], look: [3.38, 0.98, 2.6], fov: 37 },
+    { f: B('champion') + 13, pos: [1.55, 1.9, 6.7], look: [3.39, 0.99, 2.6], fov: 33, ease: 'io' },
+    { f: B('champion') + 44, pos: [1.68, 1.86, 6.45], look: [3.4, 1.0, 2.6], fov: 32, ease: 'io' },
+    { f: E('champion'), pos: [1.85, 1.8, 6.3], look: [3.4, 1.0, 2.6], fov: 31, ease: 'io' }] }) },
+  luckiest: { cut: 'hard', raw: luckRaw() },
   gold: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('gold'), pos: [1.0, 1.6, 5.6], look: [0.62, 1.25, 2.05], fov: 34 },
-    { f: E('gold'), pos: [0.9, 1.55, 5.0], look: [0.6, 1.27, 2.05], fov: 30, ease: 'io' }] }) },
+    { f: B('gold'), pos: [1.15, 1.66, 6.1], look: [0.62, 1.25, 2.05], fov: 36 },
+    { f: B('gold') + 13, pos: [0.98, 1.58, 5.15], look: [0.61, 1.26, 2.05], fov: 31, ease: 'io' },
+    { f: B('gold') + 50, pos: [0.93, 1.56, 4.95], look: [0.6, 1.27, 2.05], fov: 29.5, ease: 'io' },
+    { f: E('gold'), pos: [0.9, 1.55, 4.85], look: [0.6, 1.27, 2.05], fov: 29, ease: 'io' }] }) },
   lastsecond: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('lastsecond'), pos: [0.55, 1.72, 1.6], look: [-2.7, 1.08, -1.85], fov: 34 },
-    { f: B('lastsecond') + 80, pos: [0.38, 1.66, 1.38], look: [-2.73, 1.06, -1.88], fov: 32 },
-    { f: E('lastsecond'), pos: [0.22, 1.62, 1.2], look: [-2.75, 1.05, -1.9], fov: 30, ease: 'io' }] }) },
-  follow: { cut: 'hard', raw: keysCam({ keys: followKeys() }) },
+    { f: B('lastsecond'), pos: [0.72, 1.78, 1.95], look: [-2.7, 1.08, -1.85], fov: 36 },
+    { f: B('lastsecond') + 12, pos: [0.5, 1.7, 1.5], look: [-2.71, 1.07, -1.87], fov: 32.5, ease: 'io' },
+    { f: B('lastsecond') + 80, pos: [0.38, 1.66, 1.38], look: [-2.73, 1.06, -1.88], fov: 31.5, ease: 'io' },
+    { f: E('lastsecond'), pos: [0.2, 1.62, 1.18], look: [-2.75, 1.05, -1.9], fov: 30, ease: 'io' }] }) },
+  follow: { cut: 'hard', raw: followRaw() },
   dovecote: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('dovecote'), pos: [2.7, 3.3, 8.6], look: [-1.7, 4.35, 16.3], fov: 41 },
-    { f: B('dovecote') + 80, pos: [0.4, 4.3, 11.8], look: [-1.8, 4.55, 16.0], fov: 35 },
-    { f: B('dovecote') + 125, pos: [-2.15, 4.5, 13.95], look: [-1.87, 4.6, 15.9], fov: 31 },
-    { f: E('dovecote'), pos: [-2.75, 4.22, 14.35], look: [-1.88, 4.62, 15.9], fov: 29, ease: 'io' }] }) },
+    { f: B('dovecote'), pos: [3.1, 3.1, 7.6], look: [-1.7, 4.35, 16.3], fov: 43 },
+    { f: B('dovecote') + 19, pos: [1.6, 3.9, 10.2], look: [-1.75, 4.45, 16.1], fov: 37, ease: 'io' },
+    { f: B('dovecote') + 70, pos: [0.2, 4.35, 12.1], look: [-1.8, 4.55, 16.0], fov: 33, ease: 'io' },
+    { f: B('dovecote') + 125, pos: [-2.0, 4.5, 13.9], look: [-1.87, 4.6, 15.9], fov: 30, ease: 'io' },
+    { f: E('dovecote'), pos: [-2.7, 4.25, 14.3], look: [-1.88, 4.62, 15.9], fov: 28.5, ease: 'io' }] }) },
   accuse: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('accuse'), pos: [-7.15, 1.66, 11.15], look: [-4.72, 1.36, 14.35], fov: 34 },
-    { f: E('accuse'), pos: [-6.9, 1.62, 11.5], look: [-4.72, 1.36, 14.35], fov: 30, ease: 'io' }] }) },
+    { f: B('accuse'), pos: [-7.5, 1.74, 10.6], look: [-4.72, 1.36, 14.35], fov: 36 },
+    { f: B('accuse') + 13, pos: [-7.05, 1.66, 11.3], look: [-4.72, 1.36, 14.35], fov: 31.5, ease: 'io' },
+    { f: E('accuse'), pos: [-6.85, 1.62, 11.55], look: [-4.72, 1.36, 14.35], fov: 29.5, ease: 'io' }] }) },
   laugh: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('laugh'), pos: [-5.75, 1.72, 11.15], look: [PORCH_G.x - 0.05, 1.5, PORCH_G.z], fov: 31 },
-    { f: E('laugh'), pos: [-5.6, 1.7, 11.45], look: [PORCH_G.x - 0.05, 1.5, PORCH_G.z], fov: 27, ease: 'io' }] }) },
+    { f: B('laugh'), pos: [-5.95, 1.78, 10.8], look: [PORCH_G.x - 0.05, 1.5, PORCH_G.z], fov: 33 },
+    { f: B('laugh') + 12, pos: [-5.68, 1.72, 11.3], look: [PORCH_G.x - 0.05, 1.5, PORCH_G.z], fov: 28.5, ease: 'io' },
+    { f: E('laugh'), pos: [-5.58, 1.7, 11.5], look: [PORCH_G.x - 0.05, 1.5, PORCH_G.z], fov: 26.5, ease: 'io' }] }) },
   dialogue: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('dialogue'), pos: [-5.5, 1.74, 11.5], look: [PORCH_G.x, 1.47, PORCH_G.z], fov: 29 },
-    { f: E('dialogue'), pos: [-5.35, 1.71, 11.8], look: [PORCH_G.x, 1.47, PORCH_G.z], fov: 25, ease: 'io' }] }) },
+    { f: B('dialogue'), pos: [-5.62, 1.8, 11.2], look: [PORCH_G.x, 1.47, PORCH_G.z], fov: 31 },
+    { f: B('dialogue') + 11, pos: [-5.42, 1.74, 11.65], look: [PORCH_G.x, 1.47, PORCH_G.z], fov: 27, ease: 'io' },
+    { f: E('dialogue'), pos: [-5.33, 1.71, 11.85], look: [PORCH_G.x, 1.47, PORCH_G.z], fov: 25, ease: 'io' }] }) },
   son: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('son'), pos: [8.7, 1.45, 10.9], look: [SON.x, 1.1, SON.z], fov: 35 },
-    { f: B('son') + 50, pos: [7.9, 1.35, 9.3], look: [SON.x - 0.25, 1.1, SON.z + 0.3], fov: 32 },
-    { f: E('son'), pos: [7.5, 1.8, 8.8], look: [SON.x - 1.1, 2.4, SON.z - 0.6], fov: 28, ease: 'io' }] }) },
-  flight: { cut: 'hard', raw: keysCam({ keys: flightKeys() }) },
+    { f: B('son'), pos: [8.95, 1.5, 11.4], look: [SON.x, 1.1, SON.z], fov: 37 },
+    { f: B('son') + 16, pos: [8.15, 1.4, 9.7], look: [SON.x - 0.1, 1.1, SON.z + 0.1], fov: 32, ease: 'io' },
+    { f: B('son') + 50, pos: [7.7, 1.5, 9.1], look: [SON.x - 0.25, 1.1, SON.z + 0.3], fov: 30, ease: 'io' },
+    { f: E('son'), pos: [7.45, 1.85, 8.75], look: [SON.x - 1.1, 2.4, SON.z - 0.6], fov: 27.5, ease: 'io' }] }) },
+  flight: { cut: 'hard', raw: flightRaw() },
   sixhours: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('sixhours'), pos: [1.6, 6.0, 11.0], look: [-1.2, 4.9, 15.9], fov: 37 },
-    { f: B('sixhours') + 52, pos: [0.3, 5.5, 12.3], look: [-1.65, 5.0, 15.6], fov: 34 },
-    { f: B('sixhours') + 78, pos: [-0.4, 5.25, 13.3], look: [-1.64, 4.64, 15.55], fov: 32 },
-    { f: B('sixhours') + 110, pos: [-0.55, 5.15, 13.1], look: [-1.66, 4.6, 15.55], fov: 31 },
-    { f: E('sixhours'), pos: [-0.7, 5.2, 12.95], look: [-1.63, 4.58, 15.6], fov: 31, ease: 'io' }] }) },
+    { f: B('sixhours'), pos: [1.9, 6.2, 10.4], look: [-1.2, 4.9, 15.9], fov: 39 },
+    { f: B('sixhours') + 15, pos: [1.0, 5.8, 11.6], look: [-1.45, 4.95, 15.75], fov: 35, ease: 'io' },
+    { f: B('sixhours') + 52, pos: [0.3, 5.5, 12.3], look: [-1.65, 5.0, 15.6], fov: 33, ease: 'io' },
+    { f: B('sixhours') + 78, pos: [-0.35, 5.25, 13.25], look: [-1.64, 4.64, 15.55], fov: 31.5, ease: 'io' },
+    { f: B('sixhours') + 110, pos: [-0.55, 5.15, 13.1], look: [-1.66, 4.6, 15.55], fov: 30.5, ease: 'io' },
+    { f: E('sixhours'), pos: [-0.7, 5.2, 12.95], look: [-1.63, 4.58, 15.6], fov: 30, ease: 'io' }] }) },
   hook: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('hook'), pos: [1.45, 2.45, 25.45], look: [0.02, 2.82, 12.55], fov: 44 },
-    { f: E('hook'), pos: [1.25, 2.3, 24.65], look: [0.02, 2.84, 12.55], fov: 42.5, ease: 'io' }] }) },
+    { f: B('hook'), pos: [1.7, 2.6, 26.6], look: [0.02, 2.85, 12.55], fov: 45 },
+    { f: B('hook') + 14, pos: [1.32, 2.38, 24.9], look: [0.02, 2.84, 12.55], fov: 42, ease: 'io' },
+    { f: E('hook'), pos: [1.22, 2.3, 24.55], look: [0.02, 2.84, 12.55], fov: 41.5, ease: 'io' }] }) },
 };
+// The race shot enters its reaction half on a declared whip (a+54,
+// blend 8) — the only mid-shot reframe in the film (valleyfly pattern).
+const RIG_SHOTS = [];
+for (const s of SHOTS) {
+  if (s.id === 'race') {
+    RIG_SHOTS.push({ a: s.a, b: s.a + 53, cut: 'hard', raw: raceTrackRaw() });
+    RIG_SHOTS.push({ a: s.a + 54, b: s.b, cut: 'whip', blend: 8, raw: keysCam({ keys: raceReactKeys() }) });
+  } else RIG_SHOTS.push({ a: s.a, b: s.b, ...RIG_BY_ID[s.id] });
+}
 const RIG = buildRig({
   total: TOTAL,
-  shots: SHOTS.map((s) => ({ a: s.a, b: s.b, ...RIG_BY_ID[s.id] })),
-  kicks: [{ f: B('lastsecond') + 82, a: 0.03 }, { f: B('champion') + 44, a: 0.025 }],
-  sigma: 3.6, smoothRadius: 14, fovSigma: 1.6,
+  shots: RIG_SHOTS,
+  kicks: [
+    { f: B('race') + 52, a: 0.05 },        // the grey hits the finish post
+    { f: B('champion') + 45, a: 0.06 },    // the champion hits the ground
+    { f: B('lastsecond') + 82, a: 0.07 },  // the slip SLAMS down
+    { f: B('accuse') + 2, a: 0.05 },       // the bookmaker bursts in
+    { f: B('son') + 53, a: 0.045 },        // the pigeon launches
+    { f: B('sixhours') + 72, a: 0.06 },    // touchdown on the perch bar
+    { f: B('hook') + 8, a: 0.04 },         // the hook board lands
+  ],
+  sigma: 2.0, smoothRadius: 6, fovSigma: 1.1,
 });
 export const camAt = (f) => RIG.camAt(f);
 export const RIG_META = {
   kicks: RIG.declared.kicks, hardCuts: RIG.declared.hardCuts,
-  blends: SHOTS.filter((s) => RIG_BY_ID[s.id].cut === 'blend').map((s) => ({ a: s.a - Math.floor(RIG_BY_ID[s.id].blend / 2), b: s.a + Math.ceil(RIG_BY_ID[s.id].blend / 2) })),
+  blends: [],
   whips: RIG.declared.whips,
   samples: RIG.samples,
 };
@@ -378,10 +476,10 @@ export const castAt = (f) => {
     case 'payout': {
       // OPENS mid-action: the bookmaker counts out a heavy pouch across the
       // counter; the gambler takes it with a smug little nod.
-      std('gambler', OUTFITS.gambler, { expr: 'grin', mode: 'stand', blink: blinkAt(f, 11), seed: 11, prop: ['point', 0.35],
-        ...head(f, 11, -1.5, -0.25, 0.0, -0.2) }, GAMBLER_STALL.x, GAMBLER_STALL.z, { yaw: -0.35 });
-      std('bookmaker', OUTFITS.bookmaker, { expr: 'nervous', mode: 'stand', blink: blinkAt(f, 12), seed: 12, prop: ['point', -0.4],
-        ...head(f, 12, 1, 0.3, -0.05, 0.2) }, BOOK_STALL.x, BOOK_STALL.z, { yaw: 0.3 });
+      std('gambler', OUTFITS.gambler, { expr: 'grin', mode: 'stand', blink: blinkAt(f, 11), seed: 11, prop: ['point', q(0.22 + 0.5 * payoutGripG(f).k, 2)],
+        ...head(f, 11, -1.5, -0.25, 0.0, -0.2, payoutGripG(f).squash) }, GAMBLER_STALL.x, GAMBLER_STALL.z, { yaw: -0.35 });
+      std('bookmaker', OUTFITS.bookmaker, { expr: 'nervous', mode: 'stand', blink: blinkAt(f, 12), seed: 12, prop: ['point', q(-0.12 - 0.42 * payoutGripB(f).k, 2)],
+        ...head(f, 12, 1, 0.3, -0.05, 0.2, payoutGripB(f).squash) }, BOOK_STALL.x, BOOK_STALL.z, { yaw: 0.3 });
       std('villager1', OUTFITS.villager1, { expr: 'shock', mode: 'stand', blink: blinkAt(f, 13), seed: 13,
         ...head(f, 13, -2, -0.3, 0.25, 0) }, -4.75, 0.5, { yaw: -0.5 });
       std('villager2', OUTFITS.villager2, { expr: 'shock', mode: 'stand', blink: blinkAt(f, 14), seed: 14,
@@ -470,7 +568,7 @@ export const castAt = (f) => {
       let GP = T.faceP('laugh', 11); GP.blush = 0;
       const winkK = gamblerWink(f);
       if (winkK > 0) GP = T.blendFaceP(GP, T.faceP('wink', 11), winkK);
-      std('gambler', OUTFITS.gambler, { expr: 'laugh', exprP: GP, mode: 'stand', blink: blinkAt(f, 11), seed: 11, headTilt: q(-3 + micro(f, 11), 1), look: q(0.4, 2), lookY: q(0.05, 2) }, PORCH_G.x, PORCH_G.z, { yaw: 0.5 });
+      std('gambler', OUTFITS.gambler, { expr: 'laugh', exprP: GP, mode: 'stand', blink: blinkAt(f, 11), seed: 11, headTilt: q(-3 + micro(f, 11), 1), look: q(0.4, 2), lookY: q(0.05, 2), breath: lifeAt({ seed: 11 })(f).breath }, PORCH_G.x, PORCH_G.z, { yaw: 0.5 });
       std('bookmaker', OUTFITS.bookmaker, { expr: 'shock', mode: 'stand', blink: blinkAt(f, 12), seed: 12,
         ...head(f, 12, 0, -0.4, 0.05, -0.3) }, PORCH_B.x, PORCH_B.z, { yaw: -0.5 });
       break;
@@ -478,8 +576,10 @@ export const castAt = (f) => {
     case 'dialogue': {
       // THE dialogue beat: the gambler PERFORMS his line — mouth driven by
       // the stem inside the speak segment, closed outside it; the bookmaker
-      // only listens (his mouth never opens).
-      std('gambler', OUTFITS.gambler, { mode: 'stand', blink: blinkAt(f, 11), seed: 11, look: 0.35, ...speakFace('smile', f) }, PORCH_G.x, PORCH_G.z, { yaw: 0.45 });
+      // only listens (his mouth never opens). v4: his free hand TALKS with
+      // the voice (gestureAt, pulses on the stressed words).
+      const DG = dialogueGesture(f);
+      std('gambler', OUTFITS.gambler, { mode: 'stand', blink: blinkAt(f, 11), seed: 11, look: 0.35, prop: ['point', q(DG.on ? DG.k : 0.12, 2)], ...speakFace('smile', f) }, PORCH_G.x, PORCH_G.z, { yaw: 0.45 });
       std('bookmaker', OUTFITS.bookmaker, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 12), seed: 12,
         ...head(f, 12, 0, -0.35, 0.05, -0.3) }, PORCH_B.x, PORCH_B.z, { yaw: -0.5 });
       break;
@@ -487,16 +587,16 @@ export const castAt = (f) => {
     case 'son': {
       const SP = sonPose(f), SG = sonGaze(f);
       const released = f >= B('son') + 52;
-      std('son', OUTFITS.son, { expr: released ? 'smile' : 'neutral', mode: SP.mode, squash: SP.squash, blink: blinkAt(f, 31), seed: 31,
-        prop: released ? ['point', 0.85] : null,
+      std('son', OUTFITS.son, { expr: released ? 'smile' : 'neutral', mode: SP.mode, squash: q(SP.squash + sonGrip(f).squash, 2), blink: blinkAt(f, 31), seed: 31,
+        prop: released ? ['point', 0.85] : ['point', q(0.2 + 0.5 * sonGrip(f).k, 2)],
         ...head(f, 31, released ? -2 : 2, SG.look, SG.lookY, -0.15) }, SON.x, SON.z, { yaw: -0.35 });
       break;
     }
     case 'flight': break;   // the pigeon alone against the sky
     case 'sixhours': {
       const KP = gamblerPlatPose(f);
-      std('gambler', OUTFITS.gambler, { expr: f > B('sixhours') + 96 ? 'grin' : 'smile', mode: KP.mode, squash: KP.squash, blink: blinkAt(f, 11), seed: 11,
-        prop: f >= B('sixhours') + 96 && KP.mode === 'stand' ? ['point', -0.4] : null,
+      std('gambler', OUTFITS.gambler, { expr: f > B('sixhours') + 96 ? 'grin' : 'smile', mode: KP.mode, squash: q(KP.squash + perchGrip(f).squash, 2), blink: blinkAt(f, 11), seed: 11,
+        prop: KP.mode !== 'stand' ? ['point', q(-0.15 - 0.5 * perchGrip(f).k, 2)] : (f >= B('sixhours') + 96 ? ['point', -0.4] : null),
         ...head(f, 11, -1.5, GG.look, GG.lookY, -0.2) }, PLAT_G.x, PLAT_G.z, { y: PLATFORM_Y, ground: PLATFORM_Y, blob: false, yaw: -0.5 });
       break;
     }
