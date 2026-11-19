@@ -7,6 +7,13 @@
 // face; wirecu is a pure tripwire-rig insert at ~0.8 m; the hook ends on
 // the watchman IN frame pointing at his board. Timings/captions/mix are
 // the v1 build's, untouched.
+// V4 UPGRADE (2026-11-19, PICTURE ONLY): every shot re-keyed to the v4
+// action camera (fast punch-ins at clause cuts, subject-speed tracking,
+// impact kicks, sigma 2.3 rig), kit body.js v2 wired in (breath + lifeAt
+// on every actor, gestureAt on the dialogue, gripAt on the tying hands,
+// carryDip under the silk bale), and the hook framing tightened so the
+// watchman reads ~26% in the foreground. Stem, script, timings, boards,
+// mix and speakdata are byte-identical to the R2 build.
 // Batch 9 E3 (Mirror Trick Tales). ONE set: a treasure warehouse at night —
 // shelf rows of silk bales, spice sacks and silver chests, a web of
 // knee-high tripwires each tied to a hidden bell, the watchman's bedroll in
@@ -35,7 +42,7 @@
 // the bell beats lift exposure through bellK. Boards/text NEVER graded.
 import { M, blinkAt, q, clamp, lerp, ramp, kf } from './motion.js';
 import { buildRig, keysCam } from './camrig.js';
-import { poseWindows, turnTrack, gazeTrack, winkTrack } from './body.js';
+import { poseWindows, turnTrack, gazeTrack, winkTrack, lifeAt, gestureAt, gripAt, carryDip } from './body.js';
 import * as SOL from './solid.js';
 import * as T from './toon.js';
 import * as SPK from './speak.js';
@@ -230,9 +237,23 @@ const guardGaze = gazeTrack([
 ]);
 const watchmanWink = winkTrack([{ a: 1470, b: 1481 }]);
 const micro = (f, seed) => 1.1 * Math.sin((f + seed * 5) * 0.037 + 1);
+// v4 (body.js v2): continuous life — lifeAt weight-shift/sway folded into
+// every head track, and bodyFront gets breath: f in std() below, so no
+// actor ever stands (or lies) robot-still.
+const LIFE = {};
+const life = (seed) => LIFE[seed] || (LIFE[seed] = lifeAt({ seed, shift: 1.4, swayAmp: 0.7 }));
 const head = (f, seed, tilt, look, lookY, facing = 0, squash = 0) => ({
-  headTilt: q(tilt + micro(f, seed), 1), look: q(look, 2), lookY: q(lookY, 2), facing: q(facing, 2), squash: q(squash, 2),
+  headTilt: q(tilt + micro(f, seed) + 0.6 * life(seed)(f).tilt, 1), look: q(look, 2), lookY: q(lookY, 2), facing: q(facing, 2), squash: q(squash, 2),
 });
+// v4 dialogue gesture: the watchman's free hand talks with the line
+// (beats = the line's word stresses from words.js).
+const dialogueGesture = gestureAt([{ a: 1412, b: 1484, beats: [1418, 1434, 1454, 1475], base: 0.45, amp: 0.16 }]);
+// v4 grips: the tying hands work the string at the two kneels — a lift
+// (gather + pull tight) and a place (press the knot down) per kneel.
+const tyingGrip = gripAt([
+  { f0: 578, type: 'lift', dur: 13 }, { f0: 592, type: 'place', dur: 9 },
+  { f0: 641, type: 'lift', dur: 13 }, { f0: 655, type: 'place', dur: 9 },
+]);
 
 // ---------- hero / focus ----------
 const FOCUS = {
@@ -254,71 +275,140 @@ const FOCUS = {
 };
 export const heroPosAt = (f) => FOCUS[shotAt(f).id](f);
 
-// ---------- cameras: EVERY shot is a camrig track on a subject ----------
+// ---------- cameras: v4 ACTION RIG (2026-11-19 upgrade) ----------
+// Every shot re-keyed from the R2 two-key drift to the v4 grammar of the
+// reference builds (valleyfly / fireless): a fast eased PUNCH-IN landing
+// 13–16 frames after each clause cut (subject scale roughly ×1.5–2),
+// then tracking keys keyed to the subject's own motion, impact kicks on
+// the action, and a tight smoothing pass (sigma 2.3 / radius 7, the
+// shepherd v4 values) so the authored speed survives to the screen.
+// Shot boundaries, staging, boards and timings are UNCHANGED.
 const tyingKeys = () => {
-  const frames = [535, 574, 602, 637, 664];
-  return frames.map((f, i) => {
+  // [frame, cam offset x from the watchman, cam height, cam z, look y, fov]
+  const spec = [
+    [535, 4.7, 1.85, 6.5, 1.0, 42],    // wide as he starts down the lane
+    [550, 3.0, 1.4, 5.1, 0.85, 37],    // punch lands, tracking at his speed
+    [574, 2.7, 1.15, 4.9, 0.6, 36],    // dips with the first kneel
+    [602, 2.7, 1.15, 4.9, 0.6, 36],
+    [637, 2.8, 1.3, 5.0, 0.7, 36],     // rises, tracks the second walk
+    [664, 2.7, 1.15, 4.9, 0.6, 35],    // second kneel
+    [682, 2.7, 1.2, 4.9, 0.65, 35],
+  ];
+  return spec.map(([f, off, h, z, ly, fov], i) => {
     const wx = tyingXAt(f);
-    return { f, pos: [wx + 3.1, 1.5, 5.0], look: [wx - 0.3, 0.85, 2.5], fov: 38 - i * 0.8, ...(i === frames.length - 1 ? { ease: 'io' } : {}) };
+    return { f, pos: [wx + off, h, z], look: [wx - 0.3, ly, 2.5], fov, ...(i > 0 ? { ease: 'io' } : {}) };
   });
 };
 const RIG_BY_ID = {
+  // OPENING: hero BIG from frame 0 (~39%), a fast punch as he starts to
+  // settle onto the cot, then the camera sinks WITH him to a low close
+  // on the lying head (~56%).
   sleep: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('sleep'), pos: [3.9, 1.28, 3.55], look: [1.05, 1.1, 0.92], fov: 38 },
-    { f: B('sleep') + 50, pos: [3.05, 0.98, 3.25], look: [0.0, 0.65, 0.95], fov: 35 },
-    { f: E('sleep'), pos: [1.15, 0.72, 2.95], look: [-0.42, 0.38, 0.98], fov: 33, ease: 'io' }] }) },
+    { f: B('sleep'), pos: [3.35, 1.28, 3.2], look: [1.3, 1.2, 0.92], fov: 41 },
+    { f: B('sleep') + 15, pos: [3.1, 1.18, 3.15], look: [1.42, 1.38, 0.93], fov: 36, ease: 'io' },
+    { f: B('sleep') + 45, pos: [2.3, 0.9, 2.95], look: [0.1, 0.85, 0.96], fov: 34.5, ease: 'io' },
+    { f: B('sleep') + 70, pos: [2.1, 0.78, 2.95], look: [-0.28, 0.48, 0.97], fov: 34, ease: 'io' },
+    { f: E('sleep'), pos: [1.3, 0.68, 2.85], look: [-0.45, 0.4, 0.98], fov: 33, ease: 'io' }] }) },
+  // TREASURE: punch onto the first bale cluster, then a fast dolly that
+  // tracks along the goods row at reading speed.
   treasure: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('treasure'), pos: [-7.5, 1.7, -2.2], look: [-6.2, 1.3, -6.4], fov: 40 },
-    { f: E('treasure'), pos: [6.5, 1.8, -2.4], look: [7.5, 1.2, -6.4], fov: 37, ease: 'io' }] }) },
+    { f: B('treasure'), pos: [-8.7, 1.65, -1.3], look: [-6.5, 1.25, -6.4], fov: 42 },
+    { f: B('treasure') + 16, pos: [-7.0, 1.55, -1.9], look: [-5.7, 1.25, -6.4], fov: 39, ease: 'io' },
+    { f: B('treasure') + 61, pos: [0.4, 1.7, -2.2], look: [1.7, 1.2, -6.4], fov: 38, ease: 'io' },
+    { f: E('treasure'), pos: [6.9, 1.75, -2.3], look: [8.3, 1.2, -6.4], fov: 37, ease: 'io' }] }) },
+  // MEMORY: punch onto the wide-awake guards, then track left at the
+  // thief's own pace as he slips along the shelves behind them.
   memory: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('memory'), pos: [4.2, 1.6, 1.9], look: [4.0, 1.2, -3.8], fov: 39 },
-    { f: E('memory'), pos: [3.9, 1.5, 1.2], look: [4.05, 1.25, -3.85], fov: 35, ease: 'io' }] }) },
+    { f: B('memory'), pos: [5.7, 1.85, 3.5], look: [4.2, 1.25, -3.6], fov: 41 },
+    { f: B('memory') + 15, pos: [4.9, 1.55, 1.6], look: [4.1, 1.22, -3.8], fov: 37, ease: 'io' },
+    { f: B('memory') + 69, pos: [3.5, 1.5, 1.6], look: [3.4, 1.2, -4.1], fov: 36, ease: 'io' },
+    { f: E('memory'), pos: [2.9, 1.45, 1.1], look: [2.5, 1.2, -4.3], fov: 35, ease: 'io' }] }) },
+  // HIRE: two-shot punch-in on owner + watchman, settling tighter.
   hire: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('hire'), pos: [7.6, 1.75, -0.4], look: [10.7, 1.25, -3.85], fov: 37 },
-    { f: E('hire'), pos: [7.2, 1.65, -0.7], look: [10.75, 1.28, -3.85], fov: 33, ease: 'io' }] }) },
+    { f: B('hire'), pos: [6.5, 1.95, 0.7], look: [10.6, 1.3, -3.8], fov: 40 },
+    { f: B('hire') + 15, pos: [7.35, 1.7, -0.55], look: [10.7, 1.27, -3.85], fov: 35, ease: 'io' },
+    { f: E('hire'), pos: [7.0, 1.6, -0.9], look: [10.75, 1.28, -3.85], fov: 32, ease: 'io' }] }) },
   tying: { cut: 'hard', raw: keysCam({ keys: tyingKeys() }) },
+  // LIE: front three-quarter track at his walking speed, then a dip as
+  // he rolls down onto the bedroll.
   lie: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('lie'), pos: [4.55, 2.35, 5.1], look: [0.2, 0.7, 1.1], fov: 42 },
-    { f: E('lie'), pos: [4.0, 2.0, 4.55], look: [0.25, 0.65, 1.1], fov: 37, ease: 'io' }] }) },
+    { f: B('lie'), pos: [1.9, 1.75, 5.7], look: [-0.9, 1.0, 2.4], fov: 41 },
+    { f: B('lie') + 14, pos: [2.7, 1.5, 5.0], look: [-0.2, 0.95, 1.9], fov: 38, ease: 'io' },
+    { f: B('lie') + 45, pos: [3.7, 1.35, 4.5], look: [1.2, 0.8, 1.05], fov: 36, ease: 'io' },
+    { f: E('lie'), pos: [2.45, 0.85, 3.35], look: [0.0, 0.5, 1.02], fov: 34, ease: 'io' }] }) },
+  // THIEVES: punch toward the rope, then the look DIVES with each man
+  // down the rope to the floor.
   thieves: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('thieves'), pos: [-4.6, 1.0, 1.4], look: [-11.9, 2.9, -2.0], fov: 43 },
-    { f: E('thieves'), pos: [-5.4, 1.05, 0.9], look: [-11.6, 2.0, -2.0], fov: 40, ease: 'io' }] }) },
+    { f: B('thieves'), pos: [-6.7, 1.35, 1.9], look: [-12.0, 3.5, -2.0], fov: 43 },
+    { f: B('thieves') + 16, pos: [-7.6, 1.2, 1.2], look: [-12.05, 2.8, -2.0], fov: 40, ease: 'io' },
+    { f: B('thieves') + 70, pos: [-7.9, 1.1, 0.9], look: [-11.9, 1.7, -2.0], fov: 39, ease: 'io' },
+    { f: E('thieves'), pos: [-8.2, 1.05, 0.7], look: [-11.5, 1.15, -2.0], fov: 38, ease: 'io' }] }) },
+  // BELLS: floor-level punch to the stepping feet, tracking at step
+  // speed; at the wire hit the lens WIDENS and kicks, then RISES fast
+  // into the lead thief's shocked face (~65%).
   bells: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('bells'), pos: [-3.0, 0.6, 0.9], look: [-9.6, 0.5, -2.0], fov: 41 },
-    { f: B('bells') + 52, pos: [-3.95, 0.44, -0.3], look: [-8.3, 0.42, -2.05], fov: 37 },
-    { f: B('bells') + 65, pos: [-4.2, 0.4, -0.6], look: [-7.4, 0.42, -2.12], fov: 36.5 },
-    { f: HIT, pos: [-4.05, 0.38, -0.9], look: [-6.12, 0.44, -2.32], fov: 44 },
-    { f: HIT + 19, pos: [-4.55, 0.95, -0.45], look: [-6.3, 1.0, -2.1], fov: 33 },
-    { f: E('bells'), pos: [-4.75, 1.55, -0.55], look: [-6.22, 1.82, -2.02], fov: 31, ease: 'io' }] }) },
+    { f: B('bells'), pos: [-2.5, 0.75, 1.4], look: [-10.0, 0.5, -2.0], fov: 43 },
+    { f: B('bells') + 14, pos: [-3.6, 0.5, -0.1], look: [-8.7, 0.45, -2.05], fov: 38, ease: 'io' },
+    { f: B('bells') + 50, pos: [-4.0, 0.42, -0.5], look: [-7.7, 0.42, -2.1], fov: 37, ease: 'io' },
+    { f: HIT, pos: [-4.05, 0.38, -0.9], look: [-6.12, 0.44, -2.32], fov: 44, ease: 'io' },
+    { f: HIT + 16, pos: [-4.6, 1.02, -0.3], look: [-6.3, 1.08, -2.1], fov: 33, ease: 'io' },
+    { f: E('bells'), pos: [-4.85, 1.58, -0.05], look: [-6.22, 1.84, -2.02], fov: 30, ease: 'io' }] }) },
+  // BELLROW: the bell tour as a fast tracked dolly down the aisle.
   bellrow: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('bellrow'), pos: [-8.8, 1.35, 3.6], look: [-3.0, 1.1, -3.2], fov: 42 },
-    { f: B('bellrow') + 58, pos: [-1.5, 1.3, 3.4], look: [3.5, 1.2, -3.6], fov: 40 },
-    { f: E('bellrow'), pos: [5.8, 1.35, 3.2], look: [11.8, 1.7, -4.3], fov: 38, ease: 'io' }] }) },
+    { f: B('bellrow'), pos: [-9.7, 1.55, 4.2], look: [-3.5, 1.1, -3.2], fov: 44 },
+    { f: B('bellrow') + 15, pos: [-8.2, 1.35, 3.6], look: [-2.8, 1.12, -3.3], fov: 41, ease: 'io' },
+    { f: B('bellrow') + 58, pos: [-1.2, 1.3, 3.35], look: [3.8, 1.2, -3.6], fov: 39, ease: 'io' },
+    { f: E('bellrow'), pos: [6.4, 1.4, 3.1], look: [12.2, 1.75, -4.35], fov: 37, ease: 'io' }] }) },
+  // WAKE: the punch lands exactly as he sits up — reaction face ~64%.
   wake: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('wake'), pos: [3.55, 1.45, 4.8], look: [1.2, 0.9, 1.0], fov: 35 },
-    { f: E('wake'), pos: [2.75, 1.3, 3.35], look: [1.5, 1.15, 0.95], fov: 30, ease: 'io' }] }) },
+    { f: B('wake'), pos: [4.4, 1.65, 5.7], look: [1.25, 0.85, 1.0], fov: 38 },
+    { f: B('wake') + 14, pos: [3.2, 1.4, 4.1], look: [1.35, 1.02, 0.97], fov: 33, ease: 'io' },
+    { f: B('wake') + 50, pos: [2.85, 1.32, 3.5], look: [1.5, 1.15, 0.95], fov: 30, ease: 'io' },
+    { f: E('wake'), pos: [2.62, 1.3, 3.2], look: [1.52, 1.16, 0.95], fov: 29, ease: 'io' }] }) },
+  // YAWN: punch into the great yawn (~52%), holding as it melts into
+  // the smile of a man about to explain.
   yawn: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('yawn'), pos: [-2.2, 1.5, 3.6], look: [1.3, 1.28, 0.88], fov: 36 },
-    { f: E('yawn'), pos: [-2.5, 1.45, 3.3], look: [1.38, 1.3, 0.88], fov: 33, ease: 'io' }] }) },
-  dialogue: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('dialogue'), pos: [2.8, 1.52, 3.15], look: [1.58, 1.43, 0.92], fov: 30 },
-    { f: E('dialogue'), pos: [2.5, 1.47, 2.8], look: [1.6, 1.44, 0.92], fov: 26, ease: 'io' }] }) },
+    { f: B('yawn'), pos: [-0.9, 1.62, 4.3], look: [1.45, 1.3, 0.9], fov: 39 },
+    { f: B('yawn') + 14, pos: [-0.4, 1.52, 3.1], look: [1.52, 1.3, 0.89], fov: 32, ease: 'io' },
+    { f: E('yawn'), pos: [-0.35, 1.5, 3.0], look: [1.54, 1.31, 0.89], fov: 31, ease: 'io' }] }) },
+  // DIALOGUE: entered on a 6-frame WHIP from the yawn framing, a fast
+  // punch-in (13f) to the speaking face, then the camera HOLDS on the
+  // speaker with a micro-push only (face ~36% -> ~79%).
+  dialogue: { cut: 'whip', blend: 6, raw: keysCam({ keys: [
+    { f: B('dialogue'), pos: [3.5, 1.66, 4.15], look: [1.57, 1.42, 0.92], fov: 34 },
+    { f: B('dialogue') + 13, pos: [2.7, 1.52, 3.05], look: [1.59, 1.435, 0.92], fov: 28.5, ease: 'io' },
+    { f: E('dialogue'), pos: [2.55, 1.48, 2.9], look: [1.6, 1.44, 0.92], fov: 27, ease: 'io' }] }) },
+  // WIRECU: pure rig insert — punch from a wider read of the aisle to
+  // the macro of wire, stake and bell, then a slow creep along it.
   wirecu: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('wirecu'), pos: [-4.35, 0.72, -0.95], look: [-6.02, 0.52, -2.58], fov: 36 },
-    { f: B('wirecu') + 74, pos: [-4.95, 0.62, -1.55], look: [-6.03, 0.55, -2.6], fov: 33 },
-    { f: E('wirecu'), pos: [-5.45, 0.56, -2.05], look: [-6.04, 0.57, -2.6], fov: 31, ease: 'io' }] }) },
+    { f: B('wirecu'), pos: [-3.9, 0.85, -0.6], look: [-6.0, 0.5, -2.55], fov: 39 },
+    { f: B('wirecu') + 15, pos: [-4.6, 0.66, -1.3], look: [-6.02, 0.53, -2.58], fov: 34, ease: 'io' },
+    { f: B('wirecu') + 74, pos: [-5.0, 0.6, -1.6], look: [-6.03, 0.55, -2.6], fov: 32, ease: 'io' },
+    { f: E('wirecu'), pos: [-5.5, 0.55, -2.1], look: [-6.04, 0.57, -2.6], fov: 30, ease: 'io' }] }) },
+  // CATRAT: the camera pans WITH the cat and the rat under the wire,
+  // then settles onto the silk carrier for the second hit.
   catrat: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('catrat'), pos: [-3.1, 0.9, 2.2], look: [-6.3, 0.55, -2.0], fov: 39 },
-    { f: E('catrat'), pos: [-3.5, 0.85, 1.9], look: [-6.3, 0.55, -2.0], fov: 36, ease: 'io' }] }) },
+    { f: B('catrat'), pos: [-2.5, 1.0, 2.6], look: [-7.6, 0.5, -1.6], fov: 41 },
+    { f: B('catrat') + 15, pos: [-3.0, 0.9, 2.2], look: [-6.9, 0.52, -1.8], fov: 38, ease: 'io' },
+    { f: B('catrat') + 80, pos: [-3.4, 0.88, 2.0], look: [-5.6, 0.52, -2.0], fov: 37, ease: 'io' },
+    { f: E('catrat'), pos: [-3.6, 0.9, 1.85], look: [-6.25, 0.6, -2.05], fov: 35, ease: 'io' }] }) },
+  // HOOK: character beat + board together — the camera punches from a
+  // wider read (board ~74%, hero ~20%) into the final framing (board
+  // ~85% fully inside, watchman ~26% in the lower-right foreground,
+  // pointing up at his board), then holds to the literal last frame.
   hook: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('hook'), pos: [-1.6, 2.36, 0.55], look: [12.3, 2.62, 0.5], fov: 39 },
-    { f: E('hook'), pos: [-0.7, 2.3, 0.55], look: [12.3, 2.62, 0.5], fov: 37.5, ease: 'io' }] }) },
+    { f: B('hook'), pos: [1.15, 2.45, 0.05], look: [12.3, 2.9, 0.5], fov: 48.5 },
+    { f: B('hook') + 16, pos: [2.2, 2.3, -0.1], look: [12.3, 2.95, 0.5], fov: 47, ease: 'io' },
+    { f: E('hook'), pos: [2.35, 2.28, -0.1], look: [12.3, 2.95, 0.5], fov: 46.5, ease: 'io' }] }) },
 };
 const RIG = buildRig({
   total: TOTAL,
   shots: SHOTS.map((s) => ({ a: s.a, b: s.b, ...RIG_BY_ID[s.id] })),
-  kicks: [{ f: HIT, a: 0.035 }, { f: HIT2, a: 0.03 }],
-  sigma: 3.2, smoothRadius: 10, fovSigma: 1.6,
+  // v4 impact kicks, ON the action: the second step lands (f983), the
+  // wire hit itself (HIT), the sit-up (wake+8), the second wire hit
+  // (HIT2) and the dropped bale's thud (HIT2+16).
+  kicks: [{ f: B('bells') + 50, a: 0.05 }, { f: HIT, a: 0.13 }, { f: B('wake') + 8, a: 0.05 }, { f: HIT2, a: 0.1 }, { f: HIT2 + 16, a: 0.06 }],
+  sigma: 2.3, smoothRadius: 7, fovSigma: 1.6,
 });
 export const camAt = (f) => RIG.camAt(f);
 export const RIG_META = {
@@ -415,7 +505,7 @@ const drawRat = (p) => {
 export const castAt = (f) => {
   const S = shotAt(f), tint = tintFor(S), out = [];
   const std = (id, o, opts, x, z, extra = {}) => out.push({ id, x, y: extra.y ?? 0, z, r: 0.32, ground: extra.ground ?? 0,
-    actor: (T) => ({ key: 'whx' + JSON.stringify(o) + JSON.stringify(opts) + (extra.y ?? 0), draw: (p) => T.bodyFront(p, o, opts), x, y: extra.y ?? 0, z, ground: extra.ground ?? 0, tint, ...extra }) });
+    actor: (T) => ({ key: 'whx' + JSON.stringify(o) + JSON.stringify(opts) + (extra.y ?? 0), draw: (p) => T.bodyFront(p, o, { breath: f, ...opts }), x, y: extra.y ?? 0, z, ground: extra.ground ?? 0, tint, ...extra }) });
   const WG = watchmanGaze(f);
   const wm = watchmanAt(f);
   const watchmanLying = (opts, extra = {}) => std('watchman', OUTFITS.watchman, opts, BED.x, BED.z, { roll: rollAt(f), blob: false, ...extra });
@@ -460,8 +550,9 @@ export const castAt = (f) => {
       const P = tyingPose(f);
       const walking = P.mode === 'stand';
       const dist = Math.abs(tyingXAt(f) - 7.5) + (f > 602 ? Math.abs(tyingXAt(f) - 4.1) : 0);
-      watchmanStd({ expr: 'neutral', mode: walking ? 'march' : P.mode, squash: P.squash, phase: q((dist / 1.55) % 1, 2),
-        blink: blinkAt(f, 31), seed: 31, prop: walking ? null : ['sew', 0.5],
+      const grip = tyingGrip(f);   // v4: hands physically work the string at the kneels
+      watchmanStd({ expr: 'neutral', mode: walking ? 'march' : P.mode, squash: q((P.squash || 0) + grip.squash, 2), phase: q((dist / 1.55) % 1, 2),
+        blink: blinkAt(f, 31), seed: 31, prop: walking ? null : ['sew', q(0.3 + 0.45 * grip.k, 2)],
         ...head(f, 31, walking ? 0 : -4, WG.look, walking ? 0 : -0.3, -0.15) }, { yaw: walking ? -0.45 : -0.7 });
       break;
     }
@@ -538,7 +629,8 @@ export const castAt = (f) => {
       let KP = speakFace('smile', f);
       const wk = watchmanWink(f);
       if (wk > 0) KP = { ...KP, exprP: T.blendFaceP(KP.exprP, T.faceP('wink'), wk) };
-      watchmanStd({ mode: 'stand', blink: blinkAt(f, 31), seed: 31, look: -0.25, ...KP }, { yaw: -0.3 });
+      const gest = dialogueGesture(f);   // v4: the free hand talks with the voice
+      watchmanStd({ mode: 'stand', blink: blinkAt(f, 31), seed: 31, look: -0.25, wave: q(gest.k, 2), ...KP }, { yaw: -0.3 });
       break;
     }
     case 'wirecu': break;   // R2: a PURE rig insert — wire, stake and bell only, no faces at the edges
@@ -551,7 +643,8 @@ export const castAt = (f) => {
         actor: (T) => ({ key: 'rat1', draw: drawRat, x: ratX, y: Math.abs(Math.sin(f * 0.8)) * 0.015, z: -1.6, ground: 0, tint, s: 0.5 }) });
       const hit = f >= HIT2;
       thiefStd(0, { expr: hit ? 'shock' : 'nervous', mode: 'march', phase: q((Math.abs(thiefAt(0, f).x + 8.7) / 1.55) % 1, 2),
-        blink: blinkAt(f, 81), seed: 81, ...head(f, 81, hit ? -2 : 4, 0.1, hit ? 0.1 : -0.2, 0) }, { yaw: 0.2 });
+        blink: blinkAt(f, 81), seed: 81, squash: q(hit ? 0 : carryDip(f, 0.75), 2),   // v4: body dips under the carried bale
+        ...head(f, 81, hit ? -2 : 4, 0.1, hit ? 0.1 : -0.2, 0) }, { yaw: 0.2 });
       break;
     }
     case 'hook': {
