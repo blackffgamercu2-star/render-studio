@@ -369,6 +369,7 @@ export const BOOK_POS = [0, 0, -6];
 const bookG = new THREE.Group(); bookG.position.set(...BOOK_POS); world.add(bookG);
 const coverPivot = new THREE.Group(); coverPivot.position.set(-0.84, 0.14, 0.36); bookG.add(coverPivot);
 const doorPivot = new THREE.Group(); doorPivot.position.set(-0.38, 0.14, -0.4); bookG.add(doorPivot);
+const pageHinge = new THREE.Group();   // R2: the flipping page in the boy's stand book (interior set, pageK)
 {
   const g = bookG;
   // low wooden platform the book stands on
@@ -455,6 +456,14 @@ const INT_POS = [30, 0, -30];
   add(tbox(0.5, 0.05, 0.36, 2), MAT.wood, -0.3, 0.42, -0.28, g, { cast: false }).rotation.x = -0.28;
   const ob = add(new THREE.PlaneGeometry(0.46, 0.32), MAT.pageFace, -0.3, 0.5, -0.24, g, { cast: false });
   ob.rotation.x = -0.62; ob.userData.nd = ndMat;
+  // R2: one loose page on the stand book's right leaf, hinged at the
+  // spine — it flips to the left leaf on pageK (the boy turns it while
+  // hunting the answer, 'reads' shot). Sits a hair above the static
+  // page face so it never z-fights it.
+  const pageTilt = new THREE.Group(); pageTilt.position.set(-0.3, 0.5, -0.235); pageTilt.rotation.x = -0.62; g.add(pageTilt);
+  pageTilt.add(pageHinge);
+  const flipPg = add(new THREE.PlaneGeometry(0.215, 0.3), MAT.pageFace, 0.109, 0, 0.004, pageHinge, { cast: false });
+  flipPg.userData.nd = ndMat;
   // oil lamp: brass base + glass + glow
   add(new THREE.CylinderGeometry(0.09, 0.12, 0.05, 10), MAT.brass, 0.95, 0.11, -0.85, g, { cast: false });
   add(new THREE.SphereGeometry(0.075, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffc36a }), 0.95, 0.2, -0.85, g, { cast: false }).userData.ndSkip = true;
@@ -465,7 +474,7 @@ const INT_POS = [30, 0, -30];
 // transform is mirrored in boards.json — keep in sync. Posts stand OUTSIDE
 // the panel span (panel half-width 1.95 -> posts at +/-2.08). It fades in
 // at the start of the final shot and HOLDS at full opacity to the last frame.
-const boardHook = textBoard(['लेकिन कल...', 'वह आदमी जो बादलों', 'को बुला सकता था?'], 3.9, 1.6, '#2a1a0c', '#ffe9a8', 900, { pitch: 0.21, dy: 0.01 });
+const boardHook = textBoard(['लेकिन कल...', 'वह आदमी जो बादलों', 'को बुला सकता था?'], 3.9, 1.6, '#2a1a0c', '#ffe9a8', 900, { pitch: 0.21, dy: 0.01, fsMul: 0.55 });
 boardHook.position.set(...BOARD_POS); boardHook.rotation.y = BOARD_RY; world.add(boardHook); addBoardOccluder(boardHook, 3.9, 1.6, 'hookK');
 add(tbox(0.09, 2.0, 0.09, 2), MAT.woodDk, BOARD_POS[0] - 2.08, 0.62, BOARD_POS[2] - 0.08, world, { cast: false });
 add(tbox(0.09, 2.0, 0.09, 2), MAT.woodDk, BOARD_POS[0] + 2.08, 0.62, BOARD_POS[2] - 0.08, world, { cast: false });
@@ -621,6 +630,7 @@ function worldState(Ws, f) {
   // the great cover swings on its hinge; the back door on its own
   coverPivot.rotation.y = -(0.16 + 0.62 * (Ws.coverK ?? 0));
   doorPivot.rotation.y = 1.9 * (Ws.doorK ?? 0);
+  pageHinge.rotation.y = -2.75 * (Ws.pageK ?? 0);
   // the sneeze shake: the whole book-box judders on its platform
   const sh = Ws.shakeK ?? 0;
   bookG.rotation.z = sh * 0.022 * Math.sin(f * 2.3);
