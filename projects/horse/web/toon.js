@@ -1179,7 +1179,7 @@ const footStroke = (p, a, b, w, col)=>{
     ], w, col);
 };
 export const bodyFront = (p, o, opts)=>{
-    const { phase = 0, expr = "neutral", mode = "march", look = 0, blink = false, lift = 60, prop = null, tilt = 0, headTilt = 0, wave, light = DEF_LIGHT, facing = 0, seed = 1, exprP = null, airY = 0, squash = 0, lookY = 0, breath = null, clothShade = true } = opts;
+    const { phase = 0, expr = "neutral", mode = "march", look = 0, blink = false, lift = 60, prop = null, propL = null, carry = null, tilt = 0, headTilt = 0, wave, light = DEF_LIGHT, facing = 0, seed = 1, exprP = null, airY = 0, squash = 0, lookY = 0, breath = null, clothShade = true } = opts;
     const Bd = BUILD[o.build ?? "adult"], skin = o.skin ?? SKIN, two = Math.PI * 2, lid = lidOf(blink);
     const H = headBlob(seed, Bd.a, facing), W = 2 * H.a, HH = 2 * H.b, u = W / 100;
     const vS = 1 - (squash || 0); // v2: squash & stretch — head widens/shortens, torso chain compresses toward the sole
@@ -1422,6 +1422,29 @@ export const bodyFront = (p, o, opts)=>{
             ]
         ];
     };
+    // ANIMATION UPGRADE v6 (2026-11-18): two-hand CARRY geometry — both
+    // hands grip one heavy object (the degchi) in front of the body.
+    // carry: 0 = lowered toward the ground, 1 = raised to the chest.
+    // The hands land on the pot's rim sides; the pot itself is drawn
+    // after the arms (below) so hand and object move in the same frames.
+    const carryGeom = ()=>{
+        const gy = chin + (1.02 - 0.40 * clamp(carry ?? 0, 0, 1)) * HH;
+        return { gy, gx: 0.60 * T.a, pw: 0.68 * T.a, py: gy + 0.30 * HH, pry: 0.36 * HH };
+    };
+    const carryPts = (side)=>{
+        const G = carryGeom(), S = sh(side);
+        return [
+            S,
+            [
+                tcx + side * (1.12 * T.a + 6 * u),
+                G.gy + 0.16 * HH
+            ],
+            [
+                tcx + side * G.gx,
+                G.gy
+            ]
+        ];
+    };
     const sw = mode === "march" || mode === "stroll" ? Math.sin(two * phase) : 0;
     const R0 = [
         300 + 47 * u,
@@ -1467,10 +1490,43 @@ export const bodyFront = (p, o, opts)=>{
         front: false
     });
     else {
+        if (carry != null) {
+            arms.push({ pts: carryPts(-1), front: true, aprop: null });
+            arms.push({ pts: carryPts(1), front: true, aprop: null });
+        } else {
         arms.push({
-            pts: prop === "shako" ? hang(-1, 0) : (mode === "kneel" || mode === "kneel1") && !prop ? kneelArm(-1) : hang(-1, -sw),
+            pts: prop === "shako" ? hang(-1, 0) : (mode === "kneel" || mode === "kneel1") && !prop && !propL ? kneelArm(-1) : hang(-1, -sw),
             front: false
         });
+        if (Array.isArray(propL)) {
+            // v6: the LEFT hand gets its own reach path + held item
+            // (mirrored twin of the right array-prop) — two-handed
+            // grips and left-hand work are now possible.
+            const SL = sh(-1), kL = clamp(propL[1], 0, 1);
+            const EL = lerp2([
+                tcx - 1.1 * T.a - 10 * u,
+                SL[1] - 0.15 * HH
+            ], [
+                tcx - 1.2 * T.a - 10 * u,
+                SL[1] + 0.3 * HH
+            ], kL);
+            const HL = lerp2([
+                tcx - 1.15 * T.a - 14 * u,
+                SL[1] - 0.55 * HH
+            ], [
+                tcx - 1.45 * T.a - 22 * u,
+                SL[1] + 0.35 * HH
+            ], kL);
+            arms.push({
+                pts: [
+                    SL,
+                    EL,
+                    HL
+                ],
+                front: true,
+                aprop: propL
+            });
+        }
         if (rifle) {
             const G = lerp2(R0, R1, 0.1);
             arms.push({
@@ -1514,7 +1570,8 @@ export const bodyFront = (p, o, opts)=>{
                         S[1] + 0.4 * HH
                     ]
                 ],
-                front: true
+                front: true,
+                aprop: "icecream"
             });
         } else if (Array.isArray(prop)) {
             const S = sh(1), k = clamp(prop[1], 0, 1);
@@ -1538,12 +1595,14 @@ export const bodyFront = (p, o, opts)=>{
                     E,
                     Hd
                 ],
-                front: true
+                front: true,
+                aprop: prop
             });
         } else arms.push({
             pts: (mode === "kneel" || mode === "kneel1") ? kneelArm(1) : hang(1, sw),
             front: false
         });
+        }
     }
     const drawArm = (a)=>{
         p.stroke(curve(a.pts[0], a.pts[1], a.pts[2]), 5.2 * u, armCol);
@@ -1735,7 +1794,8 @@ export const bodyFront = (p, o, opts)=>{
     for (const a of arms)if (a.front) {
         drawArm(a);
         const [hx, hy] = a.pts[2];
-        if (prop === "icecream") {
+        const aprop = a.aprop !== undefined ? a.aprop : prop;
+        if (aprop === "icecream") {
             p.poly([
                 [
                     hx - 8 * u,
@@ -1752,13 +1812,15 @@ export const bodyFront = (p, o, opts)=>{
             ], "#e0a35a", 1.8 * u);
             p.ell(hx, hy - 19 * u, 11 * u, 10 * u, "#f7c6d9", 2.2 * u);
             p.dot(hx, hy, 5.5 * u);
-        } else if (Array.isArray(prop)) {
+        } else if (Array.isArray(aprop)) {
             // v4: kind-driven held items — prop = [kind, k]. Kinds: 'axe'
             // (the old kit default, now explicit), 'key', 'letter', 'count',
             // 'coin', 'carve', 'sew'; 'point'/'push'/anything else = bare
             // hand, no tool (a pointing or working hand).
-            const kind = prop[0];
-            const ang = rad(-70 + 105 * clamp(prop[1], 0, 1));
+            // v6 (animation upgrade): 'thali' (polished plate gripped by
+            // its rim) and 'cloth' (a folded cloth bundle — the pagdi).
+            const kind = aprop[0];
+            const ang = rad(-70 + 105 * clamp(aprop[1], 0, 1));
             const Rh = (pts)=>rotPts(pts, ang, hx, hy);
             if (kind === "axe") {
                 p.band(Rh([
@@ -1811,6 +1873,24 @@ export const bodyFront = (p, o, opts)=>{
                 p.poly(Rh([[hx - 4 * u, hy - 8 * u], [hx + 4 * u, hy - 8 * u], [hx, hy - 30 * u]]), "#b9c1c9", 2 * u);
             } else if (kind === "sew") {
                 p.band([[hx - 2 * u, hy + 9 * u], [hx + 3 * u, hy - 17 * u]], "#c8ccd2", 1.8 * u, 0.8 * u, "round");
+            } else if (kind === "thali") {
+                // v6: a polished steel thali held BY ITS RIM — bright
+                // radial sheen, a white glint, and (below) the hand dot
+                // re-drawn over the rim edge: the grip reads.
+                p.ell(hx, hy - 7 * u, 16.5 * u, 12.5 * u, "#c7d2d8", 2.2 * u);
+                p.ell(hx, hy - 7 * u, 11.5 * u, 8.5 * u, "#e8f0f2", 0);
+                p.ell(hx - 3 * u, hy - 10 * u, 4.5 * u, 3 * u, "#ffffff", 0);
+                p.stroke([[hx - 13 * u, hy - 13 * u], [hx - 4 * u, hy - 17 * u]], 2.4 * u, "#ffffff");
+            } else if (kind === "cloth") {
+                // v6: a folded cloth bundle in the hand — the sarpanch's
+                // pagdi: dome, wrap folds, a hanging tail. Colour follows
+                // the actor's own turban (o.turban) so the bundle in his
+                // hand IS the pagdi on the thali.
+                const cc = o.turban || "#f3e3bb";
+                p.poly([[hx - 4 * u, hy - 2 * u], [hx + 9 * u, hy + 1 * u], [hx + 7 * u, hy + 16 * u], [hx + 1 * u, hy + 18 * u]], shade(cc, 0.92), 1.8 * u);
+                p.ell(hx, hy - 6 * u, 13 * u, 9.5 * u, cc, 2 * u);
+                p.stroke([[hx - 9 * u, hy - 8 * u], [hx + 8 * u, hy - 10 * u]], 2.2 * u, shade(cc, 0.72));
+                p.stroke([[hx - 10 * u, hy - 2 * u], [hx + 9 * u, hy - 4 * u]], 2.2 * u, shade(cc, 0.72));
             }
             p.dot(hx, hy, 5.5 * u);
         }
@@ -1837,6 +1917,22 @@ export const bodyFront = (p, o, opts)=>{
         ], "#3a3d47", 2.2 * u);
         p.ell(hx, hy + 31 * u, 3.5 * u, 3.5 * u, "#2b7a4b", 1.5 * u);
         p.dot(hx, hy, 5.5 * u);
+    }
+    if (carry != null) {
+        // v6 TWO-HAND CARRY: the degchi hangs between both hands — drawn
+        // after the arms so the belly sits in front of the torso, then
+        // the hands are re-dotted OVER its rim sides with a finger arc:
+        // hand and pot move in the same frames — a real grip.
+        const G = carryGeom();
+        p.ell(tcx, G.py, G.pw, G.pry, "#2b2724", 2.6 * u);
+        p.ell(tcx, G.py - G.pry * 0.82, G.pw * 0.8, G.pry * 0.3, "#3a352f", 2.2 * u);
+        p.ell(tcx, G.py - G.pry * 1.04, G.pw * 0.34, G.pry * 0.2, "#211e1b", 2 * u);
+        p.dot(tcx, G.py - G.pry * 1.18, 3.4 * u, "#0f0d0b");
+        p.stroke([[tcx - G.pw * 0.55, G.py - G.pry * 0.3], [tcx - G.pw * 0.18, G.py - G.pry * 0.48]], 2.6 * u, "#6a6259");
+        for (const sd3 of [-1, 1]) {
+            p.dot(tcx + sd3 * G.gx, G.gy, 5.5 * u);
+            p.stroke([[tcx + sd3 * G.gx - 4 * u, G.gy - 4 * u], [tcx + sd3 * G.gx + 4 * u, G.gy - 4 * u]], 2.6 * u, INK);
+        }
     }
     const Ah = A + headTilt, [cpx, cpy] = rotAbout([
         300,

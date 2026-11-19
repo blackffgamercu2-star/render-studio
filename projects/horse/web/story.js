@@ -44,7 +44,7 @@
 // runs from that stable's front along z~1-3 to the dealer's gate.
 import { M, blinkAt, q, clamp, lerp, ramp, kf, kf3 } from './motion.js';
 import { buildRig, pushInCam, keysCam } from './camrig.js';
-import { poseWindows, turnTrack, winkTrack } from './body.js';
+import { poseWindows, turnTrack, winkTrack, lifeAt, gripAt, gestureAt, stridePh } from './body.js';
 import * as SOL from './solid.js';
 import * as T from './toon.js';
 import * as SPK from './speak.js';
@@ -233,8 +233,16 @@ const FOCUS = {
 };
 export const heroPosAt = (f) => FOCUS[shotAt(f).id](f);
 
-// ---------- cameras: reference grammar — a fresh shot per clause, every
-// hold creeping (keysCam/pushInCam through the damped rig), close-ups big.
+// ---------- cameras: V4 ACTION UPGRADE (2026-11-19) — same staging,
+// anchors and end framings as the R2 build; the MOTION is rebuilt to
+// the v4 grammar (waterrun-hindi / fireless-hindi samples): every shot
+// opens pulled-back and SNAPS in with an easeOut burst over ~14-18
+// frames (subject scale x1.5-2.5), tracking shots ride locked at the
+// subject's own speed, dialogue/grin pushes are front-loaded then
+// hold, and real impact kicks land on the action beats. No slow
+// creep, no frozen holds: after the snap each shot keeps a settle
+// key in motion. The hook/hookq END keys are the R2-proven board
+// framing, byte-identical — only their speed shape changed.
 const dealerPos = (f) => { const d = dealerAt(f); return [d.x, 0, d.z]; };
 const RIG_BY_ID = {
   // R2 OPENING (v2): ON the seller BIG beside his horse from frame 0 —
@@ -245,89 +253,115 @@ const RIG_BY_ID = {
   // mid-action, already pushing in). The first framing (camera SW)
   // stacked the horse's head directly behind the dealer's hat.
   deal: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 0, pos: [3.15, 1.16, 3.4], look: [1.2, 1.5, 6.42], fov: 39 },
-    { f: 84, pos: [2.85, 1.22, 3.9], look: [1.2, 1.49, 6.42], fov: 36.5, ease: 'surge' }] }) },
+    { f: 0, pos: [3.74, 1.28, 2.49], look: [1.2, 1.52, 6.42], fov: 43 },
+    { f: 15, pos: [2.9, 1.2, 3.8], look: [1.2, 1.5, 6.42], fov: 37, ease: 'easeOut' },
+    { f: 84, pos: [2.8, 1.22, 3.95], look: [1.2, 1.49, 6.42], fov: 36, ease: 'smooth' }] }) },
   // R2 ACTION BEAT: the coin pass as a front three-quarter medium-close
   // (moonrent market R3 framing) — both men front-on, faces and torsos
   // in frame, hands meeting at centre, the coin crossing on "paid"
   coins: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 85, pos: [1.0, 1.52, 2.5], look: [1.78, 1.16, 5.12], fov: 39 },
-    { f: 150, pos: [1.16, 1.48, 2.82], look: [1.79, 1.13, 5.13], fov: 35.5, ease: 'surge' }] }) },
+    { f: 85, pos: [0.69, 1.66, 1.45], look: [1.78, 1.16, 5.12], fov: 42 },
+    { f: 99, pos: [1.1, 1.5, 2.7], look: [1.78, 1.16, 5.12], fov: 36.5, ease: 'easeOut' },
+    { f: 150, pos: [1.18, 1.48, 2.86], look: [1.79, 1.13, 5.13], fov: 35, ease: 'smooth' }] }) },
   // HERO horse: low angle, the horse fills the frame, dealer small at left
   horse: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 151, pos: [4.8, 1.85, 18.3], look: [1.2, 1.62, 13.6], fov: 38 },
-    { f: 258, pos: [4.3, 1.78, 17.5], look: [1.25, 1.64, 13.65], fov: 34, ease: 'surge' }] }) },
-  // ride: side tracking, horse + proud rider centred the whole way
-  ride: { cut: 'hard', raw: pushInCam({ subject: horsePosAt, a: 259, b: 345, d0: 9.2, d1: 8.2, h0: 1.62, h1: 1.55, lookOff: [-0.54, 1.45, -0.08], fov0: 40, fov1: 38,
-    dir: () => [0.12, -0.99] }) },
+    { f: 151, pos: [6.06, 1.93, 19.95], look: [1.2, 1.62, 13.6], fov: 41 },
+    { f: 166, pos: [4.45, 1.8, 17.7], look: [1.22, 1.63, 13.62], fov: 35, ease: 'easeOut' },
+    { f: 210, pos: [4.35, 1.79, 17.6], look: [1.24, 1.64, 13.64], fov: 34.5, ease: 'smooth' },
+    { f: 258, pos: [4.25, 1.78, 17.45], look: [1.25, 1.64, 13.65], fov: 34, ease: 'smooth' }] }) },
+  // ride: side tracking at the horse's own speed — the distance snaps
+  // in over the first 15 frames (v4), then the camera rides locked to
+  // the horse, rider centred the whole way
+  ride: { cut: 'hard', raw: (f) => {
+    const h = horsePosAt(f), u = M.easeOut(ramp(f, 259, 274)), d = lerp(11.5, 7.6, u);
+    return { pos: [h[0] + 0.12 * d, lerp(1.75, 1.52, u), h[2] - 0.99 * d], look: [h[0] - 0.54, 1.45, h[2] - 0.08], fov: lerp(43, 38, u), roll: 0 };
+  } },
   // morning: buyer crosses to his stable, hauls the door open — the
   // push keeps going to a true R2 REACTION: his face passes 65% of
   // frame width as the shock lands on "empty"
   morning: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 346, pos: [-8.7, 1.85, -5.6], look: [-10.55, 1.32, 0.35], fov: 40 },
-    { f: 408, pos: [-9.8, 1.7, -4.15], look: [-11.0, 1.4, 0.02], fov: 33, ease: 'smooth' },
-    { f: 465, pos: [-10.62, 1.58, -2.85], look: [-10.84, 1.5, -0.12], fov: 27, ease: 'surge' }] }) },
+    { f: 346, pos: [-7.9, 1.95, -7.3], look: [-10.5, 1.3, 0.4], fov: 43 },
+    { f: 360, pos: [-9.3, 1.78, -4.9], look: [-10.9, 1.36, 0.1], fov: 36, ease: 'easeOut' },
+    { f: 408, pos: [-9.85, 1.68, -4.05], look: [-11.0, 1.42, 0.0], fov: 31, ease: 'smooth' },
+    { f: 430, pos: [-10.5, 1.6, -3.1], look: [-10.85, 1.48, -0.1], fov: 27.5, ease: 'easeOut' },
+    { f: 465, pos: [-10.66, 1.57, -2.78], look: [-10.85, 1.5, -0.12], fov: 26.5, ease: 'smooth' }] }) },
   // INSERT: the padlock — unbroken. the rope — uncut. nothing was forced.
   lock: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 466, pos: [-9.9, 1.38, -1.5], look: [-10.45, 1.05, 0.55], fov: 30 },
-    { f: 519, pos: [-10.15, 1.32, -0.95], look: [-10.46, 1.06, 0.55], fov: 27, ease: 'surge' }] }) },
-  // the empty stall: hay untouched, one moonbeam, slow drift across nothing
+    { f: 466, pos: [-9.63, 1.55, -2.53], look: [-10.45, 1.05, 0.55], fov: 34 },
+    { f: 479, pos: [-10.08, 1.34, -1.05], look: [-10.46, 1.05, 0.55], fov: 27.5, ease: 'easeOut' },
+    { f: 519, pos: [-10.18, 1.31, -0.9], look: [-10.46, 1.06, 0.55], fov: 26.5, ease: 'smooth' }] }) },
+  // the empty stall: hay untouched, one moonbeam — a decisive push
+  // across the nothing in the first 16 frames, then the settle
   empty: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 520, pos: [-10.4, 1.55, 1.5], look: [-14.8, 0.95, 5.0], fov: 42 },
-    { f: 574, pos: [-10.9, 1.48, 2.1], look: [-14.9, 0.92, 5.05], fov: 38, ease: 'surge' }] }) },
+    { f: 520, pos: [-9.9, 1.62, 0.6], look: [-14.8, 0.95, 5.0], fov: 44 },
+    { f: 536, pos: [-10.75, 1.5, 1.95], look: [-14.85, 0.93, 5.02], fov: 38.5, ease: 'easeOut' },
+    { f: 574, pos: [-10.95, 1.47, 2.15], look: [-14.9, 0.92, 5.05], fov: 37.5, ease: 'smooth' }] }) },
   // march: front-track ahead of the furious buyers, faces big, feet locked
   march: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 575, pos: [-15.0, 1.95, -8.6], look: [-17.0, 1.35, -0.8], fov: 43 },
+    { f: 575, pos: [-16.5, 2.05, -9.8], look: [-17.2, 1.35, -0.8], fov: 45 },
+    { f: 589, pos: [-13.6, 1.92, -8.7], look: [-16.2, 1.34, -0.78], fov: 42.5, ease: 'easeOut' },
     { f: 632, pos: [-8.6, 1.88, -8.6], look: [-10.9, 1.32, -0.7], fov: 42, ease: 'smooth' },
-    { f: 687, pos: [-3.0, 1.8, -8.4], look: [-5.9, 1.32, -0.55], fov: 41, ease: 'surge' }] }) },
+    { f: 687, pos: [-2.9, 1.79, -8.35], look: [-5.9, 1.32, -0.55], fov: 40.5, ease: 'surge' }] }) },
   // field: hold the dealer's calm point, then swing WITH his arm to the
   // horse grazing in the field behind him — the payoff lands on the horse
   field: { cut: 'whip', blend: 18, raw: keysCam({ keys: [
-    { f: 688, pos: [-1.9, 1.72, 3.2], look: [0.2, 1.42, 7.6], fov: 39 },
-    { f: 735, pos: [-2.3, 1.66, 4.6], look: [1.4, 1.25, 10.2], fov: 37, ease: 'smooth' },
-    { f: 795, pos: [-0.7, 1.58, 7.6], look: [1.9, 0.95, 11.4], fov: 34, ease: 'surge' }] }) },
+    { f: 688, pos: [-2.1, 1.74, 2.9], look: [0.2, 1.42, 7.6], fov: 40 },
+    { f: 716, pos: [-2.25, 1.66, 4.7], look: [1.5, 1.2, 10.4], fov: 36.5, ease: 'easeInOut' },
+    { f: 795, pos: [-0.65, 1.57, 7.7], look: [1.9, 0.95, 11.4], fov: 33.5, ease: 'surge' }] }) },
   // shrug: the dealer shrugs, takes the next man's coins, hands the rope
   shrug: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 796, pos: [-1.8, 1.72, -1.2], look: [1.4, 1.3, 5.0], fov: 46 },
-    { f: 862, pos: [-1.5, 1.68, -0.5], look: [1.35, 1.29, 5.05], fov: 43, ease: 'smooth' },
-    { f: 914, pos: [-0.6, 1.6, 1.2], look: [0.75, 1.3, 5.25], fov: 36, ease: 'surge' }] }) },
+    { f: 796, pos: [-2.6, 1.8, -2.6], look: [1.4, 1.3, 5.0], fov: 48 },
+    { f: 810, pos: [-1.6, 1.7, -0.7], look: [1.38, 1.29, 5.02], fov: 43.5, ease: 'easeOut' },
+    { f: 862, pos: [-1.45, 1.67, -0.4], look: [1.35, 1.29, 5.05], fov: 42, ease: 'smooth' },
+    { f: 914, pos: [-0.55, 1.6, 1.25], look: [0.75, 1.3, 5.25], fov: 35.5, ease: 'surge' }] }) },
   // follow: night — the seventh buyer crouched in shadow with a lantern,
   // the horse standing in its stall across the yard, both in one frame
   follow: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 915, pos: [-6.2, 2.25, -5.4], look: [-10.9, 0.95, 1.5], fov: 41 },
-    { f: 1024, pos: [-6.7, 2.15, -4.7], look: [-11.0, 0.95, 1.6], fov: 37, ease: 'surge' }] }) },
+    { f: 915, pos: [-5.6, 2.4, -6.6], look: [-10.9, 0.95, 1.5], fov: 44 },
+    { f: 938, pos: [-6.55, 2.18, -4.95], look: [-10.95, 0.95, 1.55], fov: 38, ease: 'easeOut' },
+    { f: 1024, pos: [-6.75, 2.14, -4.6], look: [-11.0, 0.95, 1.6], fov: 36.5, ease: 'smooth' }] }) },
   // slip: side tracking on the horse the whole way home — it is the subject,
-  // biggest in frame; the buyer trails in darkness behind
-  slip: { cut: 'hard', raw: pushInCam({ subject: horsePosAt, a: 1025, b: 1156, d0: 9.0, d1: 8.2, h0: 1.52, h1: 1.48, lookOff: [0.3, 1.38, 0], fov0: 42, fov1: 39,
-    dir: () => [-0.25, -0.97] }) },
+  // biggest in frame; the buyer trails in darkness behind. Distance snaps
+  // in over the first 16 frames (v4), then locked to the horse's speed.
+  slip: { cut: 'hard', raw: (f) => {
+    const h = horsePosAt(f), u = M.easeOut(ramp(f, 1025, 1041)), d = lerp(11.0, 7.9, u);
+    return { pos: [h[0] - 0.25 * d, lerp(1.7, 1.47, u), h[2] - 0.97 * d], look: [h[0] + 0.3, 1.38, h[2]], fov: lerp(45, 39, u), roll: 0 };
+  } },
   // dawn: the confrontation at the gate — rope waved, dealer unruffled
   dawn: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1157, pos: [-1.8, 1.72, 2.5], look: [0.8, 1.35, 7.2], fov: 39 },
-    { f: 1263, pos: [-1.05, 1.62, 3.35], look: [0.85, 1.34, 7.25], fov: 34, ease: 'surge' }] }) },
+    { f: 1157, pos: [-2.7, 1.85, 1.2], look: [0.8, 1.35, 7.2], fov: 42 },
+    { f: 1172, pos: [-1.25, 1.65, 3.15], look: [0.83, 1.34, 7.22], fov: 35, ease: 'easeOut' },
+    { f: 1263, pos: [-1.0, 1.61, 3.4], look: [0.85, 1.34, 7.25], fov: 33.5, ease: 'smooth' }] }) },
   // grin: the dealer's face fills the frame — grin, then the wink
   grin: { cut: 'blend', blend: 14, raw: keysCam({ keys: [
-    { f: 1264, pos: [0.3, 1.62, 4.8], look: [1.5, 1.5, 7.9], fov: 34 },
-    { f: 1338, pos: [0.55, 1.58, 5.45], look: [1.5, 1.5, 7.9], fov: 29, ease: 'surge' }] }) },
+    { f: 1264, pos: [0.05, 1.66, 4.15], look: [1.5, 1.5, 7.9], fov: 36 },
+    { f: 1282, pos: [0.5, 1.59, 5.3], look: [1.5, 1.5, 7.9], fov: 29.5, ease: 'easeOut' },
+    { f: 1338, pos: [0.58, 1.57, 5.5], look: [1.5, 1.5, 7.9], fov: 28.5, ease: 'smooth' }] }) },
   // dialogue: the camera HOLDS on the speaker for the whole line (speak
-  // gate rule) — one slow push, no cutaway. R2: tightened to moonrent's
-  // dialogue scale, the face growing ~38% -> ~58% of frame width
+  // gate rule) — no cutaway. V4: the push is front-loaded (the face
+  // reaches dialogue scale by ~f1395), then a true hold with only
+  // micro-settle for the rest of the line
   dialogue: { cut: 'blend', blend: 14, raw: keysCam({ keys: [
-    { f: 1339, pos: [0.3, 1.6, 3.55], look: [1.42, 1.44, 7.88], fov: 36 },
-    { f: 1459, pos: [0.6, 1.56, 5.2], look: [1.46, 1.44, 7.89], fov: 28.5, ease: 'surge' }] }) },
+    { f: 1339, pos: [0.22, 1.62, 3.3], look: [1.42, 1.44, 7.88], fov: 37 },
+    { f: 1395, pos: [0.58, 1.57, 5.05], look: [1.45, 1.44, 7.89], fov: 29, ease: 'easeOut' },
+    { f: 1459, pos: [0.62, 1.56, 5.24], look: [1.46, 1.44, 7.89], fov: 28.3, ease: 'smooth' }] }) },
   // treat: R2 INSERT first — the camera opens ON the midnight treat
   // bowl waiting by the shed door, the bowl filling ~90% of frame
   // width in the lantern pool; then one continuous pull-back reveals
   // the ritual: the dealer kneeling, the horse's head coming down
   treat: { cut: 'hard', raw: keysCam({ keys: [
     { f: 1460, pos: [6.66, 0.6, 11.6], look: [7.04, 0.3, 13.14], fov: 36 },
-    { f: 1520, pos: [5.5, 1.05, 10.4], look: [6.95, 0.7, 13.2], fov: 37, ease: 'smooth' },
-    { f: 1587, pos: [4.35, 1.4, 9.5], look: [7.0, 0.95, 13.3], fov: 37, ease: 'surge' }] }) },
+    { f: 1500, pos: [4.9, 1.25, 9.95], look: [6.98, 0.85, 13.25], fov: 37, ease: 'easeOut' },
+    { f: 1587, pos: [4.3, 1.42, 9.45], look: [7.0, 0.95, 13.3], fov: 37, ease: 'smooth' }] }) },
   // hookq: R2 — the gate at dusk, the board rising into frame as the
   // question is asked; the dealer already kneels in the foreground
-  // below it, pointing up (the final's character beat starts here)
+  // below it, pointing up (the final's character beat starts here).
+  // V4: the push-in is front-loaded; the END key is the R2-proven
+  // board framing, untouched.
   hookq: { cut: 'whip', blend: 20, raw: keysCam({ keys: [
-    { f: 1588, pos: [0.15, 2.3, -6.4], look: [1.1, 2.2, 8.55], fov: 44 },
-    { f: 1650, pos: [0.45, 2.08, -4.6], look: [1.1, 2.19, 8.55], fov: 42.5, ease: 'surge' }] }) },
+    { f: 1588, pos: [0.05, 2.42, -7.6], look: [1.1, 2.2, 8.55], fov: 46 },
+    { f: 1606, pos: [0.42, 2.1, -4.85], look: [1.1, 2.19, 8.55], fov: 42.8, ease: 'easeOut' },
+    { f: 1650, pos: [0.45, 2.08, -4.6], look: [1.1, 2.19, 8.55], fov: 42.5, ease: 'smooth' }] }) },
   // hook: R2 FINAL — character beat + board together: the kneeling
   // dealer in the foreground points up at the board, full and readable
   // with margins, held to the literal last frame
@@ -338,7 +372,13 @@ const RIG_BY_ID = {
 const RIG = buildRig({
   total: TOTAL,
   shots: SHOTS.map((s) => ({ a: s.a, b: s.b, ...RIG_BY_ID[s.id] })),
-  kicks: [{ f: 415, a: 0.02 }, { f: 1088, a: 0.02 }],
+  // V4 impact kicks (amplitudes in the proven sample range; the old
+  // 0.02 ticks were inaudible): the coin lands in the dealer's palm
+  // (f112), the stable door bangs fully open (f418), the rope changes
+  // hands (f872), the horse bursts out and breaks into its trot
+  // (f1078), the horse's head lands at the treat bowl (f1488), the
+  // hook board finishes rising (f1632).
+  kicks: [{ f: 112, a: 0.16 }, { f: 418, a: 0.2 }, { f: 872, a: 0.12 }, { f: 1078, a: 0.22 }, { f: 1488, a: 0.13 }, { f: 1632, a: 0.12 }],
   sigma: 2.3, fovSigma: 1.6,
 });
 export const camAt = (f) => ({ ...RIG.camAt(f), flash: 0 });
@@ -459,6 +499,20 @@ const buyer7Pose = poseWindows([{ a: 922, b: 1016, mode: 'kneel1', inF: 7, outF:
 const buyer1Turn = turnTrack([{ f0: 420, dur: 12, dir: -1 }]);
 const dealerWink = winkTrack([{ a: 1300, b: 1312 }]);
 const SPEAK = SPK.makeSpeakPlayer(SPEAK_DATA);
+// ---------- ANIMATION UPGRADE v2 (kit body.js, 2026-11-19) ----------
+// Continuous life on every standing figure (breath + weight shift +
+// micro sway — no robot-standing), physical grips on the two coin
+// passes (the hand rises to meet, takes the weight, settles), a
+// dialogue gesture hand that talks with the performed line, and
+// march phases measured from DISTANCE travelled (feet plant, no
+// glide) instead of a free-running clock.
+const lifeDealer = lifeAt({ seed: 31 }), lifeBuyer1 = lifeAt({ seed: 51 }), lifeBuyer2 = lifeAt({ seed: 61 }),
+  lifeBuyer3 = lifeAt({ seed: 81 }), lifeBuyer7 = lifeAt({ seed: 71 });
+const LIFE_FOR = { dealer: lifeDealer, buyer1: lifeBuyer1, buyer2: lifeBuyer2, buyer3: lifeBuyer3, buyer7: lifeBuyer7 };
+const gestDealer = gestureAt([{ a: 1339, b: 1459, beats: [1368, 1400, 1431, 1452], base: 0.42, amp: 0.15 }]);
+const coinGripB1 = gripAt([{ f0: 84, dur: 2, type: 'lift' }, { f0: 100, dur: 12, type: 'place', settle: 6 }]);
+const coinGripD = gripAt([{ f0: 104, dur: 16, type: 'lift', settle: 8 }]);
+const coinGripB2 = gripAt([{ f0: 826, dur: 2, type: 'lift' }, { f0: 862, dur: 12, type: 'place', settle: 6 }]);
 const micro = (f, seed) => 1.1 * Math.sin((f + seed * 5) * 0.037 + 1);
 const nodAt = (f, f0, n = 9, depth = 0.34) => (f >= f0 && f <= f0 + n ? Math.sin((f - f0) / n * Math.PI) * depth : 0);
 const head = (f, seed, tilt, look, lookY, facing = 0, squash = 0) => ({
@@ -467,10 +521,21 @@ const head = (f, seed, tilt, look, lookY, facing = 0, squash = 0) => ({
 
 export const castAt = (f) => {
   const S = shotAt(f), tint = tintFor(S), out = [];
-  const std = (id, o, opts, x, z, extra = {}) => out.push({ id, x, y: extra.y || 0, z, r: extra.r || 0.32, ground: extra.groundY ?? 0, grp: extra.grp || '',
-    actor: (T) => ({ key: 'hsx' + JSON.stringify(o) + JSON.stringify(opts) + (extra.y || 0),
-      draw: (p) => { T.bodyFront(p, o, opts); },
-      x, y: extra.y || 0, z, ground: extra.groundY ?? 0, tint, ...extra }) });
+  const std = (id, o, opts0, x, z, extra = {}) => {
+    // v2 life injection: every non-marching figure breathes and shifts
+    // its weight (kit lifeAt via the toon v6 tilt/breath opts). March
+    // keeps its own gait sway inside the renderer.
+    let opts = opts0;
+    const LF = LIFE_FOR[id];
+    if (LF && opts0.mode !== 'march') {
+      const L = LF(f);
+      opts = { tilt: q(L.tilt + L.sway, 1), breath: Math.round(L.breath / 6) * 6, ...opts0 };
+    }
+    out.push({ id, x, y: extra.y || 0, z, r: extra.r || 0.32, ground: extra.groundY ?? 0, grp: extra.grp || '',
+      actor: (T) => ({ key: 'hsx' + JSON.stringify(o) + JSON.stringify(opts) + (extra.y || 0),
+        draw: (p) => { T.bodyFront(p, o, opts); },
+        x, y: extra.y || 0, z, ground: extra.groundY ?? 0, tint, ...extra }) });
+  };
   const d = dealerAt(f), b1 = buyer1At(f), b2 = buyer2At(f), b3 = buyer3At(f), b7 = buyer7At(f);
   let DP = emoDealer.at(f);
   const P1 = emoBuyer1.at(f), P2 = emoBuyer2.at(f), P3 = emoBuyer3.at(f), P7 = emoBuyer7.at(f);
@@ -493,9 +558,9 @@ export const castAt = (f) => {
       // FLIPPED (moonrent market rule): the prop arm sits on a fixed
       // side of the card, and unflipped it pointed AWAY from centre —
       // his received coin fell outside the tight frame entirely
-      std('dealer', OUTFITS.dealer, { expr: 'smile', exprP: DP, mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: f >= 112 ? ['coin', 0.55] : ['point', 0.4],
-        ...head(f, 31, -2.5, -0.3, 0.5, -0.3) }, d.x, d.z, { yaw: 0.4, flip: true });
-      std('buyer1', OUTFITS.buyer1, { expr: 'smile', exprP: P1, mode: 'stand', blink: blinkAt(f, 51), seed: 51, prop: f < 112 ? ['coin', 0.5] : null,
+      std('dealer', OUTFITS.dealer, { expr: 'smile', exprP: DP, mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: f >= 112 ? ['coin', q(0.25 + 0.32 * coinGripD(f).k, 2)] : ['point', 0.4],
+        ...head(f, 31, -2.5, -0.3, 0.5, -0.3), squash: q(coinGripD(f).squash, 2) }, d.x, d.z, { yaw: 0.4, flip: true });
+      std('buyer1', OUTFITS.buyer1, { expr: 'smile', exprP: P1, mode: 'stand', blink: blinkAt(f, 51), seed: 51, prop: f < 112 ? ['coin', q(0.25 + 0.3 * coinGripB1(f).k, 2)] : null,
         ...head(f, 51, -1.5, -0.35, 0.45, -0.35) }, b1.x, b1.z, { yaw: -0.4 });
       break;
     }
@@ -516,7 +581,7 @@ export const castAt = (f) => {
     case 'morning': {
       const walking = f >= 348 && f < 390;
       const Tn = buyer1Turn(f);
-      std('buyer1', OUTFITS.buyer1, { expr: 'smile', exprP: P1, mode: walking ? 'march' : 'stand', phase: q((f * 0.013) % 1, 2), squash: Tn.squash, blink: blinkAt(f, 51), seed: 51, prop: f >= 392 && f < 420 ? ['point', 0.5] : null,
+      std('buyer1', OUTFITS.buyer1, { expr: 'smile', exprP: P1, mode: walking ? 'march' : 'stand', phase: q(stridePh(-9.2, b1.x), 2), squash: Tn.squash, blink: blinkAt(f, 51), seed: 51, prop: f >= 392 && f < 420 ? ['point', 0.5] : null,
         ...head(f, 51, walking ? 1.5 * Math.sin(f * 0.26) : kf([[390, 0], [420, -2], [436, -6], [465, -5]], f),
           kf([[390, 0.2], [420, 0.5], [465, 0.1]], f), kf([[390, 0.1], [420, 0.45], [465, 0.2]], f), kf([[390, 0.3], [436, 0], [465, 0]], f)) },
         b1.x, b1.z, { yaw: -0.5 + Tn.yaw, y: Tn.hop });
@@ -524,12 +589,14 @@ export const castAt = (f) => {
     }
     case 'march': {
       const marching = f < 678;
-      const ph = q((f * 0.014) % 1, 2);
+      // v2: each buyer's gait phase comes from HIS OWN distance
+      // travelled (stridePh) — feet plant on the ground he covers
+      const ph = q(stridePh(-15.5, b1.x), 2);
       std('buyer1', OUTFITS.buyer1, { expr: 'stern', exprP: P1, mode: marching ? 'march' : 'stand', phase: ph, blink: blinkAt(f, 51), seed: 51, prop: ['point', 0.8],
         ...head(f, 51, marching ? 1.6 * Math.sin(f * 0.28) : -1, 0.3, 0, 0.3) }, b1.x, b1.z, { yaw: 0.35 });
-      std('buyer2', OUTFITS.buyer2, { expr: 'stern', exprP: P2, mode: marching ? 'march' : 'stand', phase: q((ph + 0.35) % 1, 2), blink: blinkAt(f, 61), seed: 61,
+      std('buyer2', OUTFITS.buyer2, { expr: 'stern', exprP: P2, mode: marching ? 'march' : 'stand', phase: q(stridePh(-16.6, b2.x), 2), blink: blinkAt(f, 61), seed: 61,
         ...head(f, 61, marching ? 1.6 * Math.sin(f * 0.28 + 1.2) : -1, 0.25, 0, 0.25) }, b2.x, b2.z, { yaw: 0.3 });
-      std('buyer3', OUTFITS.buyer3, { expr: 'stern', exprP: P3, mode: marching ? 'march' : 'stand', phase: q((ph + 0.6) % 1, 2), blink: blinkAt(f, 81), seed: 81,
+      std('buyer3', OUTFITS.buyer3, { expr: 'stern', exprP: P3, mode: marching ? 'march' : 'stand', phase: q(stridePh(-17.3, b3.x), 2), blink: blinkAt(f, 81), seed: 81,
         ...head(f, 81, marching ? 1.6 * Math.sin(f * 0.28 + 2.1) : -1, 0.3, 0, 0.3) }, b3.x, b3.z, { yaw: 0.3 });
       std('dealer', OUTFITS.dealer, { expr: 'smile', exprP: DP, mode: 'stand', blink: blinkAt(f, 31), seed: 31,
         ...head(f, 31, -1, -0.5, 0.05, -0.5) }, d.x, d.z, { yaw: -0.5 });
@@ -547,7 +614,7 @@ export const castAt = (f) => {
       const shrugK = f >= 806 && f <= 852 ? Math.sin((f - 806) / 46 * Math.PI) : 0;
       std('dealer', OUTFITS.dealer, { expr: 'smile', exprP: DP, mode: 'stand', blink: blinkAt(f, 31), seed: 31, prop: f >= 872 ? ['point', 0.5] : null,
         ...head(f, 31, -2 + 3.2 * shrugK, 0.3, 0.15, 0.3, q(0.1 * shrugK, 2)) }, d.x, d.z, { yaw: 0.4 });
-      std('buyer2', OUTFITS.buyer2, { expr: 'smile', exprP: P2, mode: 'stand', blink: blinkAt(f, 61), seed: 61, prop: f >= 838 && f < 880 ? ['coin', 0.5] : null,
+      std('buyer2', OUTFITS.buyer2, { expr: 'smile', exprP: P2, mode: 'stand', blink: blinkAt(f, 61), seed: 61, prop: f >= 830 && f < 878 ? ['coin', q(0.25 + 0.3 * coinGripB2(f).k, 2)] : null,
         ...head(f, 61, -1, -0.35, 0.3, -0.35) }, b2.x, b2.z, { yaw: -0.4 });
       break;
     }
@@ -561,7 +628,7 @@ export const castAt = (f) => {
     case 'slip': {
       // trailing the horse through the dark, staying in its shadow
       const walking = f > 1040;
-      std('buyer7', OUTFITS.buyer7, { expr: 'stern', exprP: P7, mode: walking ? 'march' : 'stand', phase: q((f * 0.012) % 1, 2), blink: blinkAt(f, 71), seed: 71,
+      std('buyer7', OUTFITS.buyer7, { expr: 'stern', exprP: P7, mode: walking ? 'march' : 'stand', phase: q(stridePh(-8.45, b7.x), 2), blink: blinkAt(f, 71), seed: 71,
         ...head(f, 71, walking ? 1.4 * Math.sin(f * 0.25) : -2, 0.5, 0.15, 0.45) }, b7.x, b7.z, { yaw: 0.45 });
       break;
     }
@@ -586,6 +653,7 @@ export const castAt = (f) => {
       const s = SPEAK.at(f);
       const spoken = SPK.applySpeak({ ...DP }, s);
       std('dealer', OUTFITS.dealer, { expr: 'smile', exprP: spoken, mode: 'stand', blink: blinkAt(f, 31), seed: 31,
+        propL: ['point', q(gestDealer(f).k, 2)],
         ...head(f, 31, -3 + q(s.nod * 40, 2), -0.3, 0, -0.35) }, d.x, d.z, { yaw: -0.4 });
       std('buyer7', OUTFITS.buyer7, { expr: 'neutral', exprP: P7, mode: 'stand', blink: blinkAt(f, 71), seed: 71,
         ...head(f, 71, kf([[1339, -1], [1400, -2.5], [1459, -3]], f), 0.5, 0.1, 0.5) }, b7.x, b7.z, { yaw: 0.5 });
