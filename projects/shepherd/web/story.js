@@ -41,7 +41,7 @@
 // board, grinning and pointing up at it, board fully readable alongside.
 import { M, blinkAt, q, clamp, lerp, ramp, kf } from './motion.js';
 import { buildRig, keysCam } from './camrig.js';
-import { poseWindows, winkTrack } from './body.js';
+import { poseWindows, winkTrack, lifeAt } from './body.js';
 import * as SOL from './solid.js';
 import * as T from './toon.js';
 import * as SPK from './speak.js';
@@ -208,8 +208,10 @@ export const sheepAt = (f) => {
 const merchantPose = poseWindows([{ a: 663 + 10, b: 772, mode: 'kneel', inF: 10, outF: 4 }]);
 const shepherdWink = winkTrack([{ a: 1645 + 88, b: 1645 + 103 }]);
 const micro = (f, seed) => 1.1 * Math.sin((f + seed * 5) * 0.037 + 1);
+const LIFE = {};
+const life = (seed) => LIFE[seed] || (LIFE[seed] = lifeAt({ seed, shift: 1.4, swayAmp: 0.7 }));
 const head = (f, seed, tilt, look, lookY, facing = 0, squash = 0) => ({
-  headTilt: q(tilt + micro(f, seed), 1), look: q(look, 2), lookY: q(lookY, 2), facing: q(facing, 2), squash: q(squash, 2),
+  headTilt: q(tilt + micro(f, seed) + 0.6 * life(seed)(f).tilt, 1), look: q(look, 2), lookY: q(lookY, 2), facing: q(facing, 2), squash: q(squash, 2),
 });
 
 // ---------- hero / focus ----------
@@ -238,79 +240,107 @@ const RIG_BY_ID = {
   // (head ~52% of frame width), low angle, the split gate dead centre
   // behind him with the flock streaming through it; push-in to ~66%.
   open: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('open'), pos: [4.95, 1.47, 4.25], look: [2.3, 1.5, 1.3], fov: 40 },
-    { f: E('open'), pos: [4.55, 1.42, 3.85], look: [2.45, 1.58, 1.4], fov: 37.5, ease: 'io' }] }) },
+    { f: B('open'), pos: [5.15, 1.5, 4.45], look: [2.35, 1.52, 1.35], fov: 40 },
+    { f: B('open') + 15, pos: [4.48, 1.48, 3.63], look: [2.48, 1.58, 1.42], fov: 36, ease: 'surge' },
+    { f: E('open'), pos: [4.34, 1.45, 3.52], look: [2.52, 1.6, 1.42], fov: 35, ease: 'surge' }] }) },
   announce: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('announce'), pos: [2.35, 1.62, 11.9], look: [0.82, 1.45, 8.2], fov: 38 },
-    { f: E('announce'), pos: [2.05, 1.55, 11.15], look: [0.84, 1.47, 8.2], fov: 34, ease: 'io' }] }) },
+    { f: B('announce'), pos: [2.5, 1.66, 12.3], look: [0.82, 1.47, 8.2], fov: 39 },
+    { f: B('announce') + 16, pos: [1.85, 1.75, 10.74], look: [0.83, 1.52, 8.2], fov: 35, ease: 'surge' },
+    { f: E('announce'), pos: [1.95, 1.68, 10.9], look: [0.84, 1.5, 8.2], fov: 34, ease: 'surge' }] }) },
   // R2: the two merchants fill the frame (shepherd out of shot — no more
   // half-hidden face at the edge); heads ~37-46% with a push-in.
   merchants: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('merchants'), pos: [-1.02, 1.52, 9.4], look: [-0.95, 1.35, 5.05], fov: 39 },
-    { f: E('merchants'), pos: [-1.0, 1.49, 9.1], look: [-0.93, 1.37, 5.08], fov: 37.5, ease: 'io' }] }) },
+    { f: B('merchants'), pos: [-0.85, 1.56, 9.7], look: [-0.98, 1.38, 5.0], fov: 40 },
+    { f: B('merchants') + 15, pos: [-0.95, 1.52, 8.55], look: [-1.0, 1.4, 5.02], fov: 36, ease: 'surge' },
+    { f: B('merchants') + 70, pos: [-0.82, 1.5, 8.42], look: [-0.88, 1.4, 5.12], fov: 35, ease: 'smooth' },
+    { f: E('merchants'), pos: [-0.78, 1.49, 8.32], look: [-0.86, 1.41, 5.14], fov: 35, ease: 'surge' }] }) },
   // R2: both rivals in one frame, peeking over their rocks (rival2 moved
   // in beside rival1 — the 9:16 hfov cannot hold the old 4 m spread).
   rivals: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('rivals'), pos: [-0.9, 1.56, -3.05], look: [-1.55, 1.22, -7.9], fov: 40 },
-    { f: E('rivals'), pos: [-1.0, 1.52, -3.45], look: [-1.56, 1.24, -7.9], fov: 37, ease: 'io' }] }) },
+    { f: B('rivals'), pos: [-0.7, 1.78, -2.55], look: [-1.5, 1.25, -7.9], fov: 41 },
+    { f: B('rivals') + 16, pos: [-0.95, 1.55, -3.9], look: [-1.56, 1.26, -7.9], fov: 36, ease: 'surge' },
+    { f: E('rivals'), pos: [-1.0, 1.52, -4.05], look: [-1.58, 1.27, -7.9], fov: 35, ease: 'surge' }] }) },
   // R2 sit: framed head-to-boot so the tapping stick on his boot stays in
   // frame (look low, frame height ~2.05 m at the subject).
   sit: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('sit'), pos: [5.7, 1.3, 3.82], look: [2.92, 1.38, 1.72], fov: 38 },
-    { f: E('sit'), pos: [5.42, 1.27, 3.56], look: [2.92, 1.4, 1.72], fov: 36, ease: 'io' }] }) },
+    { f: B('sit'), pos: [5.85, 1.34, 3.95], look: [2.92, 1.36, 1.72], fov: 39 },
+    { f: B('sit') + 14, pos: [5.35, 1.29, 3.5], look: [2.92, 1.4, 1.72], fov: 35, ease: 'surge' },
+    { f: B('sit') + 70, pos: [5.2, 1.22, 3.38], look: [2.95, 1.3, 1.75], fov: 34, ease: 'smooth' },
+    { f: E('sit'), pos: [5.15, 1.24, 3.35], look: [2.95, 1.33, 1.75], fov: 34, ease: 'surge' }] }) },
   hide: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('hide'), pos: [-5.5, 1.32, 8.35], look: [-2.15, 1.02, 4.62], fov: 37 },
-    { f: E('hide'), pos: [-5.24, 1.29, 7.98], look: [-2.13, 1.04, 4.62], fov: 34, ease: 'io' }] }) },
+    { f: B('hide'), pos: [-5.75, 1.4, 8.7], look: [-2.12, 1.05, 4.6], fov: 38 },
+    { f: B('hide') + 15, pos: [-5.3, 1.33, 7.9], look: [-2.13, 1.06, 4.62], fov: 34, ease: 'surge' },
+    { f: E('hide'), pos: [-5.15, 1.3, 7.7], look: [-2.14, 1.08, 4.62], fov: 33, ease: 'surge' }] }) },
   drone: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('drone'), pos: [7.4, 11.8, 10.8], look: [0, 0.2, -3.6], fov: 45 },
-    { f: E('drone'), pos: [6.5, 10.4, 9.4], look: [0.1, 0.25, -3.4], fov: 42, ease: 'io' }] }) },
+    { f: B('drone'), pos: [8.6, 14.5, 12.6], look: [0, 0.2, -3.8], fov: 46 },
+    { f: B('drone') + 40, pos: [7.0, 10.8, 10.2], look: [0.05, 0.25, -3.6], fov: 43, ease: 'easeInOut' },
+    { f: E('drone'), pos: [6.2, 9.2, 8.8], look: [0.1, 0.3, -3.2], fov: 41, ease: 'surge' }] }) },
   // R2 gate: shepherd right (head ~42%), the gate + crossing sheep left —
   // the tap and the swing read as one event in one frame.
   gate: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('gate'), pos: [5.6, 1.5, 4.6], look: [1.7, 1.28, 0.95], fov: 39 },
-    { f: E('gate'), pos: [5.35, 1.46, 4.3], look: [1.72, 1.3, 0.95], fov: 36, ease: 'io' }] }) },
+    { f: B('gate'), pos: [5.85, 1.56, 4.9], look: [1.68, 1.3, 0.95], fov: 40 },
+    { f: B('gate') + 15, pos: [5.3, 1.48, 4.25], look: [1.72, 1.31, 0.95], fov: 35, ease: 'surge' },
+    { f: B('gate') + 105, pos: [5.15, 1.45, 4.1], look: [1.3, 1.15, 0.6], fov: 35, ease: 'smooth' },
+    { f: E('gate'), pos: [5.25, 1.47, 4.2], look: [1.7, 1.3, 0.95], fov: 35, ease: 'surge' }] }) },
   gold: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('gold'), pos: [1.75, 1.56, 11.6], look: [-0.25, 1.35, 7.95], fov: 37 },
-    { f: E('gold'), pos: [1.6, 1.52, 11.15], look: [-0.23, 1.37, 7.95], fov: 34, ease: 'io' }] }) },
+    { f: B('gold'), pos: [1.95, 1.62, 12.1], look: [-0.22, 1.37, 7.95], fov: 38 },
+    { f: B('gold') + 16, pos: [1.7, 1.55, 11.2], look: [-0.24, 1.38, 7.95], fov: 34, ease: 'surge' },
+    { f: E('gold'), pos: [1.62, 1.53, 11.0], look: [-0.23, 1.39, 7.95], fov: 33, ease: 'surge' }] }) },
   // R2 INSERT: pure object shot — camera low at the stick's base, raking
   // up the notches to the knob, roll -22 so the stick runs diagonal and
   // fills the frame; the shepherd is geometrically out of frame.
   stick: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('stick'), pos: [3.18, 0.52, 3.32], look: [2.31, 0.92, 2.17], fov: 37, roll: -22 },
-    { f: E('stick'), pos: [3.02, 0.88, 3.16], look: [2.25, 1.28, 2.13], fov: 34, roll: -22, ease: 'io' }] }) },
-  dialogue: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('dialogue'), pos: [2.5, 1.58, 6.6], look: [1.31, 1.5, 3.0], fov: 31 },
-    { f: E('dialogue'), pos: [2.35, 1.55, 6.25], look: [1.31, 1.51, 3.0], fov: 29, ease: 'io' }] }) },
+    { f: B('stick'), pos: [3.3, 0.44, 3.45], look: [2.32, 0.85, 2.18], fov: 38, roll: -22 },
+    { f: B('stick') + 14, pos: [3.08, 0.72, 3.24], look: [2.28, 1.1, 2.15], fov: 34, roll: -22, ease: 'surge' },
+    { f: E('stick'), pos: [2.98, 0.95, 3.12], look: [2.24, 1.32, 2.12], fov: 33, roll: -22, ease: 'surge' }] }) },
+  dialogue: { cut: 'whip', blend: 6, raw: keysCam({ keys: [
+    { f: B('dialogue'), pos: [2.62, 1.62, 6.95], look: [1.31, 1.52, 3.0], fov: 33 },
+    { f: B('dialogue') + 14, pos: [2.38, 1.56, 6.15], look: [1.31, 1.52, 3.0], fov: 29, ease: 'surge' },
+    { f: E('dialogue'), pos: [2.3, 1.54, 6.0], look: [1.31, 1.53, 3.0], fov: 28, ease: 'surge' }] }) },
   // R2 ACTION BEAT: gate level (y 0.8), front three-quarter from the
   // south — sheep squeeze through the split gate TOWARD camera, exactly
   // four abreast in the gap, exiting sheep big in the foreground; the
   // leaves' swing is the action. Camera never behind the flock.
   split: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('split'), pos: [0.7, 1.5, 6.3], look: [-0.1, 0.45, -0.9], fov: 42 },
-    { f: E('split'), pos: [0.65, 1.44, 5.85], look: [-0.08, 0.46, -0.85], fov: 40, ease: 'io' }] }) },
+    { f: B('split'), pos: [0.85, 1.35, 6.9], look: [-0.1, 0.5, -0.9], fov: 43 },
+    { f: B('split') + 16, pos: [0.7, 1.05, 5.6], look: [-0.08, 0.48, -0.85], fov: 39, ease: 'surge' },
+    { f: B('split') + 117, pos: [0.6, 1.0, 5.3], look: [-0.05, 0.5, -0.8], fov: 38, ease: 'smooth' },
+    { f: E('split'), pos: [0.62, 1.05, 5.4], look: [-0.06, 0.5, -0.82], fov: 38, ease: 'surge' }] }) },
   // R2 tally: ONE clause, two phases — high wide on the streaming flock
   // (the count visual), then a long smooth dive down to the merchant's
   // amazed face (~79% of frame width) for "simple multiplication".
   tally: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('tally'), pos: [-6.6, 9.6, 11.8], look: [0.2, 0, -2.2], fov: 47 },
-    { f: B('tally') + 41, pos: [-4.6, 6.0, 9.9], look: [0.5, 0.5, 0.2], fov: 43, ease: 'io' },
-    { f: B('tally') + 77, pos: [2.5, 1.8, 7.7], look: [1.35, 1.42, 4.35], fov: 34, ease: 'io' },
-    { f: E('tally'), pos: [2.2, 1.55, 7.0], look: [1.36, 1.45, 4.35], fov: 30, ease: 'io' }] }) },
+    { f: B('tally'), pos: [-6.9, 10.4, 12.4], look: [0.2, 0, -2.2], fov: 47 },
+    { f: B('tally') + 22, pos: [-4.4, 5.6, 9.6], look: [0.6, 0.6, 0.4], fov: 42, ease: 'easeInOut' },
+    { f: B('tally') + 55, pos: [2.45, 1.75, 7.55], look: [1.35, 1.44, 4.35], fov: 32, ease: 'easeInOut' },
+    { f: E('tally'), pos: [2.18, 1.54, 6.95], look: [1.36, 1.46, 4.35], fov: 29, ease: 'surge' }] }) },
   last: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('last'), pos: [5.35, 1.48, 5.15], look: [2.35, 1.33, 1.15], fov: 38 },
-    { f: E('last'), pos: [5.05, 1.44, 4.8], look: [2.37, 1.35, 1.15], fov: 35, ease: 'io' }] }) },
+    { f: B('last'), pos: [5.55, 1.52, 5.4], look: [2.34, 1.35, 1.15], fov: 39 },
+    { f: B('last') + 15, pos: [5.1, 1.45, 4.85], look: [2.37, 1.36, 1.15], fov: 34, ease: 'surge' },
+    { f: B('last') + 80, pos: [4.95, 1.43, 4.65], look: [2.4, 1.45, 1.2], fov: 32, ease: 'smooth' },
+    { f: E('last'), pos: [4.9, 1.43, 4.6], look: [2.4, 1.46, 1.2], fov: 32, ease: 'surge' }] }) },
   // R2 FINAL: character beat + board — camera higher, board centred in
   // the upper frame; the shepherd stands in the lower foreground
   // (added to the cast for this shot), grinning and pointing up at it.
   hook: { cut: 'hard', raw: keysCam({ keys: [
-    { f: B('hook'), pos: [3.45, 2.4, 29.3], look: [-0.15, 2.95, 16], fov: 38 },
-    { f: E('hook'), pos: [3.3, 2.33, 28.9], look: [-0.15, 2.95, 16], fov: 37.5, ease: 'io' }] }) },
+    { f: B('hook'), pos: [3.6, 2.5, 30.1], look: [-0.15, 2.95, 16], fov: 38 },
+    { f: B('hook') + 16, pos: [3.5, 2.44, 29.7], look: [-0.15, 2.95, 16], fov: 37.5, ease: 'surge' },
+    { f: E('hook'), pos: [3.45, 2.4, 29.5], look: [-0.15, 2.95, 16], fov: 37, ease: 'surge' }] }) },
 };
 const RIG = buildRig({
   total: TOTAL,
   shots: SHOTS.map((s) => ({ a: s.a, b: s.b, ...RIG_BY_ID[s.id] })),
-  kicks: [{ f: B('gold') + 62, a: 0.03 }],
-  sigma: 3.2, smoothRadius: 10, fovSigma: 1.6,
+  // v4 impact kicks: stick-tap / gate-swing impacts land ON the action
+  // (tap peaks 2f before each crossing centre), the laugh, the line.
+  kicks: [
+    { f: B('open') + 37, a: 0.07 }, { f: B('open') + 109, a: 0.07 },
+    { f: B('gate') + 31, a: 0.13 }, { f: B('gate') + 103, a: 0.13 },
+    { f: B('gold') + 62, a: 0.14 },
+    { f: B('dialogue') + 6, a: 0.08 },
+    { f: B('split') + 37, a: 0.13 }, { f: B('split') + 115, a: 0.13 },
+    { f: B('last') + 58, a: 0.12 },
+  ],
+  sigma: 2.3, smoothRadius: 7, fovSigma: 1.6,
 });
 export const camAt = (f) => RIG.camAt(f);
 export const RIG_META = {
@@ -375,8 +405,8 @@ export const castAt = (f) => {
   const std = (id, o, opts, x, z, extra = {}) => out.push({ id, x, y: extra.y ?? 0, z, r: 0.32, ground: extra.ground ?? 0,
     actor: (T) => {
       const { stk, ...actorExtra } = extra;
-      return { key: 'shx' + JSON.stringify(o) + JSON.stringify(opts) + (extra.y ?? 0) + (stk !== undefined ? '|stk' + stk : ''),
-        draw: (p) => { T.bodyFront(p, o, opts); if (stk !== undefined) drawTapStick(p, stk); },
+      return { key: 'shx' + JSON.stringify(o) + JSON.stringify(opts) + (extra.y ?? 0) + (stk !== undefined ? '|stk' + stk : '') + '|br' + Math.round(f / 2),
+        draw: (p) => { T.bodyFront(p, o, { breath: f, ...opts }); if (stk !== undefined) drawTapStick(p, stk); },
         x, y: extra.y ?? 0, z, ground: extra.ground ?? 0, tint, ...actorExtra };
     } });
   const tapK = tapAt(f);
