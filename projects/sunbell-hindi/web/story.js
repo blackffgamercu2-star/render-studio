@@ -22,6 +22,7 @@
 // bell glints.
 import { M, blinkAt, q, clamp, lerp, ramp } from './motion.js';
 import { buildRig, pushInCam, staticTrackCam, keysCam } from './camrig.js';
+import { emoTrack, lifeAt, gripAt, gestureAt, stridePh } from './body.js';
 import * as SOL from './solid.js';
 import * as T from './toon.js';
 import * as SPK from './speak.js';
@@ -194,60 +195,71 @@ const FOCUS = {
 };
 export const heroPosAt = (f) => FOCUS[shotAt(f).id]();
 
-// ---------- cameras: EVERY shot is a camrig track on a subject ----------
+// ---------- cameras: v4 ACTION CAMERA (2026-11-19 upgrade) ----------
+// Zack D Films action level, proven on waterrun-hindi / fireless-hindi:
+// camera velocity keyed to the subject, fast eased push-ins at action
+// starts (subject scale x2-3 inside ~15 frames of travel), tracking at
+// subject speed, impact kicks on the two strikes, clause-boundary cuts
+// only, NO slow drift, NO static holds, and every position stays in the
+// FRONT hemisphere (south / front three-quarter) — never behind a card.
+// Shot boundaries, clause timings and the stem are UNCHANGED; only the
+// camera path inside each shot was rebuilt. R2 framing: the bell (the
+// opening hero) is BIG from frame 0 at a low angle; inserts fill the
+// frame; the dialogue close-up holds the priest's face at ~75% width;
+// the final frame carries the hook board (86% width, fully inside with
+// margins) WITH the priest standing foreground-left, mouth closed.
 const bellPos = () => [BELL.x, 2.1, BELL.z];
 const priestPos = (f) => shotAt(f).id === 'reset' ? [PRIEST_PEG[0], 0, PRIEST_PEG[1]] : [PRIEST_EVE[0], 0, PRIEST_EVE[1]];
 const youthPos = (f) => { const y = youthAt(f); return [y.x, 0, y.z]; };
-const bezierCam = (P, L, a, b, fov0, fov1) => (f) => {
-  const u = M.smooth(ramp(f, a, b));
-  const w0 = (1 - u) ** 3, w1 = 3 * (1 - u) ** 2 * u, w2 = 3 * (1 - u) * u * u, w3 = u ** 3;
-  const mix = (Q) => [0, 1, 2].map((j) => w0 * Q[0][j] + w1 * Q[1][j] + w2 * Q[2][j] + w3 * Q[3][j]);
-  return { pos: mix(P), look: mix(L), fov: lerp(fov0, fov1, u), roll: 0 };
-};
 const RIG_BY_ID = {
-  drone: { cut: 'hard', raw: bezierCam(
-    [[20, 12, 24], [12, 7, 17], [8.5, 4.2, 13], [6.8, 2.9, 10.6]],
-    [[0, 2.6, -6], [0, 2.0, -3.4], [0, 1.6, -2.4], [0, 1.7, -2.2]], 0, 114, 44, 40) },
+  drone: { cut: 'hard', raw: keysCam({ keys: [
+    { f: 0, pos: [2.2, 1.85, 3.2], look: [0, 2.2, -2], fov: 40 },
+    { f: 28, pos: [1.2, 3.4, 9.8], look: [0, 3.0, -0.5], fov: 48 },
+    { f: 82, pos: [0.9, 3.3, 9.6], look: [0, 3.0, -0.6], fov: 47 },
+    { f: 114, pos: [2.6, 2.0, 2.2], look: [0, 2.15, -2], fov: 40, ease: 'surge' }] }) },
   noonempty: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 115, pos: [5.4, 2.6, 7.6], look: [0, 2.2, -2], fov: 40 },
-    { f: 204, pos: [4.6, 2.3, 6.4], look: [0, 2.15, -2], fov: 36, ease: 'surge' }] }) },
-  villagers: { cut: 'hard', raw: pushInCam({ subject: () => [0.15, 0, 3.6], a: 205, b: 287, d0: 6.2, d1: 5.2, h0: 1.5, h1: 1.4, lookOff: [0, 1.3, 0], fov0: 42, fov1: 38,
-    dir: () => [0.3, 0.92] }) },
+    { f: 115, pos: [3.4, 2.3, 3.4], look: [0, 2.2, -2], fov: 38 },
+    { f: 204, pos: [2.5, 2.05, 1.6], look: [0, 2.15, -2], fov: 34, ease: 'surge' }] }) },
+  villagers: { cut: 'hard', raw: pushInCam({ subject: () => [0.15, 0, 3.6], a: 205, b: 287, d0: 4.6, d1: 3.3, h0: 1.45, h1: 1.38, lookOff: [0, 1.35, 0], fov0: 40, fov1: 36,
+    dir: () => [0.25, 0.97] }) },
   sneak: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 288, pos: [-0.6, 2.3, 8.6], look: [-1.8, 1.0, 4.6], fov: 42 },
-    { f: 340, pos: [-1.7, 2.1, 6.9], look: [-3.2, 0.9, 2.2], fov: 39 },
-    { f: 387, pos: [-2.4, 1.9, 5.9], look: [-3.85, 0.8, 1.45], fov: 37, ease: 'surge' }] }) },
+    { f: 288, pos: [0.6, 1.9, 9.0], look: [-1.8, 1.0, 4.6], fov: 40 },
+    { f: 330, pos: [-1.2, 1.6, 7.2], look: [-3.0, 0.9, 2.6], fov: 37 },
+    { f: 362, pos: [-1.9, 1.45, 5.6], look: [-3.85, 0.85, 1.45], fov: 35 },
+    { f: 387, pos: [-2.2, 1.4, 5.2], look: [-3.85, 0.85, 1.45], fov: 33, ease: 'surge' }] }) },
   rope: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 388, pos: [5.2, 2.0, 2.6], look: [3.2, 1.1, -1.4], fov: 36 },
-    { f: 497, pos: [5.4, 1.5, 2.0], look: [3.9, 0.35, -0.8], fov: 33, ease: 'surge' }] }) },
-  wet: { cut: 'hard', raw: staticTrackCam({ pos: [5.6, 1.9, 3.1], subject: () => [3.2, 1.05, -1.4], lookOff: [0, 0.1, 0], fov: 36 }) },
-  drying: { cut: 'hard', raw: pushInCam({ subject: () => [1.3, 1.9, -2], a: 568, b: 671, d0: 4.6, d1: 3.6, h0: 1.9, h1: 1.8, lookOff: [0, 0.1, 0], fov0: 36, fov1: 31,
-    dir: () => [0.75, 0.62] }) },
+    { f: 388, pos: [5.6, 1.7, 2.4], look: [3.3, 1.0, -1.3], fov: 34 },
+    { f: 497, pos: [5.2, 1.35, 1.7], look: [3.85, 0.4, -0.85], fov: 30, ease: 'surge' }] }) },
+  wet: { cut: 'hard', raw: keysCam({ keys: [
+    { f: 498, pos: [5.8, 1.8, 2.9], look: [3.25, 0.95, -1.35], fov: 35 },
+    { f: 567, pos: [5.5, 1.5, 2.3], look: [3.3, 0.8, -1.3], fov: 32, ease: 'surge' }] }) },
+  drying: { cut: 'hard', raw: pushInCam({ subject: () => [1.3, 1.9, -2], a: 568, b: 671, d0: 4.2, d1: 3.0, h0: 1.95, h1: 1.85, lookOff: [0, 0.05, 0], fov0: 35, fov1: 30,
+    dir: () => [0.72, 0.66] }) },
   creep: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 672, pos: [2.6, 2.2, 1.6], look: [0.45, 2.05, -2], fov: 32 },
-    { f: 759, pos: [2.35, 2.15, 1.25], look: [0.4, 2.08, -2], fov: 29, ease: 'surge' }] }) },
-  strike: { cut: 'hard', raw: pushInCam({ subject: bellPos, a: 760, b: 874, d0: 5.6, d1: 4.2, h0: 2.2, h1: 2.0, lookOff: [0, 0.15, 0], fov0: 38, fov1: 33,
-    dir: () => [0.62, 0.75] }) },
+    { f: 672, pos: [2.5, 2.25, 1.5], look: [0.5, 2.05, -2], fov: 30 },
+    { f: 759, pos: [2.15, 2.15, 0.9], look: [0.42, 2.08, -2], fov: 26, ease: 'surge' }] }) },
+  strike: { cut: 'hard', raw: pushInCam({ subject: bellPos, a: 760, b: 874, d0: 4.8, d1: 3.1, h0: 2.15, h1: 2.0, lookOff: [0, 0.12, 0], fov0: 37, fov1: 32,
+    dir: () => [0.6, 0.78] }) },
   cloudy: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 875, pos: [8.8, 3.6, 11.5], look: [0.3, 1.6, -1.5], fov: 44 },
-    { f: 965, pos: [8.3, 3.4, 10.9], look: [0.3, 1.6, -1.5], fov: 42, ease: 'surge' }] }) },
-  reset: { cut: 'hard', raw: pushInCam({ subject: priestPos, a: 966, b: 1084, d0: 5.2, d1: 4.4, h0: 1.5, h1: 1.42, lookOff: [0.35, 1.05, -0.35], fov0: 40, fov1: 36,
-    dir: () => [0.55, 0.8] }) },
+    { f: 875, pos: [7.2, 3.2, 10.2], look: [0.3, 1.7, -1.5], fov: 42 },
+    { f: 965, pos: [6.6, 3.0, 9.4], look: [0.3, 1.65, -1.5], fov: 40, ease: 'surge' }] }) },
+  reset: { cut: 'hard', raw: pushInCam({ subject: priestPos, a: 966, b: 1084, d0: 4.4, d1: 3.3, h0: 1.5, h1: 1.4, lookOff: [0.3, 1.0, -0.3], fov0: 39, fov1: 35,
+    dir: () => [0.5, 0.84] }) },
   ask: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1085, pos: [4.6, 2.3, 8.6], look: [1.2, 1.3, 1.6], fov: 40 },
-    { f: 1154, pos: [4.3, 2.2, 8.1], look: [1.3, 1.35, 1.5], fov: 37, ease: 'surge' }] }) },
-  dialogue: { cut: 'hard', raw: pushInCam({ subject: priestPos, a: 1155, b: 1242, d0: 3.3, d1: 2.7, h0: 1.56, h1: 1.5, lookOff: [0, 1.45, 0], fov0: 32, fov1: 28,
-    dir: () => [0.45, 0.85] }) },
+    { f: 1085, pos: [4.4, 2.2, 8.2], look: [1.25, 1.32, 1.7], fov: 39 },
+    { f: 1154, pos: [4.0, 2.1, 7.5], look: [1.35, 1.38, 1.6], fov: 36, ease: 'surge' }] }) },
+  dialogue: { cut: 'hard', raw: pushInCam({ subject: priestPos, a: 1155, b: 1242, d0: 3.1, d1: 2.55, h0: 1.55, h1: 1.5, lookOff: [0, 1.42, 0], fov0: 30, fov1: 27,
+    dir: () => [0.42, 0.88] }) },
   knowing: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1243, pos: [5.4, 2.2, 9.8], look: [1.1, 1.5, 3.0], fov: 44 },
-    { f: 1300, pos: [5.3, 2.3, 9.6], look: [1.0, 3.6, 0.8], fov: 43 },
-    { f: 1347, pos: [5.1, 2.3, 9.4], look: [1.1, 2.0, 2.2], fov: 42, ease: 'surge' }] }) },
+    { f: 1243, pos: [5.2, 2.15, 9.4], look: [1.1, 1.45, 3.0], fov: 42 },
+    { f: 1300, pos: [4.4, 2.3, 8.2], look: [0.6, 2.6, -0.6], fov: 40 },
+    { f: 1347, pos: [4.9, 2.2, 9.0], look: [1.1, 1.9, 2.4], fov: 41, ease: 'surge' }] }) },
   hookq: { cut: 'blend', blend: 10, raw: keysCam({ keys: [
-    { f: 1348, pos: [7.56, 3.02, 10.88], look: [0.1, 2.95, -0.45], fov: 40 },
-    { f: 1420, pos: [7.11, 3.14, 10.62], look: [0.05, 3.0, -0.48], fov: 37, ease: 'surge' }] }) },
+    { f: 1348, pos: [0.4, 2.7, 11.6], look: [0, 3.02, -0.5], fov: 43 },
+    { f: 1420, pos: [0.35, 2.72, 11.55], look: [0, 3.03, -0.5], fov: 43, ease: 'surge' }] }) },
   hook: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1421, pos: [7.11, 3.14, 10.62], look: [0.05, 3.0, -0.48], fov: 37 },
-    { f: 1472, pos: [6.95, 3.19, 10.47], look: [0.02, 3.05, -0.49], fov: 36, ease: 'surge' }] }) },
+    { f: 1421, pos: [0.35, 2.72, 11.55], look: [0, 3.03, -0.5], fov: 43 },
+    { f: 1472, pos: [0.3, 2.74, 11.5], look: [0, 3.04, -0.5], fov: 43, ease: 'surge' }] }) },
 };
 const RIG = buildRig({
   total: TOTAL,
@@ -283,7 +295,7 @@ export const worldAt = (f) => {
     dripK: wetAt(f) * (1 - ramp(f, 600, 660)), pourK: pourAt(f), lampK: lampAt(f),
     dustK: 0.05,
   };
-  if (S.id === 'drone') W.boardTitle = smooth(ramp(f, 24, 42)) * (1 - smooth(ramp(f, 66, 84)));
+  if (S.id === 'drone') W.boardTitle = smooth(ramp(f, 26, 36)) * (1 - smooth(ramp(f, 72, 82)));
   if (S.id === 'hookq') W.boardHook = smooth(ramp(f, 1392, 1416));
   if (S.id === 'hook') W.boardHook = 1;   // held at FULL opacity to the literal last frame
   return W;
@@ -304,12 +316,39 @@ export const OUTFITS = {
   v2: { jacket: '#7a4a6e', pants: '#3a3242', boots: '#1c1712', hat: 'hair', hair: '#17100c', skin: '#c98a5a', moustache: '#241a12' },
   v3: { jacket: '#a03a2e', pants: '#33302c', boots: '#241a12', hat: 'cap', cap: '#3a6ea5', skin: '#a06a3c' },
 };
+// ---------- ANIMATION UPGRADE v1+v2 (body.js, kit Library v6) ----------
+// Continuous life on EVERY figure (breath + weight-shift tilt + sway,
+// phase-offset per seed — nobody stands like a post), emotion morphs at
+// clause beats (emoTrack over faceP: brow/cheek shading morphs WITH the
+// expression — the v2 skin reaction), the priest's dialogue gesture
+// (gestureAt — his free hand talks with the line) and his physical grip
+// on the lota (gripAt lift/place timed to the pour in main.js, so hand
+// and vessel rise and settle in the same frames). The youth's walk
+// phase comes from distance travelled (stridePh — feet plant, no
+// glide). Hair is part of the head blob in this card system: the head
+// tilt/breath offsets above move the hair mass with the head, and the
+// squash pulses on grip/landing beats spring it with the body.
+const LIFE = { priest: lifeAt({ seed: 91 }), youth: lifeAt({ seed: 71 }), v1: lifeAt({ seed: 81 }), v2: lifeAt({ seed: 82 }), v3: lifeAt({ seed: 83 }) };
+const EMO = {
+  priest: emoTrack(T.faceP, 'smile', [[0, 'smile', 1], [966, 'stern', 10], [1046, 'smile', 12], [1348, 'smile_closed', 10]]),
+  youth: emoTrack(T.faceP, 'neutral', [[0, 'neutral', 1], [205, 'smile', 10], [288, 'nervous', 12], [672, 'shock', 8], [770, 'shock', 6], [880, 'neutral', 12], [1243, 'smile', 10]]),
+  v1: emoTrack(T.faceP, 'neutral', [[0, 'smile', 1], [875, 'neutral', 10], [1243, 'smile', 10]]),
+  v2: emoTrack(T.faceP, 'neutral', [[0, 'neutral', 1], [875, 'nervous', 10], [1243, 'smile_closed', 10]]),
+  v3: emoTrack(T.faceP, 'smile', [[0, 'smile', 1]]),
+};
+const PRIEST_GRIP = gripAt([{ f0: 988, dur: 12, type: 'lift' }, { f0: 1046, dur: 12, type: 'place', settle: 9 }]);
+const PRIEST_GESTURE = gestureAt([{ a: 1155, b: 1242, beats: [1172, 1198, 1224], base: 0.45, amp: 0.15 }]);
 export const castAt = (f) => {
   const S = shotAt(f), tint = tintFor(S), out = [];
-  const std = (id, o, opts, x, z, extra = {}) => out.push({ id, x, y: 0, z, r: 0.32, ground: 0,
-    actor: (T) => ({ key: 'pax' + JSON.stringify(o) + JSON.stringify(opts), draw: (p) => T.bodyFront(p, o, opts), x, y: 0, z, ground: 0, tint, ...extra }) });
+  const std = (id, o, opts, x, z, extra = {}) => {
+    const lf = LIFE[id] ? LIFE[id](f) : { breath: f, tilt: 0, sway: 0 };
+    const o2 = { breath: Math.round(lf.breath / 6) * 6, tilt: q((opts.tilt || 0) + lf.sway, 2), headTilt: q((opts.headTilt || 0) + lf.tilt * 0.35, 2), ...opts };
+    if (opts.breath !== undefined) o2.breath = opts.breath;
+    out.push({ id, x, y: 0, z, r: 0.32, ground: 0,
+      actor: (T) => ({ key: 'pax' + JSON.stringify(o) + JSON.stringify(o2), draw: (p) => T.bodyFront(p, o, o2), x, y: 0, z, ground: 0, tint, ...extra }) });
+  };
   const y = youthAt(f);
-  const youthWatch = (expr) => std('youth', OUTFITS.youth, { expr, mode: 'sit', blink: blinkAt(f, 71), seed: 71, headTilt: 0.05 }, y.x, y.z, { yaw: -0.5 });
+  const youthWatch = (expr) => std('youth', OUTFITS.youth, { exprP: { ...EMO.youth.at(f), cheek: 0.45 }, mode: 'sit', blink: blinkAt(f, 71), seed: 71, headTilt: 0.05, look: -0.3, lookY: 0.2 }, y.x, y.z, { yaw: -0.5 });
   switch (S.id) {
     case 'drone': {
       std('v1', OUTFITS.v1, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 81), seed: 81 }, 0.2, 3.3, { yaw: 0.3 });
@@ -319,56 +358,70 @@ export const castAt = (f) => {
     case 'noonempty': break;   // the point of the beat: NOBODY is there
     case 'villagers': {
       const nod = 0.05 + 0.03 * Math.sin(f * 0.11);
-      std('v1', OUTFITS.v1, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 81), seed: 81, headTilt: q(nod, 2) }, 0.2, 3.3, { yaw: 0.35 });
-      std('v2', OUTFITS.v2, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 82), seed: 82, headTilt: q(nod * 0.8, 2) }, 1.15, 3.7, { yaw: -0.25 });
-      std('v3', OUTFITS.v3, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 83), seed: 83, prop: f < 250 ? ['point', 0.6] : null }, -0.7, 3.6, { yaw: 0.5 });
+      std('v1', OUTFITS.v1, { exprP: { ...EMO.v1.at(f), cheek: 0.4 }, mode: 'stand', blink: blinkAt(f, 81), seed: 81, headTilt: q(nod, 2) }, 0.2, 3.3, { yaw: 0.35 });
+      std('v2', OUTFITS.v2, { exprP: { ...EMO.v2.at(f), cheek: 0.4 }, mode: 'stand', blink: blinkAt(f, 82), seed: 82, headTilt: q(nod * 0.8, 2) }, 1.15, 3.7, { yaw: -0.25 });
+      std('v3', OUTFITS.v3, { exprP: { ...EMO.v3.at(f), cheek: 0.4 }, mode: 'stand', blink: blinkAt(f, 83), seed: 83, prop: f < 250 ? ['point', 0.6] : null }, -0.7, 3.6, { yaw: 0.5 });
       break;
     }
     case 'sneak': {
       const mode = youthMode(f);
-      std('youth', OUTFITS.youth, { expr: f >= 363 ? 'nervous' : 'neutral', mode, phase: q((f * 0.011) % 1, 2), blink: blinkAt(f, 71), seed: 71 }, y.x, y.z, { yaw: -0.4 });
+      const ph = mode === 'stroll' ? q(stridePh(-1.8, y.x, 1.05), 2) : 0;
+      std('youth', OUTFITS.youth, { exprP: { ...EMO.youth.at(f), cheek: 0.45 }, mode, phase: ph, blink: blinkAt(f, 71), seed: 71, look: -0.25, lookY: 0.15 }, y.x, y.z, { yaw: -0.4 });
       break;
     }
     case 'rope': case 'wet': youthWatch('nervous'); break;
     case 'drying': youthWatch('nervous'); break;
     case 'creep': youthWatch('shock'); break;
     case 'strike': {
-      std('youth', OUTFITS.youth, { expr: 'shock', mode: 'sit', blink: blinkAt(f, 71), seed: 71, headTilt: -0.06 }, y.x, y.z, { yaw: -0.5 });
+      std('youth', OUTFITS.youth, { exprP: { ...EMO.youth.at(f), cheek: 0.45 }, mode: 'sit', blink: blinkAt(f, 71), seed: 71, headTilt: -0.06, look: -0.3, lookY: 0.2 }, y.x, y.z, { yaw: -0.5 });
       break;
     }
     case 'cloudy': {
-      std('youth', OUTFITS.youth, { expr: 'neutral', mode: 'sit', blink: blinkAt(f, 71), seed: 71, headTilt: f >= 920 ? 0.22 : 0.05 }, y.x, y.z, { yaw: -0.5 });
-      std('v1', OUTFITS.v1, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 81), seed: 81, headTilt: -0.08 }, -0.8, 1.8, { yaw: 0.3 });
-      std('v2', OUTFITS.v2, { expr: 'nervous', mode: 'stand', blink: blinkAt(f, 82), seed: 82, headTilt: -0.08 }, 0.9, 2.2, { yaw: -0.3 });
+      std('youth', OUTFITS.youth, { exprP: { ...EMO.youth.at(f), cheek: 0.45 }, mode: 'sit', blink: blinkAt(f, 71), seed: 71, headTilt: f >= 920 ? 0.22 : 0.05, look: -0.2, lookY: 0.1 }, y.x, y.z, { yaw: -0.5 });
+      std('v1', OUTFITS.v1, { exprP: { ...EMO.v1.at(f), cheek: 0.4 }, mode: 'stand', blink: blinkAt(f, 81), seed: 81, headTilt: -0.08 }, -0.8, 1.8, { yaw: 0.3 });
+      std('v2', OUTFITS.v2, { exprP: { ...EMO.v2.at(f), cheek: 0.4 }, mode: 'stand', blink: blinkAt(f, 82), seed: 82, headTilt: -0.08 }, 0.9, 2.2, { yaw: -0.3 });
       break;
     }
     case 'reset': {
       const pour = pourAt(f);
-      std('priest', OUTFITS.priest, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 91), seed: 91, prop: pour > 0.05 ? ['point', 0.45] : (f >= 1010 && f <= 1066 ? ['point', 0.7] : null), headTilt: pour > 0.05 ? 0.14 : 0.04 }, PRIEST_PEG[0], PRIEST_PEG[1], { yaw: 0.55 });
+      const grip = PRIEST_GRIP(f);
+      std('priest', OUTFITS.priest, { exprP: { ...EMO.priest.at(f), cheek: 0.45 }, mode: 'stand', blink: blinkAt(f, 91), seed: 91,
+        prop: grip.holding || grip.k > 0.03 ? ['point', q(grip.k, 2)] : (f >= 1010 && f <= 1066 ? ['point', 0.7] : null),
+        squash: q(Math.max(grip.squash, pour > 0.05 ? 0.03 : 0), 2), headTilt: pour > 0.05 ? 0.14 : 0.04, look: 0.3, lookY: -0.25 }, PRIEST_PEG[0], PRIEST_PEG[1], { yaw: 0.55 });
       break;
     }
     case 'ask': {
-      std('priest', OUTFITS.priest, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 91), seed: 91 }, PRIEST_EVE[0], PRIEST_EVE[1], { yaw: -0.35 });
-      std('v1', OUTFITS.v1, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 81), seed: 81, prop: f < 1120 ? ['point', 0.5] : null }, 0.6, 3.2, { yaw: 0.45 });
-      std('v2', OUTFITS.v2, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 82), seed: 82 }, 1.5, 3.85, { yaw: 0.2 });
+      std('priest', OUTFITS.priest, { exprP: { ...EMO.priest.at(f), cheek: 0.45 }, mode: 'stand', blink: blinkAt(f, 91), seed: 91 }, PRIEST_EVE[0], PRIEST_EVE[1], { yaw: -0.35 });
+      std('v1', OUTFITS.v1, { exprP: { ...EMO.v1.at(f), cheek: 0.4 }, mode: 'stand', blink: blinkAt(f, 81), seed: 81, prop: f < 1120 ? ['point', 0.5] : null }, 0.6, 3.2, { yaw: 0.45 });
+      std('v2', OUTFITS.v2, { exprP: { ...EMO.v2.at(f), cheek: 0.4 }, mode: 'stand', blink: blinkAt(f, 82), seed: 82 }, 1.5, 3.85, { yaw: 0.2 });
       break;
     }
     case 'dialogue': {
       // THE dialogue beat: the priest PERFORMS his line — mouth driven by
       // the stem inside the speak segment, closed outside it; the
-      // villagers only listen (their mouths never open).
-      std('priest', OUTFITS.priest, { mode: 'stand', blink: blinkAt(f, 91), seed: 91, look: 0.12, ...speakFace('smile', f) }, PRIEST_EVE[0], PRIEST_EVE[1], { yaw: -0.3 });
-      std('v1', OUTFITS.v1, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 81), seed: 81 }, 0.6, 3.2, { yaw: 0.45 });
-      std('v2', OUTFITS.v2, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 82), seed: 82 }, 1.5, 3.85, { yaw: 0.2 });
+      // villagers only listen (their mouths never open). His free hand
+      // gestures with the voice (gestureAt) — he does not stand like a
+      // post while he speaks.
+      const gest = PRIEST_GESTURE(f);
+      std('priest', OUTFITS.priest, { mode: 'stand', blink: blinkAt(f, 91), seed: 91, look: 0.12, prop: gest.on ? ['point', q(gest.k, 2)] : null, ...speakFace('smile', f) }, PRIEST_EVE[0], PRIEST_EVE[1], { yaw: -0.3 });
+      std('v1', OUTFITS.v1, { exprP: { ...EMO.v1.at(f), cheek: 0.4 }, mode: 'stand', blink: blinkAt(f, 81), seed: 81 }, 0.6, 3.2, { yaw: 0.45 });
+      std('v2', OUTFITS.v2, { exprP: { ...EMO.v2.at(f), cheek: 0.4 }, mode: 'stand', blink: blinkAt(f, 82), seed: 82 }, 1.5, 3.85, { yaw: 0.2 });
       break;
     }
     case 'knowing': {
-      std('priest', OUTFITS.priest, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 91), seed: 91 }, PRIEST_EVE[0], PRIEST_EVE[1], { yaw: -0.35 });
-      std('v1', OUTFITS.v1, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 81), seed: 81, headTilt: f >= 1262 && f <= 1320 ? -0.16 : 0 }, 0.6, 3.2, { yaw: 0.4 });
-      std('v2', OUTFITS.v2, { expr: 'smile_closed', mode: 'stand', blink: blinkAt(f, 82), seed: 82, headTilt: f >= 1262 && f <= 1320 ? -0.14 : 0 }, 1.5, 3.85, { yaw: 0.15 });
+      std('priest', OUTFITS.priest, { exprP: { ...EMO.priest.at(f), cheek: 0.45 }, mode: 'stand', blink: blinkAt(f, 91), seed: 91 }, PRIEST_EVE[0], PRIEST_EVE[1], { yaw: -0.35 });
+      std('v1', OUTFITS.v1, { exprP: { ...EMO.v1.at(f), cheek: 0.4 }, mode: 'stand', blink: blinkAt(f, 81), seed: 81, headTilt: f >= 1262 && f <= 1320 ? -0.16 : 0 }, 0.6, 3.2, { yaw: 0.4 });
+      std('v2', OUTFITS.v2, { exprP: { ...EMO.v2.at(f), cheek: 0.4 }, mode: 'stand', blink: blinkAt(f, 82), seed: 82, headTilt: f >= 1262 && f <= 1320 ? -0.14 : 0 }, 1.5, 3.85, { yaw: 0.15 });
       break;
     }
-    case 'hookq': case 'hook': break;
+    case 'hookq': case 'hook': {
+      // R2 FINAL: character beat + hook board TOGETHER. The priest stands
+      // foreground-left of the board, present but SILENT — the last line
+      // is narration only (END RULE): mouth closed (smile_closed faceP,
+      // no speak data), gaze up at the board.
+      std('priest', OUTFITS.priest, { exprP: { ...EMO.priest.at(f), cheek: 0.45 }, mode: 'stand', blink: blinkAt(f, 91), seed: 91, look: 0.25, lookY: 0.3, headTilt: -0.05 }, -0.2, 7.4, { yaw: 0.3 });
+      break;
+    }
   }
   return out;
 };
