@@ -1,9 +1,27 @@
-// Shot plan for "The Giant's Shoes" — giantshoes (LIBRARY v4: speak.js
-// dialogue performance + materials v4, camrig smooth tracking + solid
-// colliders). Batch 8 English topic 3. ONE set: a village square by a
-// river. Giant footprints appear overnight; the old shoemaker stitches
-// giant shoes WITH BELLS and leaves them at the riverbank; at midnight
-// the bells ring — and the "giant" is the miller's son on stilts.
+// Shot plan for "The Giant's Shoes" — giantshoes. V4 UPGRADE build
+// (2026-11-19): picture-only rebuild on the EXISTING stem — same beat
+// map, same clause timings, same boards, same mix. What changed:
+//  * "v4" ACTION CAMERA (Zack-D grammar, proven in valleyfly/fireless):
+//    every shot is a keysCam track with fast eased push-ins landing in
+//    12-18f at action starts, tracking at the subject's own speed,
+//    declared impact kicks (shoe-place f1130, first ringing step f1240,
+//    payoff doors f1349) and two whip reframes inside the laugh and
+//    payoff sections. No slow drift, no static holds, camera never
+//    behind the cards.
+//  * ANIMATION UPGRADE v1+v2 (body.js v2 / toon armPose): continuous
+//    lifeAt life on every actor, emoTrack expression morphs at beats,
+//    gaze tracks that follow the named subject, PHYSICAL GRIPS via
+//    gripTrack -> armPose (measuring strip, stitching needle, bell
+//    placing, two-hand shoe carry with carryDip), dialogue gesture on
+//    the performed line, distance-based stride phase (no glide),
+//    jumpTrack startles at the midnight reveal.
+//  * SALTED MINE V3 CAST: round WHITE heads (skin #fbf7ef, no card
+//    tint in any light), costumes by role unchanged.
+//  * R2 FRAMING: opening hero BIG from frame 0 (shoemaker crouched at
+//    the giant print, push-in), inserts fill 85-95% (print, shoes,
+//    bells, soles), reaction faces >=65% (laugh punch-ins, son's
+//    laughing face), final frame = shoemaker foreground + hook board.
+//  * Word-by-word captions are drawn in main.js from words.js.
 // Voice stem: 60.611 s, 30 fps, TOTAL 1818; timings from faster-whisper
 // word alignment (words.json). Scene changes ONLY at clause boundaries:
 //   S1  0.00-4.02  One morning...river.        S8  32.18-34.96  "A giant I..."
@@ -18,7 +36,8 @@
 // on clause boundaries. Signature VFX: brass-bell glints, footprint trail,
 // chimney smoke, river shimmer, lamp glow at night.
 import { M, blinkAt, q, clamp, lerp, ramp } from './motion.js';
-import { buildRig, pushInCam, staticTrackCam, keysCam } from './camrig.js';
+import { buildRig, keysCam } from './camrig.js';
+import { poseWindows, gazeTrack, lifeAt, emoTrack, gripTrack, gestureAt, jumpTrack, carryDip } from './body.js';
 import * as SOL from './solid.js';
 import * as T from './toon.js';
 import * as SPK from './speak.js';
@@ -26,10 +45,6 @@ import { SPEAK_DATA } from './speakdata.js';
 
 // ---------- v4 dialogue performance ----------
 const SPEAK = SPK.makeSpeakPlayer(SPEAK_DATA);
-const speakFace = (baseName, f) => {
-  const s = SPEAK.at(f);
-  return { expr: 'smile', exprP: SPK.applySpeak({ ...T.faceP(baseName), cheek: 0.5 }, s), headTilt: q(s.nod || 0, 2), clothShade: true };
-};
 
 export const FPS = 30, TOTAL = 1818, DECK = 0;
 export const SHOTS = [
@@ -95,29 +110,41 @@ export const HOUSES = [
   { x: 13, z: 6, ry: -1.2, w: 4.5, d: 4 },
 ];
 
-const walkKeys = (keys, f) => {
-  let x = keys[0][1], z = keys[0][2];
+// ---------- position tracks (piecewise keys, smootherstep between) ----------
+const posKeys = (keys) => (f) => {
+  if (f <= keys[0][0]) return [keys[0][1], keys[0][2]];
   for (let i = 1; i < keys.length; i++) {
-    if (f <= keys[i][0]) { const a = keys[i - 1], b = keys[i]; const u = smooth(ramp(f, a[0], b[0])); return [lerp(a[1], b[1], u), lerp(a[2], b[2], u)]; }
-    x = keys[keys.length - 1][1]; z = keys[keys.length - 1][2];
+    if (f <= keys[i][0]) {
+      const [f0, x0, z0] = keys[i - 1], [f1, x1, z1] = keys[i];
+      const u = M.smooth(clamp((f - f0) / Math.max(1, f1 - f0)));
+      return [lerp(x0, x1, u), lerp(z0, z1, u)];
+    }
   }
-  return [x, z];
+  const k = keys[keys.length - 1]; return [k[1], k[2]];
 };
-// shoemaker: stall -> measures the biggest print -> back to stall ->
-// carries the shoes to the riverbank -> returns home
-const SHOE_KEYS = [
-  [0, -6.0, 5.0], [292, -6.0, 5.0], [330, -1.4, 4.6], [422, -1.4, 4.6],
-  [460, -6.0, 5.0], [1065, -6.0, 5.0], [1100, -5.6, 8.6], [1197, -5.6, 8.6],
-  [1230, -6.0, 5.0], [1817, -6.0, 5.0],
-];
-const MAYOR_KEYS = [
+// travelled-distance stride phase — feet plant with the ground, no glide
+const distPhase = (raw) => {
+  const D = [0];
+  for (let f = 1; f < TOTAL; f++) { const a = raw(f - 1), b = raw(f); D[f] = D[f - 1] + Math.hypot(b[0] - a[0], b[1] - a[1]); }
+  return { phase: (f) => (D[clamp(Math.round(f), 0, TOTAL - 1)] / 0.82) % 1, moving: (f) => f > 0 && (D[clamp(Math.round(f), 0, TOTAL - 1)] - D[clamp(Math.round(f) - 1, 0, TOTAL - 1)]) > 0.004 };
+};
+// shoemaker: crouched at the biggest print at dawn -> back to his stall
+// while the watch is set -> out to the print to measure -> stall (stitch,
+// bells, mayor, dialogue) -> carries the shoes to the riverbank -> home
+// -> steps into the foreground for the hook board.
+const shoeRaw = posKeys([
+  [0, 0.75, 4.75], [140, 0.75, 4.75], [158, 0.0, 4.7], [218, -6.0, 5.0],
+  [292, -6.0, 5.0], [330, 0.75, 4.75], [422, 0.75, 4.75], [460, -6.0, 5.0],
+  [1065, -6.0, 5.0], [1100, -5.6, 8.6], [1197, -5.6, 8.6], [1230, -6.0, 5.0],
+  [1672, -6.0, 5.0], [1702, 1.35, 1.5], [1817, 1.35, 1.5],
+]);
+const mayorRaw = posKeys([
   [0, 3.6, 5.4], [803, 3.6, 5.4], [850, 1.2, 5.0], [964, 1.2, 5.0],
   [1065, 3.6, 5.4], [1817, 3.6, 5.4],
-];
-export const shoeAt = (f) => { const [x, z] = walkKeys(SHOE_KEYS, f); return { x, z }; };
-export const mayorAt = (f) => { const [x, z] = walkKeys(MAYOR_KEYS, f); return { x, z }; };
-const strolling = (f, spans) => spans.some(([a, b]) => f >= a && f <= b) ? 1 : 0;
-export const shoeMode = (f) => strolling(f, [[292, 330], [422, 460], [1065, 1100], [1197, 1230]]) ? 'stroll' : 'stand';
+]);
+const shoeMove = distPhase(shoeRaw), mayorMove = distPhase(mayorRaw);
+export const shoeAt = (f) => { const [x, z] = shoeRaw(f); return { x, z }; };
+export const mayorAt = (f) => { const [x, z] = mayorRaw(f); return { x, z }; };
 // THE GIANT SHOES (hero prop): on the stall table -> carried to the
 // riverbank -> set down -> at midnight they RISE onto the stilts and
 // walk the bank (the son steps in off-camera at the hard cut).
@@ -155,11 +182,6 @@ export const bellSwing = (f) => {
   if (f >= 1349) return Math.sin(f * 0.12) * 0.12;
   return 0;
 };
-const segMax = (f, segs) => {
-  let s = 0;
-  for (const [a, b, c, d, peak] of segs) if (f >= a && f <= d) s = Math.max(s, peak * (f < b ? smooth(ramp(f, a, b)) : f <= c ? 1 : 1 - smooth(ramp(f, c, d))));
-  return s;
-};
 export const glintAt = (f) => {
   let s = 0;
   const pulse = (a, b, peak) => { if (f >= a && f <= b) s = Math.max(s, peak * Math.sin(ramp(f, a, b) * Math.PI)); };
@@ -175,78 +197,103 @@ export const lampK = (f) => {
 
 // ---------- hero / focus ----------
 const FOCUS = {
-  drone: () => [0, 1.0, 4],
-  watch: () => [0, 1.2, 6],
-  measure: () => [0, 0.6, 4],
+  drone: () => { const s = shoeAt(60); return [s.x, 1.0, s.z]; },
+  watch: () => [0, 1.2, 6.2],
+  measure: () => [0, 0.4, 4],
   stitch: () => [TABLE.x, 0.9, TABLE.z],
-  laugh: () => [2, 1.2, 3],
+  laugh: () => [5.2, 1.3, 2.0],
   bells: () => [TABLE.x, 0.9, TABLE.z],
-  mayor: () => { const m = mayorAt(880); return [m.x, 1.3, m.z]; },
+  mayor: () => { const m = mayorAt(900); return [m.x, 1.35, m.z]; },
   dialogue: () => { const s = shoeAt(1010); return [s.x, 1.45, s.z]; },
   riverbank: () => [BANK.x, 0.8, BANK.z],
   midnight: () => [-5, 0.9, 10],
-  payoff: () => { const s = sonAt(1420) || { x: -4.2, z: 9.8 }; return [s.x, 1.6, s.z]; },
+  payoff: () => { const s = sonAt(1420) || { x: -4.2, z: 9.8 }; return [s.x, 1.8, s.z]; },
   soles: () => [-4.2, 0.3, 9.8],
   hookq: () => BOARD_POS, hook: () => BOARD_POS,
 };
 export const heroPosAt = (f) => FOCUS[shotAt(f).id]();
 
-// ---------- cameras: EVERY shot is a camrig track on a subject ----------
-const shoePos = (f) => { const s = shoeAt(f); return [s.x, 0, s.z]; };
-const bezierCam = (P, L, a, b, fov0, fov1) => (f) => {
-  const u = M.smooth(ramp(f, a, b));
-  const w0 = (1 - u) ** 3, w1 = 3 * (1 - u) ** 2 * u, w2 = 3 * (1 - u) * u * u, w3 = u ** 3;
-  const mix = (Q) => [0, 1, 2].map((j) => w0 * Q[0][j] + w1 * Q[1][j] + w2 * Q[2][j] + w3 * Q[3][j]);
-  return { pos: mix(P), look: mix(L), fov: lerp(fov0, fov1, u), roll: 0 };
-};
-const RIG_BY_ID = {
-  drone: { cut: 'hard', raw: bezierCam(
-    [[20, 12, 26], [12, 7, 19], [8, 4.5, 15], [6.5, 3.0, 12.5]],
-    [[0, 2.5, -6], [0, 1.5, 2], [0, 0.8, 4], [-1, 0.6, 6]], 0, 132, 44, 40) },
-  watch: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 133, pos: [7.5, 3.2, 13.5], look: [0, 1.1, 5.5], fov: 42 },
-    { f: 291, pos: [7.0, 3.0, 12.8], look: [0, 1.1, 5.5], fov: 40, ease: 'surge' }] }) },
-  measure: { cut: 'hard', raw: pushInCam({ subject: () => [0, 0, 4], a: 292, b: 422, d0: 5.6, d1: 4.2, h0: 1.7, h1: 1.5, lookOff: [0, 0.5, 0], fov0: 40, fov1: 34,
-    dir: () => [0.55, 0.8] }) },
-  stitch: { cut: 'hard', raw: pushInCam({ subject: () => [TABLE.x, 0.9, TABLE.z], a: 423, b: 531, d0: 5.0, d1: 4.0, h0: 1.6, h1: 1.4, lookOff: [0, 0.4, 0], fov0: 38, fov1: 33,
-    dir: () => [0.6, 0.75] }) },
-  laugh: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 532, pos: [7.8, 3.0, 12.0], look: [2, 1.2, 3], fov: 42 },
-    { f: 651, pos: [7.3, 2.8, 11.4], look: [2, 1.2, 3], fov: 40, ease: 'surge' }] }) },
-  bells: { cut: 'hard', raw: pushInCam({ subject: () => [TABLE.x, 0.9, TABLE.z], a: 652, b: 802, d0: 4.6, d1: 3.6, h0: 1.55, h1: 1.4, lookOff: [0, 0.4, 0], fov0: 36, fov1: 31,
-    dir: () => [0.6, 0.75] }) },
-  mayor: { cut: 'hard', raw: pushInCam({ subject: () => { const m = mayorAt(880); return [m.x, 0, m.z]; }, a: 803, b: 964, d0: 5.2, d1: 4.2, h0: 1.6, h1: 1.45, lookOff: [0, 1.35, 0], fov0: 38, fov1: 33,
-    dir: () => [0.5, 0.8] }) },
-  dialogue: { cut: 'hard', raw: pushInCam({ subject: shoePos, a: 965, b: 1064, d0: 3.4, d1: 2.75, h0: 1.58, h1: 1.5, lookOff: [0, 1.45, 0], fov0: 32, fov1: 28,
-    dir: () => [0.45, 0.85] }) },
-  riverbank: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1065, pos: [3.5, 3.0, 16.5], look: [BANK.x, 0.9, BANK.z], fov: 42 },
-    { f: 1215, pos: [2.8, 2.6, 15.2], look: [BANK.x, 0.9, BANK.z], fov: 38, ease: 'surge' }] }) },
-  midnight: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1216, pos: [-1.2, 1.6, 15.8], look: [-5, 0.9, 10], fov: 40 },
-    { f: 1348, pos: [-1.6, 1.5, 15.0], look: [-4.6, 0.9, 10], fov: 37, ease: 'surge' }] }) },
-  payoff: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1349, pos: [1.5, 2.2, 15.5], look: [-4.2, 1.5, 9.8], fov: 40 },
-    { f: 1520, pos: [1.0, 2.0, 14.6], look: [-4.2, 1.5, 9.8], fov: 36, ease: 'surge' }] }) },
-  soles: { cut: 'hard', raw: pushInCam({ subject: () => [-4.2, 0, 9.8], a: 1521, b: 1671, d0: 4.6, d1: 3.4, h0: 1.1, h1: 0.8, lookOff: [0, 0.25, 0], fov0: 38, fov1: 32,
-    dir: () => [0.55, 0.8] }) },
-  hookq: { cut: 'blend', blend: 10, raw: keysCam({ keys: [
-    { f: 1672, pos: [5.4, 3.9, 7.6], look: [0.1, 2.75, -5.9], fov: 40 },
-    { f: 1755, pos: [5.2, 3.9, 7.4], look: [0.05, 2.78, -5.95], fov: 37, ease: 'surge' }] }) },
-  hook: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1756, pos: [5.2, 3.9, 7.4], look: [0.05, 2.78, -5.95], fov: 37 },
-    { f: 1817, pos: [5.0, 3.95, 7.2], look: [0.02, 2.8, -5.97], fov: 36, ease: 'surge' }] }) },
-};
+// ---------- v4 ACTION CAMERA: every shot a keysCam track ----------
+// Push-ins land in 12-18f at action starts; tracking keys ride the
+// subject at its own speed; the laugh and payoff sections carry one
+// declared whip reframe each (rig sub-shots — the story TIMING above
+// is untouched). All cuts sit on clause boundaries.
+const KC = (keys, fov) => keysCam({ keys: keys.map(([f, pos, look]) => ({ f, pos, look, fov, ease: 'io' })) });
+const RIG_SHOTS = [
+  // S1: hero BIG at the print from f0 (push-in by f16), he rises, then a
+  // fast pull-back reveal of the whole square as the title board lands.
+  { id: 'drone', a: 0, b: 132, cut: 'hard', raw: KC([
+    [0, [2.25, 1.1, 7.3], [0.8, 1.0, 4.8]], [16, [2.05, 1.05, 7.05], [0.75, 0.98, 4.8]],
+    [46, [2.3, 1.25, 7.9], [0.7, 0.95, 4.75]], [66, [-2.4, 5.2, 14.5], [0.7, 1.2, -2.5]],
+    [132, [-3.0, 5.4, 13.9], [0.8, 1.25, -2.5]]], 42) },
+  // S2: lateral track along the night-watch line, faces passing close.
+  { id: 'watch', a: 133, b: 291, cut: 'hard', raw: KC([
+    [133, [7.4, 1.7, 11.0], [5.0, 1.5, 4.2]], [185, [4.2, 1.6, 10.6], [2.0, 1.5, 6.5]],
+    [240, [0.0, 1.55, 10.5], [-2.0, 1.5, 6.5]], [291, [-4.4, 1.65, 10.8], [-5.2, 1.3, 5.2]]], 41) },
+  // S3: track the walk out, then dive to the print + strip insert.
+  { id: 'measure', a: 292, b: 422, cut: 'hard', raw: KC([
+    [292, [-3.4, 1.7, 10.2], [-5.6, 1.2, 5.1]], [330, [2.2, 1.3, 8.3], [0.3, 0.5, 4.3]],
+    [348, [2.0, 1.2, 7.9], [0.28, 0.48, 4.28]], [422, [1.9, 1.22, 8.0], [0.28, 0.48, 4.28]]], 37) },
+  // S4: fast push-in onto the growing shoes on the table.
+  { id: 'stitch', a: 423, b: 531, cut: 'hard', raw: KC([
+    [423, [-3.4, 1.9, 9.6], [-6.6, 1.05, 4.8]], [441, [-4.0, 1.62, 7.9], [-6.55, 0.95, 4.8]],
+    [531, [-3.9, 1.6, 7.8], [-6.55, 0.95, 4.8]]], 36) },
+  // S5a: punch-in on the lead laugher's face.
+  { id: 'laughA', a: 532, b: 589, cut: 'hard', raw: KC([
+    [532, [7.9, 1.85, 7.6], [5.4, 1.6, 2.6]], [548, [5.95, 1.62, 3.8], [5.2, 1.68, 2.05]],
+    [589, [5.9, 1.6, 3.7], [5.2, 1.68, 2.05]]], 40) },
+  // S5b: whip reframe onto the mayor, laughing just as hard.
+  { id: 'laughB', a: 590, b: 651, cut: 'whip', blend: 6, raw: KC([
+    [590, [5.3, 1.75, 7.6], [3.7, 1.62, 5.3]], [606, [4.9, 1.62, 6.9], [3.6, 1.68, 5.4]],
+    [651, [4.8, 1.6, 6.8], [3.6, 1.68, 5.4]]], 40) },
+  // S6: bell-sewing insert — the sole and the row of bells fill frame.
+  { id: 'bells', a: 652, b: 802, cut: 'hard', raw: KC([
+    [652, [-3.5, 1.7, 9.9], [-7.0, 1.05, 4.6]], [668, [-4.0, 1.3, 9.0], [-7.2, 0.95, 4.5]],
+    [802, [-3.95, 1.32, 8.9], [-7.2, 0.95, 4.5]]], 34) },
+  // S7: track the mayor's march, then punch-in on his stern face.
+  { id: 'mayor', a: 803, b: 964, cut: 'hard', raw: KC([
+    [803, [6.9, 1.8, 10.6], [3.4, 1.3, 5.3]], [850, [3.4, 1.6, 9.3], [1.6, 1.3, 5.1]],
+    [866, [2.5, 1.6, 6.8], [1.2, 1.62, 5.0]], [964, [2.4, 1.58, 6.7], [1.2, 1.62, 5.0]]], 38) },
+  // S8: the performed line — push-in lands by f980, camera holds on him.
+  { id: 'dialogue', a: 965, b: 1064, cut: 'hard', raw: KC([
+    [965, [-3.4, 1.75, 8.6], [-6.0, 1.6, 5.0]], [980, [-4.6, 1.62, 7.1], [-6.0, 1.68, 5.0]],
+    [1064, [-4.75, 1.6, 7.0], [-6.0, 1.68, 5.0]]], 33) },
+  // S9: front three-quarter track at his carrying speed to the bank.
+  { id: 'riverbank', a: 1065, b: 1215, cut: 'hard', raw: KC([
+    [1065, [-3.2, 1.7, 9.4], [-6.0, 1.2, 5.2]], [1100, [-2.9, 1.6, 12.6], [-5.6, 1.1, 8.7]],
+    [1130, [-2.7, 1.5, 13.4], [-5.9, 0.8, 10.1]], [1215, [-2.9, 1.6, 13.0], [-5.8, 0.9, 9.9]]], 40) },
+  // S10: low track beside the walking, ringing shoes.
+  { id: 'midnight', a: 1216, b: 1348, cut: 'hard', raw: KC([
+    [1216, [-1.4, 1.3, 15.6], [-5.8, 1.0, 10.2]], [1240, [-1.7, 1.25, 15.2], [-5.9, 1.0, 10.2]],
+    [1348, [-1.3, 1.2, 14.6], [-4.4, 1.0, 9.9]]], 39) },
+  // S11a: the reveal — son high on stilts, fast push-in.
+  { id: 'payoffA', a: 1349, b: 1439, cut: 'hard', raw: KC([
+    [1349, [2.2, 2.3, 16.4], [-4.2, 1.8, 9.8]], [1365, [0.6, 2.05, 13.9], [-4.2, 1.85, 9.8]],
+    [1439, [0.4, 2.0, 13.7], [-4.2, 1.85, 9.8]]], 40) },
+  // S11b: whip onto his laughing face, too full of laughter to run.
+  { id: 'payoffB', a: 1440, b: 1520, cut: 'whip', blend: 6, raw: KC([
+    [1440, [-2.85, 2.75, 11.45], [-4.2, 2.8, 9.8]], [1456, [-2.95, 2.7, 11.3], [-4.2, 2.8, 9.8]],
+    [1520, [-3.0, 2.68, 11.25], [-4.2, 2.8, 9.8]]], 38) },
+  // S12: carved soles insert, then a reframe up to the pointing shoemaker.
+  { id: 'soles', a: 1521, b: 1671, cut: 'hard', raw: KC([
+    [1521, [-1.5, 1.1, 13.2], [-4.2, 0.35, 9.9]], [1537, [-2.8, 0.85, 11.3], [-4.2, 0.3, 9.85]],
+    [1600, [-2.85, 0.88, 11.35], [-4.2, 0.3, 9.85]], [1671, [-1.7, 1.25, 13.3], [-4.9, 0.65, 8.7]]], 36) },
+  // S13: push toward the board as it lands; the shoemaker steps into
+  // the foreground — final frame is hero + board together.
+  { id: 'hookq', a: 1672, b: 1755, cut: 'hard', raw: KC([
+    [1672, [5.6, 3.0, 8.6], [0.2, 2.7, -6]], [1755, [2.6, 2.3, 7.6], [0.1, 2.5, -6]]], 40) },
+  { id: 'hook', a: 1756, b: 1817, cut: 'hard', raw: KC([
+    [1756, [2.6, 2.3, 7.6], [0.1, 2.5, -6]], [1817, [2.5, 2.28, 7.45], [0.1, 2.5, -6]]], 40) },
+];
 const RIG = buildRig({
-  total: TOTAL,
-  shots: SHOTS.map((s) => ({ a: s.a, b: s.b, ...RIG_BY_ID[s.id] })),
-  kicks: [{ f: 1100, a: 0.03 }, { f: 1240, a: 0.03 }, { f: 1349, a: 0.03 }],
-  sigma: 2.3, fovSigma: 1.6,
+  total: TOTAL, shots: RIG_SHOTS,
+  kicks: [{ f: 1130, a: 0.22 }, { f: 1240, a: 0.25 }, { f: 1349, a: 0.30 }],
+  sigma: 1.7, smoothRadius: 5, fovSigma: 1.1,
 });
 export const camAt = (f) => RIG.camAt(f);
 export const RIG_META = {
   kicks: RIG.declared.kicks, hardCuts: RIG.declared.hardCuts,
-  blends: SHOTS.filter((s) => RIG_BY_ID[s.id].cut === 'blend').map((s) => ({ a: s.a - Math.floor(RIG_BY_ID[s.id].blend / 2), b: s.a + Math.ceil(RIG_BY_ID[s.id].blend / 2) })),
+  blends: RIG_SHOTS.filter((s) => s.cut === 'whip').map((s) => ({ a: s.a - 3, b: s.a + 3 })),
   whips: RIG.declared.whips,
   samples: RIG.samples,
 };
@@ -271,7 +318,8 @@ export const worldAt = (f) => {
     sonK: sn ? 1 : 0, sonX: sn ? sn.x : 0, sonY: sn ? sn.y : 0, sonZ: sn ? sn.z : 0,
     dustK: 0.05,
   };
-  if (S.id === 'drone') W.boardTitle = smooth(ramp(f, 2, 14)) * (1 - smooth(ramp(f, 44, 56)));
+  // title board lands during the S1 pull-back reveal (fully framed there)
+  if (S.id === 'drone') W.boardTitle = smooth(ramp(f, 52, 66)) * (1 - smooth(ramp(f, 112, 124)));
   if (S.id === 'hookq') W.boardHook = smooth(ramp(f, 1716, 1740));
   if (S.id === 'hook') W.boardHook = 1;   // held at FULL opacity to the literal last frame
   return W;
@@ -282,110 +330,264 @@ export const fxProfileAt = (f) => {
 };
 export const fxAt = () => [];
 
-// ---------- cast (single source for actors AND colliders) ----------
-const TINT = { sun: '#ffffff', night: '#c3ccd4', dusk: '#f2ddc4' };
-const tintFor = (S) => TINT[S.light] || '#ffffff';
+// ---------- cast: SALTED MINE V3 white heads, costumes by role ----------
 export const OUTFITS = {
-  shoemaker: { jacket: '#6a4a2e', pants: '#4a3826', boots: '#2c1c10', hat: 'hair', hair: '#e8e8e8', skin: '#c98a5a', moustache: '#e8e8e8' },
-  mayor: { jacket: '#8a2432', pants: '#3a2a4a', boots: '#241a12', hat: 'cap', cap: '#c8a03a', skin: '#c98a5a' },
-  son: { jacket: '#2c6a3a', pants: '#3a3226', boots: '#4a2e18', hat: 'cap', cap: '#c8a03a', skin: '#d8a06a' },
-  villager1: { jacket: '#2c4a6e', pants: '#2a3242', boots: '#1c1712', hat: 'cap', cap: '#7a5a2e', skin: '#c98a5a' },
-  villager2: { jacket: '#4a6a3a', pants: '#33302c', boots: '#241a12', hat: 'hair', hair: '#1c1410', skin: '#8a5a34', moustache: '#241a12' },
-  villager3: { jacket: '#9a5a3a', pants: '#6a4a3a', boots: '#3a2a1c', hat: 'hair', hair: '#2c1a10', skin: '#a06a3c' },
-  watchman: { jacket: '#5a2a3a', pants: '#2c2226', boots: '#1c1712', hat: 'shako', skin: '#a06a3c' },
+  shoemaker: { jacket: '#6a4a2e', pants: '#4a3826', boots: '#2c1c10', hat: 'hair', hair: '#e8e8e8', skin: '#fbf7ef', moustache: '#e8e8e8' },
+  mayor: { jacket: '#8a2432', pants: '#3a2a4a', boots: '#241a12', hat: 'cap', cap: '#c8a03a', skin: '#fbf7ef' },
+  son: { jacket: '#2c6a3a', pants: '#3a3226', boots: '#4a2e18', hat: 'cap', cap: '#c8a03a', skin: '#fbf7ef' },
+  villager1: { jacket: '#2c4a6e', pants: '#2a3242', boots: '#1c1712', hat: 'cap', cap: '#7a5a2e', skin: '#fbf7ef' },
+  villager2: { jacket: '#4a6a3a', pants: '#33302c', boots: '#241a12', hat: 'hair', hair: '#1c1410', skin: '#fbf7ef', moustache: '#241a12' },
+  villager3: { jacket: '#9a5a3a', pants: '#6a4a3a', boots: '#3a2a1c', hat: 'hair', hair: '#2c1a10', skin: '#fbf7ef' },
+  watchman: { jacket: '#5a2a3a', pants: '#2c2226', boots: '#1c1712', hat: 'shako', skin: '#fbf7ef' },
 };
+
+// ---------- performance tracks (body.js v2) ----------
+const GT = (ks) => gripTrack(ks.map(([f, x, y, g]) => ({ f, x, y, grip: g })));
+const AP = (L, R) => {
+  const o = {};
+  if (L) o.L = { hand: [Math.round(L.x), Math.round(L.y)], grip: q(L.grip, 2), front: true };
+  if (R) o.R = { hand: [Math.round(R.x), Math.round(R.y)], grip: q(R.grip, 2), front: true };
+  return Object.keys(o).length ? o : undefined;
+};
+// redraw a gripping hand OVER its object (palm dot + fingertip arcs)
+const gripHand = (p, hx, hy, skin) => {
+  p.ell(hx, hy, 9.5, 9.5, skin, 2.2);
+  for (const [dx, dy] of [[-8, -5], [0, -8], [8, -5]]) p.ell(hx + dx, hy + dy, 4.2, 4.2, skin, 1.6);
+};
+
+// expression morphs — the face matches the beat, glides, never snaps
+const shoeEmo = emoTrack([[0, 'neutral'], [292, 'smile'], [423, 'proud'], [532, 'smile'], [652, 'proud'], [803, 'smile'], [965, 'smile'], [1065, 'proud'], [1216, 'smile'], [1349, 'grin'], [1521, 'proud'], [1672, 'grin']], 31);
+const mayorEmo = emoTrack([[0, 'stern'], [532, 'laugh'], [700, 'stern'], [1349, 'shock'], [1521, 'shock'], [1672, 'smile']], 41);
+const v1Emo = emoTrack([[0, 'neutral'], [532, 'laugh'], [652, 'neutral'], [1349, 'shock'], [1521, 'neutral']], 51);
+const v2Emo = emoTrack([[0, 'neutral'], [532, 'laugh'], [652, 'neutral'], [1216, 'shock'], [1521, 'neutral']], 52);
+const v3Emo = emoTrack([[0, 'neutral'], [532, 'laugh'], [652, 'neutral']], 53);
+const sonEmo = emoTrack([[1349, 'laugh'], [1521, 'grin'], [1672, 'smile']], 71);
+// gaze — eyes follow the subject the voice names
+const shoeGaze = gazeTrack([{ f: 0, look: 0.15, lookY: -0.35, tilt: 3 }, { f: 133, look: 0.2, lookY: 0 }, { f: 292, look: 0.1, lookY: -0.1 }, { f: 336, look: 0, lookY: -0.4, tilt: 4 }, { f: 423, look: 0.1, lookY: -0.3 }, { f: 652, look: 0, lookY: -0.35 }, { f: 803, look: 0.35, lookY: 0 }, { f: 965, look: 0.3, lookY: 0.05 }, { f: 1065, look: 0.15, lookY: -0.15 }, { f: 1349, look: -0.2, lookY: 0.1 }, { f: 1521, look: -0.3, lookY: -0.35 }, { f: 1672, look: -0.15, lookY: 0.3 }]);
+const mayorGaze = gazeTrack([{ f: 0, look: -0.3 }, { f: 803, look: -0.4 }, { f: 965, look: -0.35 }, { f: 1349, look: -0.2, lookY: 0.2 }]);
+// crouches: examining the print at dawn, measuring it at mid-morning
+const shoePose = poseWindows([{ a: 6, b: 96, mode: 'kneel1', inF: 8, outF: 10 }, { a: 336, b: 418, mode: 'kneel1', inF: 7, outF: 7 }]);
+// grips — hands land ON the work in the same frames the work moves
+const measL = GT([[292, 190, 730, 0], [338, 224, 688, 0.85], [410, 224, 688, 0.85], [424, 190, 730, 0]]);
+const measR = GT([[292, 410, 730, 0], [338, 376, 688, 0.85], [410, 376, 688, 0.85], [424, 410, 730, 0]]);
+const stitchL = GT([[423, 190, 730, 0], [436, 268, 596, 0.9], [531, 268, 596, 0.9]]);
+const stitchRKeys = [[423, 410, 730, 0], [436, 392, 600, 0.8]];
+for (let t = 448, i = 0; t <= 520; t += 12, i++) stitchRKeys.push([t, 392 + (i % 2 ? 7 : -7), i % 2 ? 560 : 618, 0.8]);
+stitchRKeys.push([531, 410, 730, 0]);
+const stitchR = GT(stitchRKeys);
+const bellL = GT([[652, 190, 730, 0], [664, 268, 596, 0.9], [802, 268, 596, 0.9]]);
+const bellRKeys = [[652, 410, 730, 0], [664, 252, 600, 0.4]];
+for (let i = 0; i < 8; i++) { bellRKeys.push([668 + i * 17, 252 + i * 15, 596, 0.92]); bellRKeys.push([676 + i * 17, 252 + i * 15, 576, 0.45]); }
+bellRKeys.push([802, 410, 730, 0]);
+const bellR = GT(bellRKeys);
+const carryL = GT([[1065, 190, 730, 0], [1078, 252, 636, 0.95], [1120, 252, 636, 0.95], [1138, 236, 672, 0.4], [1150, 190, 730, 0]]);
+const carryR = GT([[1065, 410, 730, 0], [1078, 348, 636, 0.95], [1120, 348, 636, 0.95], [1138, 364, 672, 0.4], [1150, 410, 730, 0]]);
+const pointR = GT([[1672, 415, 720, 0], [1692, 448, 318, 0.15], [1817, 448, 318, 0.15]]);
+// startles — laughter hops and the midnight flinch
+const v1Jump = jumpTrack([{ f0: 540, dur: 11, h: 0.06, back: 5 }, { f0: 1352, dur: 11, h: 0.1, back: 8 }]);
+const v2Jump = jumpTrack([{ f0: 1218, dur: 11, h: 0.09, back: 9 }, { f0: 1352, dur: 11, h: 0.08, back: 6 }]);
+
 export const castAt = (f) => {
-  const S = shotAt(f), tint = tintFor(S), out = [];
-  const std = (id, o, opts, x, z, extra = {}) => out.push({ id, x, y: 0, z, r: 0.32, ground: 0,
-    actor: (T) => ({ key: 'pax' + JSON.stringify(o) + JSON.stringify(opts), draw: (p) => T.bodyFront(p, o, opts), x, y: 0, z, ground: 0, tint, ...extra }) });
-  const s = shoeAt(f), m = mayorAt(f), sn = sonAt(f);
-  const sBase = { expr: 'smile', mode: 'stand', blink: blinkAt(f, 31), seed: 31 };
+  const S = shotAt(f), out = [];
+  const add = (id, outfit, o, extra = {}) => out.push({
+    id, x: o.x, y: o.y || 0, z: o.z, r: 0.32, ground: 0,
+    actor: (TT) => ({
+      key: id + JSON.stringify(outfit) + JSON.stringify({ ...o.opts, mode: 'stand' }) + '|m=' + (o.opts.mode || 'stand') + (extra.ov || ''),
+      draw: (p) => { TT.bodyFront(p, outfit, o.opts); if (extra.drawOv) extra.drawOv(p); },
+      x: o.x, y: o.y || 0, z: o.z, ground: 0, tint: '#ffffff', yaw: extra.yaw || 0, s: extra.s,
+    }),
+  });
+  const base = (seed, amp = 1) => {
+    const L = lifeAt(f, seed);
+    return { blink: new T.Blink(seed).at(f), breath: L.breath, tilt: q(L.tilt * amp, 2), headTilt: q(L.headTilt, 2), squashL: L.squash };
+  };
+  const qP = (P) => Object.fromEntries(Object.entries(P).map(([k, v]) => [k, typeof v === 'number' ? q(v, 2) : v]));
+
+  // ---------- THE OLD SHOEMAKER (hero) ----------
+  const shoeActor = (yaw) => {
+    const seed = 31, B = base(seed), G = shoeGaze(f), P = shoePose(f);
+    let exprP = shoeEmo(f);
+    const speaking = S.id === 'dialogue' && f >= 965 && f <= 1048;
+    if (speaking) exprP = SPK.applySpeak({ ...exprP, cheek: 0.5 }, SPEAK.at(f));
+    let hL = null, hR = null, ov = '', drawOv = null, dip = 0;
+    if (S.id === 'measure') {
+      hL = measL(f); hR = measR(f);
+      if (hL.grip > 0.4 || hR.grip > 0.4) { ov = `meas${q(hL.y, 1)}:${q(hR.y, 1)}`; drawOv = (p) => { gripHand(p, hL.x, hL.y, OUTFITS.shoemaker.skin); gripHand(p, hR.x, hR.y, OUTFITS.shoemaker.skin); }; }
+    } else if (S.id === 'stitch') {
+      hL = stitchL(f); hR = stitchR(f);
+      ov = `needle${q(hR.x, 1)}:${q(hR.y, 1)}:${q(hL.x, 1)}`;
+      drawOv = (p) => {
+        p.band([[hR.x - 11, hR.y - 15], [hR.x + 13, hR.y + 11]], '#c8ccd4', 3, 0);   // the needle in his hand
+        p.band([[hR.x + 10, hR.y + 8], [hL.x + 16, hL.y - 6]], '#e8dcc0', 1.6, 0);     // thread to the held shoe
+        gripHand(p, hR.x, hR.y, OUTFITS.shoemaker.skin); gripHand(p, hL.x, hL.y, OUTFITS.shoemaker.skin);
+      };
+    } else if (S.id === 'bells') {
+      hL = bellL(f); hR = bellR(f);
+      ov = `bell${q(hR.x, 1)}:${q(hR.y, 1)}:${q(hR.grip, 2)}`;
+      drawOv = (p) => {
+        if (hR.grip > 0.7) p.ell(hR.x, hR.y + 10, 10, 10, '#e8b64a', 2);               // the bell being sewn on
+        gripHand(p, hR.x, hR.y, OUTFITS.shoemaker.skin); gripHand(p, hL.x, hL.y, OUTFITS.shoemaker.skin);
+      };
+    } else if (S.id === 'dialogue') {
+      if (speaking) { const g = gestureAt(f, 5, SPEAK.at(f).nod); hL = { x: 208 + g.dx, y: 596 + g.dy, grip: 0.15 }; }
+      hR = { x: 415, y: 720, grip: 0 };
+    } else if (S.id === 'riverbank') {
+      hL = carryL(f); hR = carryR(f);
+      if (f >= 1078 && f <= 1138) dip = carryDip(f, 0.75);
+    } else if (S.id === 'soles') {
+      hR = { x: 432, y: 472, grip: 0.1 };
+    } else if (S.id === 'hookq' || S.id === 'hook') {
+      hR = pointR(f); hL = { x: 204, y: 616, grip: 0.3 };
+    }
+    const pos = shoeAt(f);
+    const mode = P.mode !== 'stand' ? P.mode : (shoeMove.moving(f) ? 'march' : 'stand');
+    add('shoemaker', OUTFITS.shoemaker, {
+      x: pos.x, z: pos.z,
+      opts: {
+        phase: q(shoeMove.phase(f), 3), mode, exprP: qP(exprP), blink: B.blink, seed,
+        breath: B.breath, tilt: q(B.tilt + (speaking ? gestureAt(f, 5, SPEAK.at(f).nod).sway : 0), 2),
+        headTilt: q(B.headTilt + G.tilt, 2), look: q(G.look, 2), lookY: q(G.lookY, 2),
+        squash: q(Math.max(B.squashL, P.squash, dip), 3), armPose: AP(hL, hR),
+      },
+    }, { yaw, ov, drawOv });
+  };
+  // ---------- THE MAYOR ----------
+  const mayorActor = (yaw) => {
+    const seed = 41, B = base(seed), G = mayorGaze(f), pos = mayorAt(f);
+    const laughShake = S.id === 'laugh' ? 0.03 * (0.5 + 0.5 * Math.sin(f * 0.85 + seed * 2)) : 0;
+    add('mayor', OUTFITS.mayor, {
+      x: pos.x, z: pos.z,
+      opts: {
+        phase: q(mayorMove.phase(f), 3), mode: mayorMove.moving(f) ? 'march' : 'stand',
+        exprP: qP(mayorEmo(f)), blink: B.blink, seed, breath: B.breath,
+        tilt: B.tilt, headTilt: q(B.headTilt + G.tilt, 2), look: q(G.look, 2), lookY: q(G.lookY, 2),
+        squash: q(Math.max(B.squashL, laughShake), 3),
+      },
+    }, { yaw });
+  };
+  // ---------- VILLAGERS / WATCHMEN / SON ----------
+  const villager = (id, outfit, seed, x, z, yaw, emo, jump) => {
+    const B = base(seed), J = jump ? jump(f) : { y: 0, squash: 0, lean: 0 };
+    const laughShake = S.id === 'laugh' ? 0.03 * (0.5 + 0.5 * Math.sin(f * 0.85 + seed * 2)) : 0;
+    add(id, outfit, {
+      x, z, y: J.y,
+      opts: {
+        phase: 0, mode: 'stand', exprP: qP(emo(f)), blink: B.blink, seed, breath: B.breath,
+        tilt: q(B.tilt + (J.lean || 0), 2), headTilt: B.headTilt, look: 0.15, lookY: 0,
+        squash: q(Math.max(B.squashL, J.squash || 0, laughShake), 3),
+      },
+    }, { yaw });
+  };
+  const watchman = (id, seed, x, z, yaw) => {
+    const B = base(seed, 0.7);
+    add(id, OUTFITS.watchman, {
+      x, z,
+      opts: {
+        phase: 0, mode: 'stand', exprP: qP(emoTrack([[0, 'stern']], seed)(f)), blink: B.blink, seed,
+        breath: B.breath, tilt: B.tilt, headTilt: B.headTilt, look: 0.2, lookY: 0.1,
+        squash: q(B.squashL, 3), armPose: AP(null, { x: 432, y: 440, grip: 0.8 }),
+      },
+    }, { yaw });
+  };
+  const sonActor = () => {
+    const seed = 71, B = base(seed), sn = sonAt(f);
+    if (!sn) return;
+    const laughShake = S.id === 'payoff' ? 0.035 * (0.5 + 0.5 * Math.sin(f * 0.8 + seed)) : 0;
+    out.push({
+      id: 'son', x: sn.x, y: 0.9, z: sn.z, r: 0.32, ground: 0,
+      actor: (TT) => ({
+        key: 'son' + JSON.stringify(OUTFITS.son) + JSON.stringify({ m: S.id, e: qP(sonEmo(f)), sq: q(laughShake, 3), bl: B.blink }),
+        draw: (p) => TT.bodyFront(p, OUTFITS.son, {
+          phase: 0, mode: 'stand', exprP: qP(sonEmo(f)), blink: B.blink, seed,
+          breath: B.breath, tilt: B.tilt, headTilt: B.headTilt, look: -0.15, lookY: 0.05,
+          squash: q(Math.max(B.squashL, laughShake), 3),
+        }),
+        x: sn.x, y: 0.9, z: sn.z, ground: 0, tint: '#ffffff', yaw: 0.3,
+      }),
+    });
+  };
+
   switch (S.id) {
     case 'drone': {
-      std('shoemaker', OUTFITS.shoemaker, { ...sBase }, s.x, s.z, { yaw: 0.5 });
-      std('mayor', OUTFITS.mayor, { expr: 'stern', mode: 'stand', blink: blinkAt(f, 41), seed: 41 }, m.x, m.z, { yaw: -0.5 });
-      std('villager1', OUTFITS.villager1, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 51), seed: 51 }, 5.2, 2.0, { yaw: -0.3 });
-      std('villager2', OUTFITS.villager2, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 52), seed: 52 }, -3.2, 7.2, { yaw: 0.4 });
+      shoeActor(0.5);
+      mayorActor(-0.5);
+      villager('villager1', OUTFITS.villager1, 51, 5.2, 2.0, -0.3, v1Emo, null);
+      villager('villager2', OUTFITS.villager2, 52, -3.2, 7.2, 0.4, v2Emo, null);
       break;
     }
     case 'watch': {
-      // night watch: three men with pitchforks (props drawn in main.js),
-      // the shoemaker calm at his stall doorway.
-      std('watch1', OUTFITS.watchman, { expr: 'stern', mode: 'stand', blink: blinkAt(f, 61), seed: 61 }, -2.0, 6.5, { yaw: 0.2 });
-      std('watch2', OUTFITS.watchman, { expr: 'stern', mode: 'stand', blink: blinkAt(f, 62), seed: 62 }, 2.0, 6.5, { yaw: -0.2 });
-      std('watch3', OUTFITS.watchman, { expr: 'stern', mode: 'stand', blink: blinkAt(f, 63), seed: 63 }, 5.0, 4.0, { yaw: -0.6 });
-      std('shoemaker', OUTFITS.shoemaker, { ...sBase, expr: 'neutral' }, s.x, s.z, { yaw: 0.4 });
+      watchman('watch1', 61, -2.0, 6.5, 0.2);
+      watchman('watch2', 62, 2.0, 6.5, -0.2);
+      watchman('watch3', 63, 5.0, 4.0, -0.6);
+      shoeActor(0.4);
       break;
     }
     case 'measure': {
-      std('shoemaker', OUTFITS.shoemaker, { ...sBase, mode: shoeMode(f), phase: q((f * 0.011) % 1, 2), headTilt: 0.18, prop: ['point', 0.7] }, s.x, s.z, { yaw: 0.55 });
-      std('mayor', OUTFITS.mayor, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 41), seed: 41 }, m.x, m.z, { yaw: -0.55 });
-      std('villager1', OUTFITS.villager1, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 51), seed: 51 }, 5.2, 2.0, { yaw: -0.3 });
+      shoeActor(0.55);
+      mayorActor(-0.55);
+      villager('villager1', OUTFITS.villager1, 51, 5.2, 2.0, -0.3, v1Emo, null);
       break;
     }
     case 'stitch': {
-      std('shoemaker', OUTFITS.shoemaker, { ...sBase, prop: ['point', 0.6] }, s.x, s.z, { yaw: 0.5 });
-      std('villager2', OUTFITS.villager2, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 52), seed: 52 }, -3.2, 7.2, { yaw: 0.4 });
+      shoeActor(0.5);
+      villager('villager2', OUTFITS.villager2, 52, -3.2, 7.2, 0.4, v2Emo, null);
       break;
     }
     case 'laugh': {
-      std('shoemaker', OUTFITS.shoemaker, { ...sBase, expr: 'neutral' }, s.x, s.z, { yaw: 0.5 });
-      std('villager1', OUTFITS.villager1, { expr: 'laugh', mode: 'stand', blink: blinkAt(f, 51), seed: 51 }, 5.2, 2.0, { yaw: -0.3 });
-      std('villager2', OUTFITS.villager2, { expr: 'laugh', mode: 'stand', blink: blinkAt(f, 52), seed: 52 }, -3.2, 7.2, { yaw: 0.4 });
-      std('villager3', OUTFITS.villager3, { expr: 'laugh', mode: 'stand', blink: blinkAt(f, 53), seed: 53 }, 6.0, 8.0, { yaw: -0.5 });
-      std('mayor', OUTFITS.mayor, { expr: 'laugh', mode: 'stand', blink: blinkAt(f, 41), seed: 41 }, m.x, m.z, { yaw: -0.5 });
+      shoeActor(0.5);
+      villager('villager1', OUTFITS.villager1, 51, 5.2, 2.0, -0.3, v1Emo, v1Jump);
+      villager('villager2', OUTFITS.villager2, 52, -3.2, 7.2, 0.4, v2Emo, null);
+      villager('villager3', OUTFITS.villager3, 53, 6.0, 8.0, -0.5, v3Emo, null);
+      mayorActor(-0.5);
       break;
     }
     case 'bells': {
-      std('shoemaker', OUTFITS.shoemaker, { ...sBase, prop: ['point', 0.6] }, s.x, s.z, { yaw: 0.5 });
-      std('villager1', OUTFITS.villager1, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 51), seed: 51 }, 5.2, 2.0, { yaw: -0.3 });
+      shoeActor(0.5);
+      villager('villager1', OUTFITS.villager1, 51, 5.2, 2.0, -0.3, v1Emo, null);
       break;
     }
     case 'mayor': {
-      std('mayor', OUTFITS.mayor, { expr: 'stern', mode: 'stand', blink: blinkAt(f, 41), seed: 41 }, m.x, m.z, { yaw: -0.5 });
-      std('shoemaker', OUTFITS.shoemaker, { ...sBase, expr: 'smile' }, s.x, s.z, { yaw: 0.5 });
+      mayorActor(-0.5);
+      shoeActor(0.5);
       break;
     }
     case 'dialogue': {
-      // THE dialogue beat: the shoemaker PERFORMS his line — mouth driven
-      // by the stem inside the speak segment, closed outside it; the mayor
-      // only listens (his mouth never opens: narration stays voice-over).
-      std('shoemaker', OUTFITS.shoemaker, { mode: 'stand', blink: blinkAt(f, 31), seed: 31, look: 0.15, ...speakFace('smile', f) }, s.x, s.z, { yaw: 0.5 });
-      std('mayor', OUTFITS.mayor, { expr: 'stern', mode: 'stand', blink: blinkAt(f, 41), seed: 41 }, m.x, m.z, { yaw: -0.5 });
+      shoeActor(0.5);
+      mayorActor(-0.5);
       break;
     }
     case 'riverbank': {
-      std('shoemaker', OUTFITS.shoemaker, { ...sBase, mode: shoeMode(f), phase: q((f * 0.011) % 1, 2) }, s.x, s.z, { yaw: 0.55 });
-      std('mayor', OUTFITS.mayor, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 41), seed: 41 }, m.x, m.z, { yaw: -0.55 });
-      std('villager1', OUTFITS.villager1, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 51), seed: 51 }, 5.2, 2.0, { yaw: -0.3 });
+      shoeActor(0.55);
+      mayorActor(-0.55);
+      villager('villager1', OUTFITS.villager1, 51, 5.2, 2.0, -0.3, v1Emo, null);
       break;
     }
     case 'midnight': {
-      // the shoes walk alone in the dark; one villager silhouette at a door
-      std('villager2', OUTFITS.villager2, { expr: 'shock', mode: 'stand', blink: blinkAt(f, 52), seed: 52 }, -3.2, 7.2, { yaw: 0.4 });
+      // the shoes walk alone in the dark; one villager at his doorway,
+      // flinching as the bells pass
+      villager('villager2', OUTFITS.villager2, 52, -3.2, 7.2, 0.4, v2Emo, v2Jump);
       break;
     }
     case 'payoff': {
-      // the reveal: the miller's son high on stilts inside the giant shoes,
-      // laughing too hard to run. His card rides at stilt height (y=0.9);
-      // the stilt poles + carved soles are 3D props in main.js.
-      out.push({ id: 'son', x: sn.x, y: 0.9, z: sn.z, r: 0.32, ground: 0,
-        actor: (T) => ({ key: 'pax' + JSON.stringify(OUTFITS.son) + JSON.stringify({ expr: 'laugh', mode: 'stand', blink: blinkAt(f, 71), seed: 71 }),
-          draw: (p) => T.bodyFront(p, OUTFITS.son, { expr: 'laugh', mode: 'stand', blink: blinkAt(f, 71), seed: 71 }), x: sn.x, y: 0.9, z: sn.z, ground: 0, tint, yaw: 0.3 }) });
-      std('shoemaker', OUTFITS.shoemaker, { ...sBase, expr: 'smile' }, s.x, s.z, { yaw: 0.5 });
-      std('mayor', OUTFITS.mayor, { expr: 'shock', mode: 'stand', blink: blinkAt(f, 41), seed: 41 }, m.x, m.z, { yaw: -0.5 });
-      std('villager1', OUTFITS.villager1, { expr: 'shock', mode: 'stand', blink: blinkAt(f, 51), seed: 51 }, 5.2, 2.0, { yaw: -0.3 });
+      sonActor();
+      shoeActor(0.5);
+      mayorActor(-0.5);
+      villager('villager1', OUTFITS.villager1, 51, 5.2, 2.0, -0.3, v1Emo, v1Jump);
       break;
     }
     case 'soles': {
-      out.push({ id: 'son', x: sn.x, y: 0.9, z: sn.z, r: 0.32, ground: 0,
-        actor: (T) => ({ key: 'pax' + JSON.stringify(OUTFITS.son) + JSON.stringify({ expr: 'smile', mode: 'stand', blink: blinkAt(f, 71), seed: 71 }),
-          draw: (p) => T.bodyFront(p, OUTFITS.son, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 71), seed: 71 }), x: sn.x, y: 0.9, z: sn.z, ground: 0, tint, yaw: 0.3 }) });
-      std('shoemaker', OUTFITS.shoemaker, { ...sBase, prop: ['point', 0.7] }, s.x, s.z, { yaw: 0.55 });
-      std('mayor', OUTFITS.mayor, { expr: 'shock', mode: 'stand', blink: blinkAt(f, 41), seed: 41 }, m.x, m.z, { yaw: -0.5 });
+      sonActor();
+      shoeActor(0.55);
+      mayorActor(-0.5);
       break;
     }
-    case 'hookq': case 'hook': break;
+    case 'hookq': case 'hook': {
+      // END RULE: the final stretch is narration + board only — the
+      // shoemaker stands in the foreground, mouth closed, pointing up
+      // at the hook board. Nobody speaks.
+      shoeActor(-0.25);
+      break;
+    }
   }
   return out;
 };
@@ -415,6 +617,6 @@ export const groundItemsAt = (f) => {
   // 0.78 / riverbank ground 0); while carried or walking on stilts they
   // are transitional and unchecked, like a fall.
   if (sh.resting) items.push({ id: 'shoes', y: sh.y, ground: f < 1065 ? 0.78 : 0, maxHover: 0.03 });
-  for (const a of castAt(f)) items.push({ id: a.id, y: a.y, ground: a.id === 'son' ? 0.9 : 0, maxHover: 0.06 });
+  for (const a of castAt(f)) items.push({ id: a.id, y: a.y, ground: a.id === 'son' ? 0.9 : 0, maxHover: a.y > 0.01 ? 0.3 : 0.06 });
   return items;
 };
