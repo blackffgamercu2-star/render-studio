@@ -34,6 +34,7 @@
 // the cart, the stone-bump hop, storm clouds gathering over the field.
 import { M, blinkAt, q, clamp, lerp, ramp } from './motion.js';
 import { buildRig, pushInCam, staticTrackCam, keysCam } from './camrig.js';
+import { emoTrack, lifeAt, gripAt, gestureAt } from './body.js';
 import * as SOL from './solid.js';
 import * as T from './toon.js';
 import * as SPK from './speak.js';
@@ -43,8 +44,64 @@ import { SPEAK_DATA } from './speakdata.js';
 const SPEAK = SPK.makeSpeakPlayer(SPEAK_DATA);
 const speakFace = (baseName, f) => {
   const s = SPEAK.at(f);
-  return { expr: 'smile', exprP: SPK.applySpeak({ ...T.faceP(baseName), cheek: 0.5 }, s), headTilt: q(s.nod || 0, 2), clothShade: true };
+  const P = SPK.applySpeak({ ...emoCarp.at(f), cheek: 0.45 }, s);
+  P.openL = Math.min(1.3, (P.openL ?? 0.85) * 1.45); P.openR = Math.min(1.3, (P.openR ?? 0.85) * 1.45);
+  return { expr: 'smile', exprP: P, headTilt: q(s.nod || 0, 2), clothShade: true };
 };
+
+// ---------- ANIMATION UPGRADE v1+v2 (kit body.js, "Library v6") ----------
+// Continuous life on EVERY figure (lifeAt: breath + weight-shift tilt +
+// micro sway), emotion morphs at story beats (emoTrack over toon faceP —
+// the numeric brow/cheek fields ARE the v2 skin reaction: cheek shading
+// and brow shape morph WITH the expression), dialogue gesture
+// (gestureAt), PHYSICAL GRIPS (gripAt lift/place with weight settle) and
+// a stride-lagged head spring: the hair is painted on the head card, so
+// the lagged head-tilt oscillation below is what makes the hair SPRING
+// against the body sway when a character walks or turns.
+const emoCarp = emoTrack(T.faceP, 'smile', [
+  [208, 'stern', 14],    // his own wheel broke three times — resolve
+  [328, 'smile', 12],    // building the ball cart
+  [826, 'nervous', 12],  // harvest rain threat
+  [1003, 'relief', 14],  // the grain is saved
+  [1118, 'smile', 12],   // evening, the secret shared
+]);
+const emoDriver = emoTrack(T.faceP, 'smile', [
+  [914, 'nervous', 12], [1003, 'smile', 12], [1118, 'neutral', 12], [1199, 'smile', 10],
+]);
+const emoVil1 = emoTrack(T.faceP, 'smile', [
+  [736, 'laugh', 10], [826, 'nervous', 12], [1003, 'smile', 12],
+]);
+const emoVil2 = emoTrack(T.faceP, 'neutral', [
+  [180, 'shock', 8],     // the wheel snaps in front of him
+  [736, 'laugh', 10], [826, 'nervous', 12], [914, 'nervous', 10], [1003, 'smile', 12],
+]);
+const emoVil3 = emoTrack(T.faceP, 'neutral', [[826, 'nervous', 12], [914, 'nervous', 10]]);
+const lifeCarp = lifeAt({ seed: 31 }), lifeDriver = lifeAt({ seed: 51 }),
+  lifeVil1 = lifeAt({ seed: 53 }), lifeVil2 = lifeAt({ seed: 52 }), lifeVil3 = lifeAt({ seed: 54 });
+const micro = (f, seed) => 1.1 * Math.sin((f + seed * 5) * 0.037 + 1);
+// head/body opts fragment: life (breath/tilt/sway) + gaze + the hair
+// spring (a stride-phase-lagged head tilt for walking figures).
+const H2 = (life, f, seed, o = {}) => ({
+  headTilt: q((o.ht || 0) + micro(f, seed) + life(f).sway + (o.spring || 0), 1),
+  look: q(o.look || 0, 2), lookY: q(o.lookY || 0, 2), facing: q(o.facing || 0, 2),
+  squash: q(o.squash || 0, 2), tilt: q((o.tilt || 0) + life(f).tilt, 1),
+  breath: Math.round(life(f).breath / 6) * 6,
+});
+const hairSpring = (phase) => q(1.7 * Math.sin(phase * Math.PI * 2 - 0.9), 1); // lagged behind the stride sway
+// cheek shading per expression (v2 skin): warm flush rises with smiles
+// and laughter, drains on stern/nervous beats.
+const CHEEK = { smile: 0.42, grin: 0.5, laugh: 0.62, relief: 0.5, neutral: 0.3, stern: 0.14, nervous: 0.24, shock: 0.18, smile_closed: 0.42 };
+const withSkin = (P, expr) => ({ ...P, cheek: CHEEK[expr] ?? 0.3,
+  openL: Math.min(1.3, (P.openL ?? 0.85) * 1.45), openR: Math.min(1.3, (P.openR ?? 0.85) * 1.45) }); // eyes properly open (the fireless noBlush fix): v6 'smile' alone reads half-asleep
+// PHYSICAL GRIPS: the palm-ball place (carpenter lowers the ball onto
+// the young man's palm, f1226-1256 — synced to palmAt/worldAt) and the
+// worn-ball swap at the cart (lift out f658-694, place in f698-728 —
+// synced to swapOutAt/swapInAt). Squash = the weight settle.
+const gripPalm = gripAt([{ f0: 1226, dur: 30, type: 'place', settle: 10 }]);
+const gripSwap = gripAt([{ f0: 658, dur: 36, type: 'lift' }, { f0: 698, dur: 30, type: 'place', settle: 9 }]);
+// dialogue gesture: the carpenter's free hand talks with the line
+// (stresses on पहिये / टूट / गोले / घूमते).
+const gestCarp = gestureAt([{ a: 1282, b: 1356, beats: [1296, 1318, 1340], base: 0.42, amp: 0.16 }]);
 
 export const FPS = 30, TOTAL = 1638, DECK = 0;
 export const SHOTS = [
@@ -258,54 +315,138 @@ const bezierCam = (P, L, a, b, fov0, fov1) => (f) => {
   const mix = (Q) => [0, 1, 2].map((j) => w0 * Q[0][j] + w1 * Q[1][j] + w2 * Q[2][j] + w3 * Q[3][j]);
   return { pos: mix(P), look: mix(L), fov: lerp(fov0, fov1, u), roll: 0 };
 };
+// ---------- cameras: v4 ACTION LEVEL — every shot travels ----------
+// Head-width maths (card head ~0.61 m): % = 0.61 / (2*d*tan(fov/2)*0.5625).
+// Grammar (waterrun-hindi / fireless-hindi, the proven v4 builds):
+// fast eased push-ins concentrated in ~15 frames at action starts
+// (subject scale x2-3), tracking at subject speed, impact kicks on
+// impact beats, clause-boundary cuts only, FRONT / front three-quarter
+// staging only — the camera is never behind the card characters and
+// never sits still.
 const RIG_BY_ID = {
-  drone: { cut: 'hard', raw: bezierCam(
-    [[17, 11.5, 25], [11, 7, 18.5], [7.5, 4.2, 14.5], [5.2, 2.7, 11.6]],
-    [[-3.2, 1.2, 2.6], [-2.2, 0.9, 3.1], [-1.2, 0.8, 3.4], [-0.5, 0.8, 3.5]], 0, 112, 44, 40) },
-  road: { cut: 'hard', raw: staticTrackCam({ pos: [-6.6, 1.7, 9.8], subject: wcartPos, lookOff: [0, 0.45, 0], fov: 38 }) },
-  broke: { cut: 'hard', raw: pushInCam({ subject: carpPos, a: 208, b: 327, d0: 5.4, d1: 4.1, h0: 1.6, h1: 1.5, lookOff: [0, 1.25, 0], fov0: 38, fov1: 33,
-    dir: () => [0.55, 0.78] }) },
+  // drone (the OPENING, rebuilt): frame 0 is LOW and CLOSE — the driver
+  // strides at the cart's pull bar, head ~40% of width, mid-action —
+  // a 15-frame push-in, a short track, then a fast RISE into the wide
+  // drone framing that ends the clause (title board fades in up there).
+  drone: { cut: 'hard', raw: keysCam({ keys: [
+    { f: 0, pos: [0.75, 1.3, 6.75], look: [-1.75, 1.1, 3.45], fov: 38 },
+    { f: 15, pos: [1.0, 1.2, 6.45], look: [-1.4, 1.05, 3.45], fov: 37, ease: 'surge' },
+    { f: 42, pos: [1.9, 2.6, 9.3], look: [-1.7, 0.9, 3.2], fov: 40, ease: 'surge' },
+    { f: 80, pos: [4.3, 3.1, 11.2], look: [-0.6, 1.0, 3.05], fov: 41, ease: 'surge' },
+    { f: 112, pos: [5.0, 2.9, 11.6], look: [-0.35, 0.9, 3.4], fov: 40, ease: 'surge' }] }) },
+  // road: low tracking at the wheeled cart's own speed, a punch onto
+  // the snapping wheel, then a whip-tight reaction on the driver's face.
+  road: { cut: 'hard', raw: keysCam({ keys: [
+    { f: 113, pos: [-8.6, 1.35, 7.6], look: [-6.0, 0.8, 3.55], fov: 38 },
+    { f: 150, pos: [-6.4, 1.25, 7.3], look: [-4.9, 0.75, 3.55], fov: 37, ease: 'surge' },
+    { f: 178, pos: [-4.6, 1.2, 6.9], look: [-3.3, 0.8, 3.55], fov: 36, ease: 'surge' },
+    { f: 196, pos: [0.05, 1.5, 6.0], look: [-1.25, 1.45, 3.55], fov: 34, ease: 'surge' },
+    { f: 207, pos: [0.1, 1.5, 5.95], look: [-1.25, 1.45, 3.55], fov: 34, ease: 'surge' }] }) },
+  // broke: the carpenter's resolve — a fast punch from medium to a
+  // stern reaction close (face ~35% -> ~68%) inside the first clause.
+  broke: { cut: 'hard', raw: keysCam({ keys: [
+    { f: 208, pos: [-5.6, 1.7, 5.6], look: [-8.3, 1.3, 2.15], fov: 38 },
+    { f: 223, pos: [-6.15, 1.6, 4.6], look: [-8.32, 1.42, 2.15], fov: 35, ease: 'surge' },
+    { f: 250, pos: [-6.5, 1.58, 4.25], look: [-8.33, 1.45, 2.15], fov: 33, ease: 'surge' },
+    { f: 327, pos: [-6.6, 1.56, 4.1], look: [-8.34, 1.46, 2.15], fov: 32, ease: 'surge' }] }) },
+  // grooves: the INSERT — the grooved rail and its wooden balls fill
+  // the frame while his hands seat them (grip beat, low and close).
   grooves: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 328, pos: [-4.9, 0.95, 4.9], look: [-7.2, 0.32, 1.0], fov: 36 },
-    { f: 435, pos: [-5.4, 0.85, 4.3], look: [-7.25, 0.3, 0.95], fov: 33, ease: 'surge' }] }) },
+    { f: 328, pos: [-4.15, 1.25, 5.35], look: [-6.85, 0.5, 1.35], fov: 38 },
+    { f: 360, pos: [-4.5, 1.0, 4.7], look: [-7.0, 0.4, 1.1], fov: 36, ease: 'surge' },
+    { f: 435, pos: [-4.7, 0.92, 4.45], look: [-7.1, 0.36, 1.05], fov: 35, ease: 'surge' }] }) },
+  // rollout: the first roll — push-in as the cart starts, then a low
+  // front three-quarter track at the cart's own speed.
   rollout: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 436, pos: [-9.6, 1.2, 5.9], look: [-7.2, 0.45, 1.3], fov: 37 },
-    { f: 538, pos: [-5.1, 1.05, 7.7], look: [-2.7, 0.4, 3.4], fov: 35, ease: 'surge' }] }) },
+    { f: 436, pos: [-4.6, 1.15, 4.6], look: [-6.9, 0.55, 1.35], fov: 38 },
+    { f: 451, pos: [-3.9, 1.05, 5.2], look: [-5.9, 0.5, 1.6], fov: 36, ease: 'surge' },
+    { f: 500, pos: [-2.2, 1.1, 6.6], look: [-4.3, 0.5, 2.7], fov: 35, ease: 'surge' },
+    { f: 538, pos: [-0.9, 1.15, 7.3], look: [-2.75, 0.5, 3.45], fov: 35, ease: 'surge' }] }) },
+  // bump: ground-level tracking; the stone hop lands with the kicks.
   bump: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 539, pos: [-3.7, 0.95, 7.5], look: [-1.9, 0.35, 3.5], fov: 34 },
-    { f: 609, pos: [1.7, 0.9, 7.6], look: [2.3, 0.35, 3.5], fov: 32, ease: 'surge' }] }) },
-  swap: { cut: 'hard', raw: staticTrackCam({ pos: [3.6, 1.35, 8.8], subject: cartPos, lookOff: [0.4, 0.3, 0], fov: 40 }) },
+    { f: 539, pos: [-4.3, 0.95, 7.2], look: [-2.5, 0.4, 3.5], fov: 36 },
+    { f: 560, pos: [-2.6, 0.9, 7.3], look: [-1.2, 0.38, 3.5], fov: 34, ease: 'surge' },
+    { f: 609, pos: [1.3, 0.9, 7.6], look: [2.4, 0.38, 3.5], fov: 33, ease: 'surge' }] }) },
+  // swap: close on the kneeling carpenter's hands at the cart's side —
+  // the worn ball comes out, the fresh one goes in (grip beat).
+  swap: { cut: 'hard', raw: keysCam({ keys: [
+    { f: 610, pos: [0.9, 1.2, 7.6], look: [2.75, 0.45, 3.6], fov: 37 },
+    { f: 650, pos: [2.2, 1.05, 6.9], look: [3.6, 0.42, 4.1], fov: 35, ease: 'surge' },
+    { f: 694, pos: [2.5, 1.0, 6.6], look: [3.85, 0.4, 4.3], fov: 34, ease: 'surge' },
+    { f: 735, pos: [3.1, 1.1, 7.0], look: [4.35, 0.45, 3.9], fov: 35, ease: 'surge' }] }) },
+  // laugh: the village cracks up — group, then a fast punch onto the
+  // laughing faces (reaction close ~78%) as the cart rolls past them.
   laugh: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 736, pos: [3.1, 1.9, 10.6], look: [4.6, 0.9, 3.2], fov: 38 },
-    { f: 825, pos: [6.3, 1.8, 10.8], look: [7.3, 0.9, 3.3], fov: 36, ease: 'surge' }] }) },
+    { f: 736, pos: [3.2, 1.75, 10.4], look: [5.0, 1.15, 4.6], fov: 39 },
+    { f: 753, pos: [4.6, 1.6, 8.3], look: [6.15, 1.45, 5.7], fov: 35, ease: 'surge' },
+    { f: 775, pos: [5.0, 1.6, 7.9], look: [6.35, 1.45, 5.85], fov: 35, ease: 'surge' },
+    { f: 825, pos: [5.5, 1.65, 8.3], look: [6.7, 1.3, 5.6], fov: 35, ease: 'surge' }] }) },
+  // harvest: storm wide first (sky, field, one small cart), then a
+  // push onto the group as the carpenter points at the clouds.
   harvest: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 826, pos: [9.9, 3.5, 13.6], look: [3.4, 0.8, 4.6], fov: 44 },
-    { f: 913, pos: [9.3, 3.2, 12.9], look: [3.2, 0.8, 4.4], fov: 42, ease: 'surge' }] }) },
-  mud: { cut: 'hard', raw: staticTrackCam({ pos: [-2.0, 1.7, 10.2], subject: wcartPos, lookOff: [0, 0.45, 0], fov: 37 }) },
+    { f: 826, pos: [9.6, 3.4, 13.2], look: [3.2, 0.9, 4.4], fov: 44 },
+    { f: 845, pos: [7.4, 2.4, 11.0], look: [2.6, 1.0, 4.3], fov: 40, ease: 'surge' },
+    { f: 880, pos: [5.6, 1.9, 9.2], look: [2.2, 1.2, 4.45], fov: 37, ease: 'surge' },
+    { f: 913, pos: [5.2, 1.85, 8.9], look: [2.3, 1.1, 4.4], fov: 37, ease: 'surge' }] }) },
+  // mud: the other cart dies in the mud — track in, punch on the
+  // sinking wheel (kick at the snap), hold the stranded faces.
+  mud: { cut: 'hard', raw: keysCam({ keys: [
+    { f: 914, pos: [-5.9, 1.5, 8.6], look: [-2.6, 0.8, 3.7], fov: 38 },
+    { f: 948, pos: [-4.9, 1.35, 7.7], look: [-2.5, 0.75, 3.7], fov: 36, ease: 'surge' },
+    { f: 968, pos: [-4.2, 1.3, 7.0], look: [-2.45, 0.8, 3.72], fov: 34, ease: 'surge' },
+    { f: 1002, pos: [-3.9, 1.35, 7.2], look: [-2.2, 0.95, 3.7], fov: 34, ease: 'surge' }] }) },
+  // trips: harvest runs — tracking at the cart's speed to the godown,
+  // the turn, and the run back, all front three-quarter.
   trips: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1003, pos: [0.3, 2.2, 10.9], look: [2.8, 0.7, 3.5], fov: 40 },
-    { f: 1117, pos: [7.7, 2.1, 11.0], look: [6.2, 0.7, 3.5], fov: 38, ease: 'surge' }] }) },
-  evening: { cut: 'hard', raw: pushInCam({ subject: carpPos, a: 1118, b: 1198, d0: 5.4, d1: 4.2, h0: 1.6, h1: 1.5, lookOff: [0, 1.3, 0], fov0: 38, fov1: 34,
-    dir: () => [0.5, 0.82] }) },
+    { f: 1003, pos: [-0.2, 1.6, 9.8], look: [2.7, 0.7, 3.5], fov: 40 },
+    { f: 1025, pos: [2.6, 1.45, 9.0], look: [5.4, 0.65, 3.5], fov: 37, ease: 'surge' },
+    { f: 1045, pos: [5.4, 1.5, 9.2], look: [8.1, 0.7, 3.5], fov: 36, ease: 'surge' },
+    { f: 1074, pos: [6.2, 1.55, 9.4], look: [8.15, 0.7, 3.5], fov: 36, ease: 'surge' },
+    { f: 1117, pos: [1.4, 1.6, 9.9], look: [3.4, 0.7, 3.5], fov: 38, ease: 'surge' }] }) },
+  // evening: the young man asks — a two-shot that pushes in on the
+  // carpenter as the question lands.
+  evening: { cut: 'hard', raw: keysCam({ keys: [
+    { f: 1118, pos: [-4.35, 1.75, 5.9], look: [-7.45, 1.3, 2.05], fov: 38 },
+    { f: 1133, pos: [-4.95, 1.66, 5.15], look: [-7.55, 1.38, 2.05], fov: 35, ease: 'surge' },
+    { f: 1198, pos: [-5.35, 1.62, 4.8], look: [-7.6, 1.42, 2.05], fov: 34, ease: 'surge' }] }) },
+  // palm: the INSERT of the secret changing hands — the wooden ball
+  // fills the frame with both palms (grip beat, ~85% wide).
   palm: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1199, pos: [-5.5, 1.5, 5.5], look: [-7.3, 1.15, 2.05], fov: 34 },
-    { f: 1281, pos: [-5.85, 1.45, 5.05], look: [-7.25, 1.15, 2.1], fov: 31, ease: 'surge' }] }) },
-  dialogue: { cut: 'hard', raw: pushInCam({ subject: carpPos, a: 1282, b: 1365, d0: 3.3, d1: 2.7, h0: 1.58, h1: 1.5, lookOff: [0, 1.45, 0], fov0: 32, fov1: 28,
-    dir: () => [0.42, 0.86] }) },
+    { f: 1199, pos: [-4.35, 1.65, 6.3], look: [-7.35, 1.2, 2.08], fov: 38 },
+    { f: 1214, pos: [-4.95, 1.55, 5.6], look: [-7.35, 1.2, 2.09], fov: 36, ease: 'surge' },
+    { f: 1256, pos: [-5.1, 1.53, 5.45], look: [-7.34, 1.21, 2.09], fov: 35, ease: 'surge' },
+    { f: 1281, pos: [-5.05, 1.54, 5.52], look: [-7.34, 1.21, 2.09], fov: 35, ease: 'surge' }] }) },
+  // dialogue: the performed line — a fast punch to the carpenter's
+  // face (~56% -> ~72% in 15 frames), then a slow tighten while the
+  // speak track drives his mouth; the camera HOLDS on the speaker.
+  dialogue: { cut: 'hard', raw: keysCam({ keys: [
+    { f: 1282, pos: [-5.6, 1.62, 4.35], look: [-7.68, 1.44, 2.02], fov: 34 },
+    { f: 1297, pos: [-5.95, 1.6, 3.95], look: [-7.69, 1.46, 2.01], fov: 32, ease: 'surge' },
+    { f: 1365, pos: [-6.05, 1.59, 3.85], look: [-7.69, 1.47, 2.01], fov: 31, ease: 'surge' }] }) },
+  // slab: the ancient proof — tracking the great stone as it glides
+  // on its rollers, push-in riding with it.
   slab: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1366, pos: [3.3, 1.8, 5.7], look: [5.8, 0.6, -0.6], fov: 38 },
-    { f: 1492, pos: [5.1, 1.7, 5.5], look: [7.3, 0.6, -0.6], fov: 36, ease: 'surge' }] }) },
+    { f: 1366, pos: [3.0, 1.7, 5.6], look: [5.7, 0.6, -0.55], fov: 38 },
+    { f: 1381, pos: [3.9, 1.55, 5.2], look: [6.1, 0.55, -0.58], fov: 36, ease: 'surge' },
+    { f: 1492, pos: [5.2, 1.6, 5.3], look: [7.35, 0.55, -0.6], fov: 35, ease: 'surge' }] }) },
+  // hookq + hook: the FINAL framing (R2) — character beat + hook board
+  // TOGETHER: the carpenter and the young man stand foreground on the
+  // road (heads ~25% of width), the board centred above them at
+  // ~83-85% of width, fully inside the frame with margins, at FULL
+  // opacity through the literal final frame; the camera keeps a slow
+  // push the whole time — it never sits still.
   hookq: { cut: 'blend', blend: 10, raw: keysCam({ keys: [
-    { f: 1493, pos: [3.9, 3.4, 6.6], look: [-2.6, 3.45, -2.25], fov: 40 },
-    { f: 1599, pos: [5.3, 3.85, 7.85], look: [-2.68, 3.52, -2.29], fov: 37, ease: 'surge' }] }) },
+    { f: 1493, pos: [4.9, 2.6, 12.6], look: [-1.7, 2.95, -1.7], fov: 42 },
+    { f: 1546, pos: [4.0, 2.68, 11.4], look: [-2.3, 3.2, -2.1], fov: 40.5, ease: 'surge' },
+    { f: 1599, pos: [3.35, 2.7, 10.5], look: [-2.6, 3.35, -2.25], fov: 39.5, ease: 'surge' }] }) },
   hook: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1600, pos: [5.3, 3.85, 7.85], look: [-2.68, 3.52, -2.29], fov: 37 },
-    { f: 1637, pos: [5.15, 3.9, 7.7], look: [-2.69, 3.53, -2.29], fov: 36, ease: 'surge' }] }) },
+    { f: 1600, pos: [3.35, 2.7, 10.5], look: [-2.6, 3.35, -2.25], fov: 39.5 },
+    { f: 1637, pos: [3.22, 2.68, 10.25], look: [-2.62, 3.37, -2.26], fov: 39, ease: 'surge' }] }) },
 };
 const RIG = buildRig({
   total: TOTAL,
   shots: SHOTS.map((s) => ({ a: s.a, b: s.b, ...RIG_BY_ID[s.id] })),
-  kicks: [{ f: 186, a: 0.025 }, { f: 576, a: 0.03 }, { f: 593, a: 0.02 }, { f: 965, a: 0.025 }],
+  kicks: [{ f: 186, a: 0.22 }, { f: 576, a: 0.28 }, { f: 593, a: 0.2 }, { f: 694, a: 0.12 }, { f: 965, a: 0.24 }, { f: 1052, a: 0.12 }],
   sigma: 2.3, fovSigma: 1.6,
 });
 export const camAt = (f) => RIG.camAt(f);
@@ -318,9 +459,16 @@ export const RIG_META = {
 export const dofAt = (f) => {
   const S = shotAt(f), C = camAt(f), hp = heroPosAt(f);
   let cinf = 2.4;
-  if (['drone', 'hookq'].includes(S.id)) cinf = 1.4;
+  if (S.id === 'drone' && f >= 42) cinf = 1.4;
   if (['grooves', 'bump', 'palm', 'dialogue'].includes(S.id)) cinf = 3.6;
-  if (S.id === 'hook') cinf = 3.0;
+  if (S.id === 'swap') cinf = 3.2;
+  if (S.id === 'laugh') cinf = 2.6;
+  if (S.id === 'hookq' || S.id === 'hook') {
+    // focus on the board, but the foreground heroes (about half the
+    // board distance) must stay readable — shallow near-blur only
+    const bd = Math.hypot(C.pos[0] - BOARD_POS[0], C.pos[1] - BOARD_POS[1], C.pos[2] - BOARD_POS[2]);
+    return { focus: bd, cinf: 1.1, near: 0.4 };
+  }
   const d = Math.hypot(C.pos[0] - hp[0], C.pos[1] - hp[1], C.pos[2] - hp[2]);
   return { focus: d, cinf };
 };
@@ -338,7 +486,7 @@ export const worldAt = (f) => {
     palmX: p.x, palmY: p.y, palmZ: p.z, palmK: p.k,
     cloudK: cloudKAt(f),
   };
-  if (S.id === 'drone') W.boardTitle = smooth(ramp(f, 26, 44)) * (1 - smooth(ramp(f, 66, 86)));
+  if (S.id === 'drone') W.boardTitle = smooth(ramp(f, 78, 92)); // v4 opening: the title board fades in only once the rise reaches the wide framing (boardverify-safe)
   if (S.id === 'hookq') W.boardHook = smooth(ramp(f, 1546, 1572));
   if (S.id === 'hook') W.boardHook = 1;   // held at FULL opacity to the literal last frame
   return W;
@@ -404,89 +552,121 @@ export const castAt = (f) => {
     actor: (T) => ({ key: 'pax' + JSON.stringify(o) + JSON.stringify(opts), draw: (p) => T.bodyFront(p, o, opts), x, y: 0, z, ground: 0, tint, ...extra }) });
   const c = cartAt(f), d = driverAt(f), cp = carpAt(f), w = wcartAt(f), s = slabAt(f);
   const walkPhase = q((c.dist / 1.7) % 1, 2), fPhase = q((f * 0.011) % 1, 2);
+  // v1+v2 performance fragments: emotion morphs (brow/cheek = skin) +
+  // continuous life; walkers get the stride-lagged hair spring and a
+  // two-hand grip on the cart's pull bar (prop + propL, hands closed).
+  const CP = (e) => withSkin(emoCarp.at(f), e), DP = (e) => withSkin(emoDriver.at(f), e),
+    V1P = (e) => withSkin(emoVil1.at(f), e), V2P = (e) => withSkin(emoVil2.at(f), e), V3P = (e) => withSkin(emoVil3.at(f), e);
+  const HC = (o = {}) => H2(lifeCarp, f, 31, o), HD = (o = {}) => H2(lifeDriver, f, 51, o),
+    H1 = (o = {}) => H2(lifeVil1, f, 53, o), H2v = (o = {}) => H2(lifeVil2, f, 52, o), H3 = (o = {}) => H2(lifeVil3, f, 54, o);
   const carpBase = { mode: cp.mode, blink: blinkAt(f, 31), seed: 31, phase: fPhase };
+  const pullGrip = d.moving ? { prop: ['point', 0.7], propL: ['point', 0.7] } : {};
+  const drvWalk = { spring: hairSpring(walkPhase) };
   switch (S.id) {
     case 'drone': {
-      std('driver', OUTFITS.driver, { expr: 'smile', mode: 'stroll', phase: walkPhase, blink: blinkAt(f, 51), seed: 51 }, d.x, d.z, { yaw: -0.4 });
-      std('carpenter', OUTFITS.carpenter, { ...carpBase, expr: 'smile' }, cp.x, cp.z, { yaw: 0.5 });
+      // frame 0 must read MID-STRIDE: the stride phase starts a quarter
+      // cycle in, so the legs are split and the hair spring is loaded
+      std('driver', OUTFITS.driver, { expr: 'smile', exprP: DP('smile'), mode: 'stroll', phase: q((walkPhase + 0.25) % 1, 2), blink: blinkAt(f, 51), seed: 51, ...pullGrip, ...HD(drvWalk) }, d.x, d.z, { yaw: -0.4 });
+      std('carpenter', OUTFITS.carpenter, { ...carpBase, expr: 'smile', exprP: CP('smile'), ...HC() }, cp.x, cp.z, { yaw: 0.5 });
       break;
     }
     case 'road': {
       const broken = f >= 180;
-      std('villager2', OUTFITS.villager2, { expr: broken ? 'shock' : 'neutral', mode: broken ? 'stand' : 'stroll', phase: fPhase, blink: blinkAt(f, 52), seed: 52 }, w.x + 1.92, w.z, { yaw: -0.3 });
+      std('villager2', OUTFITS.villager2, { expr: broken ? 'shock' : 'neutral', exprP: V2P(broken ? 'shock' : 'neutral'), mode: broken ? 'stand' : 'stroll', phase: fPhase, blink: blinkAt(f, 52), seed: 52, ...H2v() }, w.x + 1.92, w.z, { yaw: -0.3 });
       break;
     }
     case 'broke': {
-      std('carpenter', OUTFITS.carpenter, { ...carpBase, expr: 'stern', headTilt: 0.14 }, cp.x, cp.z, { yaw: -0.7 });
+      std('carpenter', OUTFITS.carpenter, { ...carpBase, expr: 'stern', exprP: CP('stern'), ...HC({ ht: 6 }) }, cp.x, cp.z, { yaw: -0.7 });
       break;
     }
     case 'grooves': {
-      std('carpenter', OUTFITS.carpenter, { ...carpBase, expr: 'smile', headTilt: 0.22 }, cp.x, cp.z, { yaw: -0.9 });
-      std('driver', OUTFITS.driver, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 51), seed: 51 }, -5.8, 1.4, { yaw: -0.5 });
-      std('villager1', OUTFITS.villager1, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 53), seed: 53 }, -5.95, 2.75, { yaw: -0.4 });
+      // seated at the cart, hands IN the groove seating the balls —
+      // both arms forward and down (grip posture) the whole beat
+      std('carpenter', OUTFITS.carpenter, { ...carpBase, expr: 'smile', exprP: CP('smile'), prop: ['point', 0.85], propL: ['point', 0.85], ...HC({ ht: 9 }) }, cp.x, cp.z, { yaw: -0.9 });
+      std('driver', OUTFITS.driver, { expr: 'smile', exprP: DP('smile'), mode: 'stand', blink: blinkAt(f, 51), seed: 51, ...HD() }, -4.95, 1.15, { yaw: -0.5 });
+      std('villager1', OUTFITS.villager1, { expr: 'smile', exprP: V1P('smile'), mode: 'stand', blink: blinkAt(f, 53), seed: 53, ...H1() }, -5.6, 0.85, { yaw: -0.4 });
       break;
     }
     case 'rollout': {
-      std('driver', OUTFITS.driver, { expr: 'smile', mode: d.moving ? 'stroll' : 'stand', phase: walkPhase, blink: blinkAt(f, 51), seed: 51 }, d.x, d.z, { yaw: -0.4 });
-      std('carpenter', OUTFITS.carpenter, { ...carpBase, expr: 'smile' }, cp.x, cp.z, { yaw: 0.6 });
-      std('villager1', OUTFITS.villager1, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 53), seed: 53 }, -2.2, 1.7, { yaw: 0.4 });
+      std('driver', OUTFITS.driver, { expr: 'smile', exprP: DP('smile'), mode: d.moving ? 'stroll' : 'stand', phase: walkPhase, blink: blinkAt(f, 51), seed: 51, ...pullGrip, ...HD(drvWalk) }, d.x, d.z, { yaw: -0.4 });
+      std('carpenter', OUTFITS.carpenter, { ...carpBase, expr: 'smile', exprP: CP('smile'), ...HC() }, cp.x, cp.z, { yaw: 0.6 });
+      std('villager1', OUTFITS.villager1, { expr: 'smile', exprP: V1P('smile'), mode: 'stand', blink: blinkAt(f, 53), seed: 53, ...H1() }, -2.2, 1.7, { yaw: 0.4 });
       break;
     }
     case 'bump': case 'swap': case 'laugh': {
-      std('driver', OUTFITS.driver, { expr: 'smile', mode: d.moving ? 'stroll' : 'stand', phase: walkPhase, blink: blinkAt(f, 51), seed: 51 }, d.x, d.z, { yaw: -0.4 });
-      std('carpenter', OUTFITS.carpenter, { ...carpBase, expr: S.id === 'swap' && cp.mode === 'sit' ? 'stern' : 'smile', headTilt: cp.mode === 'sit' ? 0.2 : 0 }, cp.x, cp.z, { yaw: S.id === 'laugh' ? -0.5 : 0.4 });
+      const swapping = S.id === 'swap' && cp.mode === 'sit';
+      const gs = swapping ? gripSwap(f) : { squash: 0 };
+      std('driver', OUTFITS.driver, { expr: 'smile', exprP: DP('smile'), mode: d.moving ? 'stroll' : 'stand', phase: walkPhase, blink: blinkAt(f, 51), seed: 51, ...pullGrip, ...HD(drvWalk) }, d.x, d.z, { yaw: -0.4 });
+      std('carpenter', OUTFITS.carpenter, { ...carpBase, expr: swapping ? 'stern' : 'smile', exprP: CP(swapping ? 'stern' : 'smile'),
+        ...(swapping ? { prop: ['point', 0.78], propL: ['point', 0.6] } : {}), ...HC({ ht: cp.mode === 'sit' ? 8 : 0, squash: gs.squash }) }, cp.x, cp.z, { yaw: S.id === 'laugh' ? -0.5 : 0.4 });
       if (S.id === 'laugh') {
-        std('villager2', OUTFITS.villager2, { expr: 'laugh', mode: 'stand', blink: blinkAt(f, 52), seed: 52 }, 5.6, 2.05, { yaw: 0.2 });
-        std('villager1', OUTFITS.villager1, { expr: 'laugh', mode: 'stand', blink: blinkAt(f, 53), seed: 53 }, 6.35, 1.85, { yaw: -0.2 });
+        // the laughing pair stands on the SOUTH roadside now — the v4
+        // camera stays in front of them for the reaction close-up
+        const bob = (seed) => q(1.7 * Math.abs(Math.sin(f * 0.45 + seed)), 1);
+        std('villager2', OUTFITS.villager2, { expr: 'laugh', exprP: V2P('laugh'), mode: 'stand', blink: blinkAt(f, 52), seed: 52, ...H2v({ ht: bob(52) }) }, 6.0, 5.7, { yaw: 0.2 });
+        std('villager1', OUTFITS.villager1, { expr: 'laugh', exprP: V1P('laugh'), mode: 'stand', blink: blinkAt(f, 53), seed: 53, ...H1({ ht: bob(53) }) }, 6.6, 6.15, { yaw: -0.2 });
       }
       break;
     }
     case 'harvest': {
-      std('carpenter', OUTFITS.carpenter, { ...carpBase, expr: f < 880 ? 'nervous' : 'smile', prop: ['point', 0.5] }, cp.x, cp.z, { yaw: 0.7 });
-      std('driver', OUTFITS.driver, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 51), seed: 51 }, d.x, d.z, { yaw: -0.6 });
-      std('villager2', OUTFITS.villager2, { expr: 'nervous', mode: 'stand', blink: blinkAt(f, 52), seed: 52, headTilt: -0.08 }, 1.55, 5.3, { yaw: 0.3 });
-      std('villager1', OUTFITS.villager1, { expr: 'nervous', mode: 'stand', blink: blinkAt(f, 53), seed: 53, headTilt: -0.08 }, 3.15, 4.85, { yaw: -0.3 });
-      std('villager3', OUTFITS.villager3, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 54), seed: 54 }, 2.6, 5.6, { yaw: 0 });
+      std('carpenter', OUTFITS.carpenter, { ...carpBase, expr: f < 880 ? 'nervous' : 'smile', exprP: CP(f < 880 ? 'nervous' : 'smile'), prop: ['point', 0.5], ...HC() }, cp.x, cp.z, { yaw: 0.7 });
+      std('driver', OUTFITS.driver, { expr: 'neutral', exprP: DP('neutral'), mode: 'stand', blink: blinkAt(f, 51), seed: 51, ...HD() }, d.x, d.z, { yaw: -0.6 });
+      std('villager2', OUTFITS.villager2, { expr: 'nervous', exprP: V2P('nervous'), mode: 'stand', blink: blinkAt(f, 52), seed: 52, ...H2v({ ht: -3 }) }, 1.55, 5.3, { yaw: 0.3 });
+      std('villager1', OUTFITS.villager1, { expr: 'nervous', exprP: V1P('nervous'), mode: 'stand', blink: blinkAt(f, 53), seed: 53, ...H1({ ht: -3 }) }, 3.15, 4.85, { yaw: -0.3 });
+      std('villager3', OUTFITS.villager3, { expr: 'neutral', exprP: V3P('neutral'), mode: 'stand', blink: blinkAt(f, 54), seed: 54, ...H3() }, 2.6, 5.6, { yaw: 0 });
       break;
     }
     case 'mud': {
-      std('villager2', OUTFITS.villager2, { expr: 'nervous', mode: 'stand', prop: ['point', 0.7], blink: blinkAt(f, 52), seed: 52 }, w.x + 1.92, w.z + 0.05, { yaw: -0.3 });
-      std('villager3', OUTFITS.villager3, { expr: 'nervous', mode: 'stand', prop: ['push', 0.7], blink: blinkAt(f, 54), seed: 54, headTilt: 0.15 }, w.x - 1.95, w.z + 0.15, { yaw: 0.85 });
-      std('carpenter', OUTFITS.carpenter, { ...carpBase, expr: 'smile' }, cp.x, cp.z, { yaw: -0.5 });
-      std('driver', OUTFITS.driver, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 51), seed: 51 }, d.x, d.z, { yaw: -0.5 });
+      std('villager2', OUTFITS.villager2, { expr: 'nervous', exprP: V2P('nervous'), mode: 'stand', prop: ['point', 0.7], blink: blinkAt(f, 52), seed: 52, ...H2v() }, w.x + 1.92, w.z + 0.05, { yaw: -0.3 });
+      std('villager3', OUTFITS.villager3, { expr: 'nervous', exprP: V3P('nervous'), mode: 'stand', prop: ['push', 0.7], blink: blinkAt(f, 54), seed: 54, ...H3({ ht: 6 }) }, w.x - 1.95, w.z + 0.15, { yaw: 0.85 });
+      std('carpenter', OUTFITS.carpenter, { ...carpBase, expr: 'smile', exprP: CP('smile'), ...HC() }, cp.x, cp.z, { yaw: -0.5 });
+      std('driver', OUTFITS.driver, { expr: 'smile', exprP: DP('smile'), mode: 'stand', blink: blinkAt(f, 51), seed: 51, ...HD() }, d.x, d.z, { yaw: -0.5 });
       break;
     }
     case 'trips': {
-      std('driver', OUTFITS.driver, { expr: 'smile', mode: d.moving ? 'stroll' : 'stand', phase: walkPhase, blink: blinkAt(f, 51), seed: 51 }, d.x, d.z, { yaw: c.yaw > 1.5 ? 0.4 : -0.4 });
-      std('carpenter', OUTFITS.carpenter, { ...carpBase, expr: 'smile' }, cp.x, cp.z, { yaw: -0.4 });
+      std('driver', OUTFITS.driver, { expr: 'smile', exprP: DP('smile'), mode: d.moving ? 'stroll' : 'stand', phase: walkPhase, blink: blinkAt(f, 51), seed: 51, ...pullGrip, ...HD(drvWalk) }, d.x, d.z, { yaw: c.yaw > 1.5 ? 0.4 : -0.4 });
+      std('carpenter', OUTFITS.carpenter, { ...carpBase, expr: 'smile', exprP: CP('smile'), ...HC() }, cp.x, cp.z, { yaw: -0.4 });
       break;
     }
     case 'evening': {
-      std('carpenter', OUTFITS.carpenter, { ...carpBase, expr: 'smile' }, cp.x, cp.z, { yaw: 0.55 });
-      std('driver', OUTFITS.driver, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 51), seed: 51 }, d.x, d.z, { yaw: -0.55 });
+      std('carpenter', OUTFITS.carpenter, { ...carpBase, expr: 'smile', exprP: CP('smile'), ...HC() }, cp.x, cp.z, { yaw: 0.55 });
+      std('driver', OUTFITS.driver, { expr: 'neutral', exprP: DP('neutral'), mode: 'stand', blink: blinkAt(f, 51), seed: 51, ...HD() }, d.x, d.z, { yaw: -0.55 });
       break;
     }
     case 'palm': {
-      std('carpenter', OUTFITS.carpenter, { ...carpBase, expr: 'smile', prop: f >= 1216 && f <= 1262 ? ['point', 0.8] : null }, cp.x, cp.z, { yaw: 0.55 });
-      std('driver', OUTFITS.driver, { expr: 'smile', mode: 'stand', prop: f >= 1210 ? ['point', 0.85] : null, blink: blinkAt(f, 51), seed: 51 }, d.x, d.z, { yaw: -0.55 });
+      // THE grip beat: the carpenter's hand closes on the ball and
+      // lowers it onto the young man's raised palm — his arm follows
+      // gripPalm.k down, the settle squash lands as the ball rests
+      const gp = gripPalm(f);
+      std('carpenter', OUTFITS.carpenter, { ...carpBase, expr: 'smile', exprP: CP('smile'), prop: f >= 1205 ? ['point', q(0.3 + 0.55 * gp.k, 2)] : null, ...HC({ squash: gp.squash }) }, cp.x, cp.z, { yaw: 0.55 });
+      std('driver', OUTFITS.driver, { expr: 'smile', exprP: DP('smile'), mode: 'stand', prop: f >= 1210 ? ['point', 0.85] : null, blink: blinkAt(f, 51), seed: 51, ...HD() }, d.x, d.z, { yaw: -0.55 });
       break;
     }
     case 'dialogue': {
       // THE dialogue beat: the carpenter PERFORMS his line — mouth driven
-      // by the stem inside the speak segment, closed outside it; the
-      // young man only listens, the ball resting on his palm.
-      std('carpenter', OUTFITS.carpenter, { mode: 'stand', blink: blinkAt(f, 31), seed: 31, look: 0.12, ...speakFace('smile', f) }, cp.x, cp.z, { yaw: 0.5 });
-      std('driver', OUTFITS.driver, { expr: 'smile_closed', mode: 'stand', prop: ['point', 0.85], blink: blinkAt(f, 51), seed: 51 }, d.x, d.z, { yaw: -0.5 });
+      // by the stem inside the speak segment, closed outside it; his free
+      // hand gestures with the voice (gestureAt); the young man only
+      // listens, mouth shut, the ball resting on his palm.
+      const gst = gestCarp(f);
+      std('carpenter', OUTFITS.carpenter, { mode: 'stand', blink: blinkAt(f, 31), seed: 31, ...HC({ look: 0.12 }), ...speakFace('smile', f), ...(gst.on ? { propL: ['point', gst.k] } : {}) }, cp.x, cp.z, { yaw: 0.5 });
+      std('driver', OUTFITS.driver, { expr: 'smile_closed', exprP: DP('smile'), mode: 'stand', prop: ['point', 0.85], blink: blinkAt(f, 51), seed: 51, ...HD() }, d.x, d.z, { yaw: -0.5 });
       break;
     }
     case 'slab': {
-      std('villager2', OUTFITS.villager2, { expr: 'stern', mode: 'stand', prop: ['push', 0.65], headTilt: 0.18, blink: blinkAt(f, 52), seed: 52 }, s.x - 1.68, s.z - 0.35, { yaw: 0.85 });
-      std('villager1', OUTFITS.villager1, { expr: 'stern', mode: 'stand', prop: ['push', 0.65], headTilt: 0.18, blink: blinkAt(f, 53), seed: 53 }, s.x - 1.68, s.z + 0.35, { yaw: 0.85 });
-      std('carpenter', OUTFITS.carpenter, { ...carpBase, expr: 'smile' }, cp.x, cp.z, { yaw: 0.7 });
-      std('driver', OUTFITS.driver, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 51), seed: 51 }, 8.9, 0.9, { yaw: -0.6 });
+      std('villager2', OUTFITS.villager2, { expr: 'stern', exprP: V2P('stern'), mode: 'stand', prop: ['push', 0.65], blink: blinkAt(f, 52), seed: 52, ...H2v({ ht: 7 }) }, s.x - 1.68, s.z - 0.35, { yaw: 0.85 });
+      std('villager1', OUTFITS.villager1, { expr: 'stern', exprP: V1P('stern'), mode: 'stand', prop: ['push', 0.65], blink: blinkAt(f, 53), seed: 53, ...H1({ ht: 7 }) }, s.x - 1.68, s.z + 0.35, { yaw: 0.85 });
+      std('carpenter', OUTFITS.carpenter, { ...carpBase, expr: 'smile', exprP: CP('smile'), ...HC() }, cp.x, cp.z, { yaw: 0.7 });
+      std('driver', OUTFITS.driver, { expr: 'smile', exprP: DP('smile'), mode: 'stand', blink: blinkAt(f, 51), seed: 51, ...HD() }, 8.9, 0.9, { yaw: -0.6 });
       break;
     }
-    case 'hookq': case 'hook': break;
+    case 'hookq': case 'hook': {
+      // END RULE: narration + board only — both heroes are PRESENT in
+      // the foreground (the R2 character beat) but neither speaks:
+      // mouths closed, gentle life only, gazing up at the board.
+      std('carpenter', OUTFITS.carpenter, { ...carpBase, expr: 'smile', exprP: CP('smile'), ...HC({ lookY: -0.25 }) }, 0.75, 5.15, { yaw: 0.25 });
+      std('driver', OUTFITS.driver, { expr: 'smile_closed', exprP: DP('smile'), mode: 'stand', blink: blinkAt(f, 51), seed: 51, ...HD({ lookY: -0.25 }) }, -0.3, 4.6, { yaw: -0.2 });
+      break;
+    }
   }
   return out;
 };

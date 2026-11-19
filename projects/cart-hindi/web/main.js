@@ -5,6 +5,7 @@ import * as FX from './fx.js';
 import * as PR from './props.js';
 import * as M4 from './materials.js';
 import { TOTAL, shotAt, camAt, dofAt, lightFor, actorsAt, worldAt, fxAt, fxProfileAt, BOARD_POS, TITLE_POS, ROAD_Z, BUMP } from './story.js';
+import { WORDS } from './words.js';
 
 const W = 1080, H = 1920;
 const canvas = document.getElementById('c');
@@ -384,6 +385,33 @@ const dofScene = fs(new THREE.ShaderMaterial({ uniforms: dofU, vertexShader: `va
     gl_FragColor = linearToOutputTexel(vec4(acc/max(wsum,1e-3), 1.)); }` }));
 dofScene.children[0].material.toneMapped = false;
 
+// ---------- word-by-word captions (the reference's signature) ----------
+const capCanvas = document.createElement('canvas'); capCanvas.width = W; capCanvas.height = H;
+const capG = capCanvas.getContext('2d');
+const capTex = new THREE.CanvasTexture(capCanvas); capTex.colorSpace = THREE.SRGBColorSpace;
+const capScene = fs(new THREE.MeshBasicMaterial({ map: capTex, transparent: true, toneMapped: false }));
+let capKey = null;
+const drawCaption = (f) => {
+  const t = f / 30;
+  let i = -1;
+  for (let k = 0; k < WORDS.length; k++) { if (t >= WORDS[k].s) i = k; else break; }
+  let word = '';
+  if (i >= 0) word = WORDS[i].w;
+  if (word === capKey) return;
+  capKey = word;
+  capG.clearRect(0, 0, W, H);
+  if (word) {
+    capG.font = '900 74px Arial, Helvetica, sans-serif';
+    capG.textAlign = 'center'; capG.textBaseline = 'middle'; capG.lineJoin = 'round';
+    capG.lineWidth = 17; capG.strokeStyle = '#000000';
+    const y = Math.round(H * 0.79);
+    capG.strokeText(word, W / 2, y);
+    capG.fillStyle = '#ffffff';
+    capG.fillText(word, W / 2, y);
+  }
+  capTex.needsUpdate = true;
+};
+
 // ---------- per-frame state ----------
 const tmpV = new THREE.Vector3();
 function applyLight(L, f) {
@@ -511,6 +539,8 @@ window.renderFrame = (f) => {
   renderer.setRenderTarget(rtInk); renderer.render(inkScene, fsCam);
   dofU.focus.value = D.focus; dofU.cinf.value = D.cinf; dofU.near.value = D.near ?? 1;
   renderer.setRenderTarget(null); renderer.render(dofScene, fsCam);
+  drawCaption(f);
+  renderer.autoClear = false; renderer.render(capScene, fsCam); renderer.autoClear = true;
   return true;
 };
 window.TOTAL = TOTAL;
