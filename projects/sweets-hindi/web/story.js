@@ -1,4 +1,9 @@
 // Shot plan for "कभी खाली न होने वाली मिठाई की थाली" — sweets-hindi
+// v4 UPGRADE (2026-11-19): picture rebuilt to Abid's v4 ACTION CAMERA
+// (punch-in key sets, tracking at subject speed, impact kicks, one
+// whip into the performed line) + kit body.js v2 animation (lifeAt
+// continuous life, gripAt tray lift, gestureAt dialogue gesture,
+// stridePh planted feet). Stem/script/beat map/boards/mix untouched.
 // R2 REBUILD (Salted Mine V3 / moonrent-R2 standard, approved by Abid):
 // painted 3D world, white-head card cast, word-by-word captions,
 // hard-cut clause shots with travelling cameras, body actions, ONE
@@ -34,7 +39,7 @@
 // dusk for the hook board. Boards/text are never graded.
 import { M, blinkAt, q, clamp, lerp, ramp, kf } from './motion.js';
 import { buildRig, keysCam, pushInCam } from './camrig.js';
-import { poseWindows, turnTrack, winkTrack } from './body.js';
+import { poseWindows, turnTrack, winkTrack, lifeAt, gripAt, gestureAt, stridePh } from './body.js';
 import { makeSpeakPlayer, applySpeak } from './speak.js';
 import { SPEAK_DATA } from './speakdata.js';
 import * as SOL from './solid.js';
@@ -173,129 +178,171 @@ const FOCUS = {
 };
 export const heroPosAt = (f) => FOCUS[shotAt(f).id]();
 
-// ---------- cameras: R2 grammar — a hard CUT per clause, every shot
-// travels (push / track), no static holds. Sizes follow the R2
-// coverage rules: hero BIG on the opening, inserts fill the frame,
-// action at subject level from the FRONT three-quarter (never behind
-// the cards), reactions push past 65% of frame width.
+// ---------- cameras: v4 ACTION CAMERA (Abid's standard, upgrade
+// 2026-11-19) — a hard CUT per clause (ONE whip into the performed
+// line), and inside every shot the fireless/waterrun punch grammar:
+// the camera enters WIDE and PUNCHES IN fast — subject scale grows
+// ~x1.5-2 inside the first 14-16 frames ('surge' landing key) — then
+// keeps tracking/settling at subject speed to the end key. No slow
+// drift, no static holds, camera velocity keyed to the subject.
+// Impact KICKS land on the story's physical beats: the count shock
+// (f748), the laddu pop (f1262), the tray reaching full lift (f1364),
+// the crowd's laugh burst (f1418). Sizes keep the R2 coverage rules:
+// hero BIG on the opening, inserts fill the frame, action at subject
+// level from the FRONT three-quarter (never behind the cards),
+// reactions punch past 65% of frame width.
 const RIG_BY_ID = {
   // open: LOW angle from the plaza, the halwai BIG behind his counter
-  // from frame 0 (head ~40% of frame width, growing), mid-action —
-  // arm raised presenting the overflowing thali beside him.
+  // from frame 0 (head ~40% of frame width), punching to ~53% by f15
+  // as he presents the overflowing thali, then a slow tighten.
   open: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 0, pos: [1.57, 1.34, 4.14], look: [0.62, 1.5, 1.1], fov: 37.5 },
-    { f: 127, pos: [1.47, 1.37, 3.8], look: [0.62, 1.52, 1.08], fov: 36, ease: 'surge' }] }) },
+    { f: 0, pos: [1.66, 1.3, 4.35], look: [0.62, 1.5, 1.1], fov: 38 },
+    { f: 15, pos: [1.5, 1.36, 3.62], look: [0.62, 1.52, 1.08], fov: 35, ease: 'surge' },
+    { f: 70, pos: [1.46, 1.38, 3.58], look: [0.62, 1.52, 1.08], fov: 34.8, ease: 'smooth' },
+    { f: 127, pos: [1.44, 1.38, 3.52], look: [0.62, 1.53, 1.08], fov: 34.5, ease: 'surge' }] }) },
   // morning: tight on the tray as he loads the hundred laddus — the
   // mound fills the frame, the halwai working behind it.
   morning: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 128, pos: [1.5, 1.7, 4.35], look: [0.6, 1.42, 1.0], fov: 36 },
-    { f: 216, pos: [1.38, 1.66, 4.08], look: [0.6, 1.44, 1.0], fov: 34.5, ease: 'surge' }] }) },
-  // crowd: the noon rush — counter, tray and three customers in a
-  // medium-wide that still pushes in.
+    { f: 128, pos: [1.56, 1.74, 4.5], look: [0.6, 1.4, 1.0], fov: 37 },
+    { f: 143, pos: [1.42, 1.67, 4.12], look: [0.6, 1.43, 1.0], fov: 34.5, ease: 'surge' },
+    { f: 216, pos: [1.36, 1.65, 3.98], look: [0.6, 1.44, 1.0], fov: 33.5, ease: 'surge' }] }) },
+  // crowd: the noon rush — counter, tray and three customers; the
+  // punch lands by f232, then the push keeps pace with the rush.
   crowd: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 217, pos: [-2.55, 2.5, 7.65], look: [0.22, 1.14, 1.6], fov: 45 },
-    { f: 325, pos: [-2.3, 2.42, 7.15], look: [0.24, 1.16, 1.62], fov: 42, ease: 'surge' }] }) },
-  // gossip: THE REACTION — a push-in on the amazed customer's face,
-  // moonrent 'fear' grammar: ~50% of frame width growing past 65%.
-  gossip: { cut: 'hard', raw: pushInCam({ subject: () => [-0.5, 0, 2.9], dir: () => [0.42, 0.91],
-    d0: 3.4, d1: 2.55, h0: 1.64, h1: 1.59, a: 326, b: 453, lookOff: [0, 1.61, 0], fov0: 35, fov1: 31 }) },
-  // smug: the halwai's close — full price, no shame; face ~60->70%.
+    { f: 217, pos: [-2.7, 2.58, 7.95], look: [0.22, 1.12, 1.6], fov: 46 },
+    { f: 232, pos: [-2.38, 2.44, 7.3], look: [0.23, 1.15, 1.61], fov: 43, ease: 'surge' },
+    { f: 325, pos: [-2.24, 2.4, 7.05], look: [0.24, 1.16, 1.62], fov: 41.5, ease: 'surge' }] }) },
+  // gossip: THE REACTION — a fast PUNCH onto the amazed customer's
+  // face: ~48% of frame width at the cut, ~70% by f341, settling ~73%.
+  gossip: { cut: 'hard', raw: keysCam({ keys: [
+    { f: 326, pos: [0.99, 1.66, 6.13], look: [-0.5, 1.61, 2.9], fov: 36 },
+    { f: 341, pos: [0.59, 1.6, 5.27], look: [-0.5, 1.61, 2.9], fov: 32.5, ease: 'surge' },
+    { f: 453, pos: [0.51, 1.59, 5.1], look: [-0.5, 1.61, 2.9], fov: 31.5, ease: 'surge' }] }) },
+  // smug: the halwai's close — full price, no shame; the punch takes
+  // his face from ~55% to ~70% inside 15 frames.
   smug: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 454, pos: [1.85, 1.64, 3.2], look: [0.76, 1.47, 0.52], fov: 34 },
-    { f: 578, pos: [1.7, 1.6, 2.95], look: [0.75, 1.48, 0.52], fov: 32, ease: 'surge' }] }) },
-  // tally: the neighbour and his slate, medium-close — the chalk
+    { f: 454, pos: [1.92, 1.66, 3.32], look: [0.76, 1.47, 0.52], fov: 35 },
+    { f: 469, pos: [1.74, 1.61, 3.0], look: [0.75, 1.48, 0.52], fov: 32.5, ease: 'surge' },
+    { f: 578, pos: [1.68, 1.59, 2.9], look: [0.75, 1.48, 0.52], fov: 31.5, ease: 'surge' }] }) },
+  // tally: the neighbour and his slate — punch in by f594, the chalk
   // groups accumulating in the lower frame as he watches the counter.
   tally: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 579, pos: [1.55, 1.52, 6.5], look: [3.22, 1.02, 3.65], fov: 39 },
-    { f: 685, pos: [1.7, 1.48, 6.2], look: [3.24, 1.04, 3.62], fov: 36, ease: 'surge' }] }) },
-  // count: the evening sum — his face close, the shock lands as the
-  // camera keeps pushing (400 sold against 100 loaded).
+    { f: 579, pos: [1.48, 1.55, 6.65], look: [3.22, 1.0, 3.65], fov: 40 },
+    { f: 594, pos: [1.64, 1.49, 6.28], look: [3.23, 1.03, 3.63], fov: 36.5, ease: 'surge' },
+    { f: 685, pos: [1.72, 1.47, 6.14], look: [3.24, 1.04, 3.62], fov: 35.5, ease: 'surge' }] }) },
+  // count: the evening sum — punch onto his face by f701, a second
+  // tighten as the shock lands (KICK f748: 400 sold against 100).
   count: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 686, pos: [1.95, 1.52, 6.15], look: [3.33, 1.22, 3.88], fov: 37 },
-    { f: 840, pos: [2.1, 1.5, 5.9], look: [3.34, 1.26, 3.9], fov: 34, ease: 'surge' }] }) },
-  // sneak: tracking the neighbour around the back of the shop.
+    { f: 686, pos: [1.88, 1.55, 6.3], look: [3.33, 1.2, 3.88], fov: 38 },
+    { f: 701, pos: [2.04, 1.51, 5.98], look: [3.34, 1.25, 3.9], fov: 34.5, ease: 'surge' },
+    { f: 748, pos: [2.08, 1.5, 5.9], look: [3.34, 1.26, 3.9], fov: 33.5, ease: 'surge' },
+    { f: 840, pos: [2.12, 1.5, 5.84], look: [3.34, 1.26, 3.9], fov: 33, ease: 'surge' }] }) },
+  // sneak: TRACKING the neighbour around the back of the shop at HIS
+  // speed — the camera keys ride his walk (f845-890), never ahead of
+  // him, never behind his pace.
   sneak: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 841, pos: [3.3, 2.0, -12.2], look: [4.2, 1.2, -8.35], fov: 39 },
-    { f: 894, pos: [2.8, 1.9, -11.5], look: [1.95, 1.26, -7.4], fov: 36, ease: 'surge' }] }) },
-  // peek: over his shoulder at the crack's glow — his head large at
-  // the side of frame, the lit slit centred beyond him.
+    { f: 841, pos: [3.6, 2.05, -12.5], look: [4.25, 1.2, -8.35], fov: 40 },
+    { f: 862, pos: [3.05, 1.95, -11.9], look: [3.0, 1.24, -7.8], fov: 37.5, ease: 'smooth' },
+    { f: 878, pos: [2.8, 1.9, -11.55], look: [2.1, 1.26, -7.45], fov: 36, ease: 'surge' },
+    { f: 894, pos: [2.72, 1.88, -11.4], look: [1.95, 1.27, -7.4], fov: 35.5, ease: 'surge' }] }) },
+  // peek: over his shoulder at the crack's glow — a fast settle onto
+  // the lit slit by f910, his head large at the side of frame.
   peek: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 895, pos: [1.15, 1.7, -10.9], look: [1.5, 1.45, -6.9], fov: 40 },
-    { f: 948, pos: [1.22, 1.67, -10.55], look: [1.5, 1.46, -6.9], fov: 38, ease: 'surge' }] }) },
-  // seeback: THE INSERT — a pure object shot (no cast). From the
-  // dark back room the camera pushes toward the partition's lit
-  // hatch: through it, the diagonal trough runs up to the dark hole
-  // under the tray — the secret channel framed by the opening.
+    { f: 895, pos: [1.1, 1.73, -11.15], look: [1.5, 1.45, -6.9], fov: 41 },
+    { f: 910, pos: [1.2, 1.68, -10.62], look: [1.5, 1.46, -6.9], fov: 38.5, ease: 'surge' },
+    { f: 948, pos: [1.24, 1.66, -10.45], look: [1.5, 1.46, -6.9], fov: 37.5, ease: 'surge' }] }) },
+  // seeback: THE INSERT — a pure object shot (no cast). The camera
+  // DOLLIES FAST through the dark back room toward the partition's
+  // lit hatch: through it, the diagonal trough runs up to the dark
+  // hole under the tray — the secret channel framed by the opening.
   seeback: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 949, pos: [0.25, 0.45, -3.2], look: [0.25, 0.62, 1.1], fov: 36 },
-    { f: 1053, pos: [0.25, 0.58, -1.2], look: [0.25, 0.68, 1.3], fov: 33, ease: 'surge' }] }) },
+    { f: 949, pos: [0.25, 0.42, -3.55], look: [0.25, 0.6, 1.05], fov: 37 },
+    { f: 965, pos: [0.25, 0.5, -2.2], look: [0.25, 0.64, 1.2], fov: 34.5, ease: 'surge' },
+    { f: 1053, pos: [0.25, 0.58, -1.15], look: [0.25, 0.68, 1.3], fov: 32.5, ease: 'surge' }] }) },
   // wife: the back-room reveal — she rolls laddus at her low table,
-  // front three-quarter, face large, dough and fresh laddus forward.
+  // front three-quarter; the punch lands her face large by f1069.
   wife: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1054, pos: [2.05, 1.32, -4.25], look: [0.7, 0.97, -2.05], fov: 34 },
-    { f: 1164, pos: [1.9, 1.28, -3.95], look: [0.68, 1.0, -2.0], fov: 32, ease: 'surge' }] }) },
-  // refillA: she turns toward the channel opening and reaches — a
-  // close on the wife as the secret starts moving.
+    { f: 1054, pos: [2.14, 1.36, -4.45], look: [0.7, 0.95, -2.05], fov: 35 },
+    { f: 1069, pos: [1.94, 1.29, -4.0], look: [0.69, 0.99, -2.02], fov: 32.5, ease: 'surge' },
+    { f: 1164, pos: [1.87, 1.27, -3.9], look: [0.68, 1.0, -2.0], fov: 31.5, ease: 'surge' }] }) },
+  // refillA: she turns toward the channel opening and reaches — the
+  // punch follows her turn, close on the wife as the secret moves.
   refillA: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1165, pos: [1.95, 1.28, -4.1], look: [0.52, 0.93, -1.62], fov: 34 },
-    { f: 1229, pos: [1.82, 1.24, -3.85], look: [0.5, 0.95, -1.6], fov: 32, ease: 'surge' }] }) },
+    { f: 1165, pos: [2.02, 1.31, -4.28], look: [0.52, 0.92, -1.62], fov: 35 },
+    { f: 1180, pos: [1.86, 1.25, -3.92], look: [0.51, 0.94, -1.61], fov: 32.5, ease: 'surge' },
+    { f: 1229, pos: [1.8, 1.23, -3.8], look: [0.5, 0.95, -1.6], fov: 31.5, ease: 'surge' }] }) },
   // refillB: THE ACTION BEAT — inside the counter cavity, front
   // three-quarter on the hidden channel: her hand rides the trough
-  // UP and pushes the fresh laddu through the hole. Hand + laddu
-  // fill the centre; the camera pushes with the hand.
+  // UP and pushes the fresh laddu through the hole; the camera
+  // pushes WITH the hand, rising as it rises (KICK at the pop f1262
+  // lands in the next shot's first frames).
   refillB: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1230, pos: [-1.05, 0.66, 1.35], look: [0.25, 0.76, 1.05], fov: 35 },
-    { f: 1269, pos: [-0.95, 0.78, 1.42], look: [0.25, 0.92, 1.25], fov: 32, ease: 'surge' }] }) },
+    { f: 1230, pos: [-1.12, 0.62, 1.3], look: [0.25, 0.72, 1.02], fov: 36 },
+    { f: 1246, pos: [-1.0, 0.72, 1.38], look: [0.25, 0.84, 1.16], fov: 33.5, ease: 'surge' },
+    { f: 1269, pos: [-0.93, 0.8, 1.44], look: [0.25, 0.94, 1.27], fov: 31.5, ease: 'surge' }] }) },
   // refillC: the payoff on top — tight on the mound as the fresh
-  // laddu pops on with its glint.
+  // laddu pops on with its glint; a fast settle onto the mound.
   refillC: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1270, pos: [1.3, 2.0, 3.05], look: [0.25, 1.34, 1.5], fov: 32 },
-    { f: 1299, pos: [1.16, 1.94, 2.82], look: [0.25, 1.36, 1.5], fov: 30, ease: 'surge' }] }) },
-  // revealA: the neighbour strides in and LIFTS the tray — group
-  // medium, the rising tray centred, the kick lands at full lift.
+    { f: 1270, pos: [1.36, 2.04, 3.18], look: [0.25, 1.33, 1.5], fov: 33 },
+    { f: 1282, pos: [1.2, 1.96, 2.88], look: [0.25, 1.35, 1.5], fov: 30.5, ease: 'surge' },
+    { f: 1299, pos: [1.14, 1.93, 2.78], look: [0.25, 1.36, 1.5], fov: 29.5, ease: 'surge' }] }) },
+  // revealA: the neighbour strides in and LIFTS the tray — the punch
+  // lands as he reaches the counter, a second tighten rides the lift
+  // itself, and the KICK lands at full lift (f1364).
   revealA: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1300, pos: [0.05, 1.98, 6.95], look: [0.62, 1.2, 2.0], fov: 45 },
-    { f: 1383, pos: [0.22, 1.92, 6.55], look: [0.68, 1.22, 1.98], fov: 42, ease: 'surge' }] }) },
+    { f: 1300, pos: [-0.05, 2.04, 7.25], look: [0.62, 1.18, 2.0], fov: 46 },
+    { f: 1315, pos: [0.14, 1.95, 6.7], look: [0.65, 1.21, 1.99], fov: 43, ease: 'surge' },
+    { f: 1364, pos: [0.2, 1.93, 6.58], look: [0.67, 1.22, 1.98], fov: 42, ease: 'surge' },
+    { f: 1383, pos: [0.23, 1.92, 6.5], look: [0.68, 1.22, 1.98], fov: 41.5, ease: 'surge' }] }) },
   // revealB: the hole, exposed — high front close on the counter
   // top: the tilted tray held above, the dark hole open beneath it;
-  // both men stand just out of frame, the hole owns the shot.
+  // a fast punch onto the hole, which owns the shot.
   revealB: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1384, pos: [0.5, 2.05, 4.6], look: [0.12, 1.0, 1.55], fov: 34 },
-    { f: 1417, pos: [0.44, 1.98, 4.35], look: [0.11, 1.02, 1.55], fov: 32, ease: 'surge' }] }) },
-  // laugh: the crowd lets go — medium on the laughing customers,
-  // the halwai sheepish-grinning behind the counter.
+    { f: 1384, pos: [0.56, 2.1, 4.82], look: [0.12, 0.99, 1.55], fov: 35 },
+    { f: 1396, pos: [0.46, 2.0, 4.42], look: [0.11, 1.01, 1.55], fov: 32.5, ease: 'surge' },
+    { f: 1417, pos: [0.43, 1.97, 4.3], look: [0.11, 1.02, 1.55], fov: 31.5, ease: 'surge' }] }) },
+  // laugh: the crowd lets go (KICK f1418 on the burst) — a fast
+  // punch into the laughing group, then the push rides the laugh.
   laugh: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1418, pos: [-2.5, 2.0, 7.3], look: [0.45, 1.25, 2.7], fov: 43 },
-    { f: 1557, pos: [-2.3, 1.94, 6.9], look: [0.47, 1.28, 2.68], fov: 40, ease: 'surge' }] }) },
-  // leadin: "तब हलवाई ने मुस्कुराकर कहा।" — his smile in close.
+    { f: 1418, pos: [-2.66, 2.06, 7.6], look: [0.45, 1.23, 2.7], fov: 44 },
+    { f: 1433, pos: [-2.38, 1.97, 7.02], look: [0.46, 1.27, 2.69], fov: 41, ease: 'surge' },
+    { f: 1557, pos: [-2.26, 1.93, 6.82], look: [0.47, 1.28, 2.68], fov: 39.5, ease: 'surge' }] }) },
+  // leadin: "तब हलवाई ने मुस्कुराकर कहा।" — his smile punched close.
   leadin: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1558, pos: [0.88, 1.62, 3.62], look: [0.72, 1.46, 0.5], fov: 33 },
-    { f: 1598, pos: [0.84, 1.6, 3.42], look: [0.72, 1.47, 0.5], fov: 31.5, ease: 'surge' }] }) },
-  // dialogue: THE performed line — a held close on the halwai as he
-  // says it himself (speak.js lip-sync); the push is gentle, the
-  // camera never leaves the speaker.
-  dialogue: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1599, pos: [1.75, 1.6, 3.15], look: [0.66, 1.47, 0.5], fov: 31 },
-    { f: 1707, pos: [1.62, 1.57, 2.9], look: [0.66, 1.48, 0.5], fov: 29.5, ease: 'surge' }] }) },
+    { f: 1558, pos: [0.92, 1.64, 3.78], look: [0.72, 1.46, 0.5], fov: 34 },
+    { f: 1572, pos: [0.85, 1.6, 3.46], look: [0.72, 1.47, 0.5], fov: 31.5, ease: 'surge' },
+    { f: 1598, pos: [0.84, 1.6, 3.4], look: [0.72, 1.47, 0.5], fov: 31, ease: 'surge' }] }) },
+  // dialogue: THE performed line — entered on a 6-frame WHIP from
+  // the lead-in's angle, then a fast settle onto the speaker and a
+  // held close while he says it himself (speak.js lip-sync); the
+  // camera never leaves him.
+  dialogue: { cut: 'whip', blend: 6, raw: keysCam({ keys: [
+    { f: 1599, pos: [1.7, 1.61, 3.2], look: [0.66, 1.47, 0.5], fov: 31.5 },
+    { f: 1613, pos: [1.64, 1.58, 2.96], look: [0.66, 1.48, 0.5], fov: 30, ease: 'surge' },
+    { f: 1707, pos: [1.6, 1.57, 2.86], look: [0.66, 1.48, 0.5], fov: 29, ease: 'surge' }] }) },
   // hook: character beat + board TOGETHER — the halwai kneels in the
-  // FOREGROUND (z 19.8, ~7 units from camera, head ~21% of frame
-  // width) at the board's lower-left, pointing up at the question;
-  // the board sits fully inside the frame at ~83% width with margins
-  // on both sides, dusk behind. (moonrent-R2 final recipe.)
+  // FOREGROUND (z 19.8, head ~21-26% of frame width) at the board's
+  // lower-left, pointing up at the question; the camera enters a
+  // touch wide and punches to the proven R2 end framing by f1723 —
+  // the board sits fully inside the frame (~74% -> ~84% width) with
+  // margins on both sides at every frame, dusk behind.
   hook: { cut: 'hard', raw: keysCam({ keys: [
-    { f: 1708, pos: [0, 2.06, 27.6], look: [-0.05, 1.62, 10.8], fov: 36 },
+    { f: 1708, pos: [0, 2.12, 28.3], look: [-0.05, 1.6, 10.8], fov: 36.5 },
+    { f: 1723, pos: [0, 2.02, 27.05], look: [-0.05, 1.61, 10.8], fov: 35.2, ease: 'surge' },
     { f: 1790, pos: [0, 2.0, 26.9], look: [-0.05, 1.6, 10.8], fov: 35, ease: 'surge' }] }) },
 };
 const RIG = buildRig({
   total: TOTAL,
   shots: SHOTS.map((s) => ({ a: s.a, b: s.b, ...RIG_BY_ID[s.id] })),
-  kicks: [{ f: 1364, a: 0.04 }],
+  kicks: [{ f: 748, a: 0.1 }, { f: 1262, a: 0.14 }, { f: 1364, a: 0.16 }, { f: 1418, a: 0.08 }],
   sigma: 2.3, fovSigma: 1.6,
 });
 export const camAt = (f) => ({ ...RIG.camAt(f), flash: 0 });
 export const RIG_META = {
   kicks: RIG.declared.kicks, hardCuts: RIG.declared.hardCuts,
-  blends: [], whips: RIG.declared.whips, samples: RIG.samples,
+  blends: SHOTS.filter((s) => RIG_BY_ID[s.id].cut === 'blend' || RIG_BY_ID[s.id].cut === 'whip')
+    .map((s) => ({ a: s.a - Math.floor((RIG_BY_ID[s.id].blend || 0) / 2), b: s.a + Math.ceil((RIG_BY_ID[s.id].blend || 0) / 2) })),
+  whips: RIG.declared.whips, samples: RIG.samples,
 };
 export const dofAt = (f) => {
   const S = shotAt(f), C = camAt(f), hp = heroPosAt(f);
@@ -380,18 +427,40 @@ const emoCustB = emoTrack('smile', [[326, 'wonder', 8], [1300, 'shock', 6], [141
 // refill, the halwai winks as he delivers the trick's logic.
 const wifeTurn = turnTrack([{ f0: 1172, dur: 14, dir: 1 }]);
 const halwaiWink = winkTrack([{ a: 1652, b: 1662 }]);
+// ANIMATION UPGRADE (kit body.js v2, 2026-11-18 order): continuous
+// life for every figure — lifeAt's slow weight-shift tilt is folded
+// into EVERY head() call below (keyed by the actor's seed), and its
+// breath phase offsets each actor's breathing inside std(). Nobody
+// stands like a robot, not even while speaking.
+const LIFE = {
+  31: lifeAt({ seed: 31 }), 41: lifeAt({ seed: 41 }), 43: lifeAt({ seed: 43 }),
+  47: lifeAt({ seed: 47 }), 61: lifeAt({ seed: 61 }), 71: lifeAt({ seed: 71 }),
+};
+// PHYSICAL GRIP: the neighbour's tray lift (f1332-1364) — gripAt's k
+// drives his raised-arm prop and its squash is the strain/settle of
+// taking the tray's weight; the tray's own world track (trayAt) rides
+// the same window, so hand and object move in the same frames.
+const trayGrip = gripAt([{ f0: 1332, dur: 32, type: 'lift', settle: 8 }]);
+// DIALOGUE GESTURE: while the halwai performs his line (f1599-1697),
+// his free hand talks with the voice — beats land on कभी (1621),
+// नहीं (1643), दोस्तों (1649), नीचे (1672), जुड़ी (1685).
+const gestHalwai = gestureAt([{ a: 1599, b: 1697, beats: [1621, 1643, 1649, 1672, 1685], base: 0.35, amp: 0.2 }]);
 const micro = (f, seed) => 1.1 * Math.sin((f + seed * 5) * 0.037 + 1);
 const nodAt = (f, f0, n = 9, depth = 0.34) => (f >= f0 && f <= f0 + n ? Math.sin((f - f0) / n * Math.PI) * depth : 0);
 const head = (f, seed, tilt, look, lookY, facing = 0, squash = 0) => ({
-  headTilt: q(tilt + micro(f, seed), 1), look: q(look, 2), lookY: q(lookY, 2), facing: q(facing, 2), squash: q(squash, 2),
+  headTilt: q(tilt + micro(f, seed) + (LIFE[seed] ? LIFE[seed](f).tilt : 0), 1), look: q(look, 2), lookY: q(lookY, 2), facing: q(facing, 2), squash: q(squash, 2),
 });
 
 export const castAt = (f) => {
   const S = shotAt(f), tint = tintFor(S), out = [];
-  const std = (id, o, opts, x, z, extra = {}) => out.push({ id, x, y: extra.y || 0, z, r: 0.30, ground: 0,
+  const std = (id, o, opts, x, z, extra = {}) => {
+    // lifeAt breath phase: each actor breathes on his own cycle.
+    if (opts.seed != null) opts.breath = f + opts.seed * 41;
+    out.push({ id, x, y: extra.y || 0, z, r: 0.30, ground: 0,
     actor: (T) => ({ key: 'smx' + JSON.stringify(o) + JSON.stringify(opts) + (extra.y || 0),
       draw: (p) => { T.bodyFront(p, o, opts); if (extra.overlay) extra.overlay(p); },
       x, y: extra.y || 0, z, ground: 0, tint, ...extra }) });
+  };
   const h = halwaiAt(f), n = neighAt(f), w = wifeAt(f);
   const aA = custAAt(f), aB = custBAt(f), aC = custCAt();
   let HP = emoHalwai.at(f);
@@ -453,7 +522,11 @@ export const castAt = (f) => {
     }
     case 'sneak': {
       const walking = f >= 845 && f < 890;
-      std('neighbour', OUTFITS.neighbour, { expr: 'neutral', exprP: NP, mode: walking ? 'march' : 'stand', phase: q((f * 0.013) % 1, 2), breath: f, blink: blinkAt(f, 61), seed: 61,
+      // stride phase from DISTANCE travelled (stridePh): the path
+      // (4.3,-8.3)->(1.85,-7.32) is ~2.64 long; feet plant with the
+      // ground instead of gliding on a fixed-rate cycle.
+      const walkU = smooth(ramp(f, 845, 890));
+      std('neighbour', OUTFITS.neighbour, { expr: 'neutral', exprP: NP, mode: walking ? 'march' : 'stand', phase: q(stridePh(0, walkU * 2.64, 0.95), 2), breath: f, blink: blinkAt(f, 61), seed: 61,
         ...head(f, 61, walking ? 1.6 * Math.sin(f * 0.3) : -2, -0.3, 0.15, -0.3) }, n.x, n.z, { yaw: -0.3 });
       break;
     }
@@ -492,9 +565,9 @@ export const castAt = (f) => {
     }
     case 'revealA': {
       const lifting = f >= 1332 && f <= 1417;
-      std('neighbour', OUTFITS.neighbour, { expr: 'neutral', exprP: NP, mode: 'stand', breath: f, blink: blinkAt(f, 61), seed: 61, prop: lifting ? ['point', 0.92] : null,
+      std('neighbour', OUTFITS.neighbour, { expr: 'neutral', exprP: NP, mode: 'stand', breath: f, blink: blinkAt(f, 61), seed: 61, prop: f >= 1332 ? ['point', q(0.92 * trayGrip(f).k, 2)] : null,
         ...head(f, 61, kf([[1300, -1], [1332, -2], [1364, -4], [1417, -3.5]], f), 0.1,
-          kf([[1300, 0.1], [1364, 0.5], [1417, 0.45]], f), 0.1, lifting && f < 1370 ? 0.05 : 0) }, n.x, n.z, { yaw: -0.15 });
+          kf([[1300, 0.1], [1364, 0.5], [1417, 0.45]], f), 0.1, q(trayGrip(f).squash, 2)) }, n.x, n.z, { yaw: -0.15 });
       std('halwai', OUTFITS.halwai, { expr: 'smile', exprP: HP, mode: 'stand', breath: f, blink: blinkAt(f, 31), seed: 31,
         ...head(f, 31, kf([[1300, -1.5], [1332, -2.5], [1364, -3], [1417, -2]], f), -0.4, 0.1, -0.4) }, h.x, h.z, { yaw: -0.35 });
       std('custA', OUTFITS.custA, { expr: 'grin', exprP: AP, mode: 'stand', breath: f, blink: blinkAt(f, 41), seed: 41,
@@ -506,8 +579,8 @@ export const castAt = (f) => {
     case 'revealB': {
       // the hole insert: the neighbour holds the tray up, the halwai
       // stares at the dark hole in the counter top.
-      std('neighbour', OUTFITS.neighbour, { expr: 'neutral', exprP: NP, mode: 'stand', breath: f, blink: blinkAt(f, 61), seed: 61, prop: ['point', 0.92],
-        ...head(f, 61, kf([[1384, -4], [1417, -3.5]], f), 0.1, kf([[1384, 0.5], [1417, 0.45]], f), 0.1, 0) }, n.x, n.z, { yaw: -0.15 });
+      std('neighbour', OUTFITS.neighbour, { expr: 'neutral', exprP: NP, mode: 'stand', breath: f, blink: blinkAt(f, 61), seed: 61, prop: ['point', q(0.92 * trayGrip(f).k, 2)],
+        ...head(f, 61, kf([[1384, -4], [1417, -3.5]], f), 0.1, kf([[1384, 0.5], [1417, 0.45]], f), 0.1, q(trayGrip(f).squash, 2)) }, n.x, n.z, { yaw: -0.15 });
       std('halwai', OUTFITS.halwai, { expr: 'smile', exprP: HP, mode: 'stand', breath: f, blink: blinkAt(f, 31), seed: 31,
         ...head(f, 31, kf([[1384, -3], [1417, -2]], f), -0.4, 0.1, -0.4) }, h.x, h.z, { yaw: -0.35 });
       break;
@@ -539,7 +612,7 @@ export const castAt = (f) => {
       let DP = applySpeak(HP, sp);
       const winkK = halwaiWink(f);
       if (winkK > 0) DP = T.blendFaceP(DP, T.faceP('wink', 31), winkK * (sp.active ? 0.5 : 1));
-      std('halwai', OUTFITS.halwai, { expr: 'smile', exprP: DP, mode: 'stand', breath: f, blink: blinkAt(f, 31), seed: 31,
+      std('halwai', OUTFITS.halwai, { expr: 'smile', exprP: DP, mode: 'stand', breath: f, blink: blinkAt(f, 31), seed: 31, prop: ['point', q(gestHalwai(f).k, 2)],
         ...head(f, 31, -2.5 + q(sp.nod * 40, 1), 0.05, -0.02, 0.05) }, h.x, h.z, { yaw: 0.08 });
       break;
     }

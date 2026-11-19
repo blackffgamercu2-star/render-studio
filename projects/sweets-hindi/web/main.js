@@ -401,7 +401,7 @@ const hookG = new THREE.Group(); hookG.position.set(HOOK_POS[0], 0, HOOK_POS[2])
     const leg = add(tbox(0.12, 1.1, 0.12, 2), MAT.woodDk, lx, 0.4, -0.3, hookG, { cast: false }); leg.rotation.x = 0.5;
   }
 }
-const boardHook = textBoard(['लेकिन कल...', 'वह आदमी जो अपनी ही', 'परछाई बेच आया?'], 4.8, 2.7, '#3a2410', '#ffe9a8', 900, { pitch: 0.20, dy: 0.01 });
+const boardHook = textBoard(['लेकिन कल...', 'वह आदमी जो अपनी ही', 'परछाई बेच आया?'], 4.8, 2.7, '#3a2410', '#ffe9a8', 900, { pitch: 0.20, dy: 0.01, fsMul: 0.58 });
 boardHook.position.set(0, HOOK_POS[1], 0); hookG.add(boardHook); addBoardOccluder(boardHook, 4.8, 2.7, 'hookK');
 
 // ---------- FX: bulb dust motes + kadhai steam ----------
