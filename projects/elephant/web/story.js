@@ -1,449 +1,340 @@
-// Shot plan for "The Boy Who Weighed the Elephant" (batch-5 topic 1, EN) —
-// timed to the ACTUAL voice stem (64.77 s, 30 fps, TOTAL 1943), clause
-// timings from faster-whisper word alignment on stem_en.wav (227 words,
-// last word ends 64.22 s; boundaries = ASR word-start frames; ASR heard
-// "chalk mark" as "chocolate arc" at 40.6 s — timing unaffected):
-// C1 0 hook "couldn't be done" | C2 57 elephant heavier than 10 horses |
-// C3 228 wise men / blacksmiths | C4 332 barefoot boy steps forward |
-// C5 488 court laughed | C6 571 led elephant to river | C7 689 walked it
-// onto the boat | C8 739 boat sank low | C9 783 chalk waterline |
-// C10 899 led elephant off, boat floated up | C11 981 "bring the stones" |
-// C12 1045 soldiers loaded stones | C13 1124 sank until water touched
-// the chalk mark | C14 1241 boy smiled, stones = elephant |
-// C15 1443 king stared, ordered weighed | C16 1580 weighed the unweighable |
-// C17 1697 next trick stranger | C18 1758 shepherd sold goat twice |
-// C19 1871 hook question, held to 1942.
-// QUALITY RULES: shots change ONLY at clause boundaries; camera TRACKS the
-// voice-named subject every beat (biggest/centred), never freezes, never
-// drifts; characters act in place — no walk-glide; costumes by role
-// (king = crown + royal robe, boy = worn poor clothes, barefoot,
-// soldiers = uniform, wise men = grey robes, shepherd = work clothes).
-// PHYSICS (Abid 2026-11-15, top priority): props sit flush on their
-// surface with contact shadow; stones rest ON the boat deck / bank pile
-// and stay; the chalk mark appears ON the boat side exactly as the marking
-// is spoken; the boat sinks ONLY as weight boards it (elephant, then
-// stones) and floats back up when the elephant steps off; the elephant
-// boards / leaves at clause boundaries with a settle, never gliding.
-// World: palace court x=0 (facade z=-3.2, throne z=-2.2), river x=+16
-// (boat at [16,0,-4.6] in the water strip z -8..-3.6, dry bank to the south).
-import { M, camFromKeys, blinkAt, q, clamp, lerp, lerp3, ramp, kf, kf3 } from './motion.js';
+// Shot plan for "The Boy Who Weighed an Elephant" — project: elephant.
+// Built on the REBUILT KIT (postman-kit) with Abid's three corrections:
+//  (1) props are real-part builds in main.js (elephant/boat/balances/ghat),
+//  (2) heads genuinely round (headBlob b=0.96a in toon.js/toonbase.js),
+//  (3) speaking motion NATURAL — deformAt neutralised, jaw <=0.22,
+//      cheek <=+0.06, head nod <=1.4deg on stressed words only.
+// Voice: tren stem (voice worker) — TOTAL/BND below are regenerated from
+// words.json once the stem lands; 17 shots, one per script line.
+// Dialogue (lip-sync) ONLY on L4 (head strongman), L6 (boy), L15 (king).
+import { M, blinkAt, q, clamp, lerp, ramp, kf } from './motion.js';
+import { buildRig, keysCam } from './camrig.js';
+import { poseWindows, gazeTrack, lifeAt, emoTrack, gripAt, gestureAt, stridePh } from './body.js';
+import * as SOL from './solid.js';
+import * as T from './toon.js';
+import * as SPK from './speak.js';
+import { SPEAK_DATA } from './speakdata.js';
 
-export const FPS = 30, TOTAL = 1943, DECK = 0;
-export const SHOTS = [
-  { id: 'title', a: 0, b: 56, light: 'day' },
-  { id: 'heavy', a: 57, b: 227, light: 'day' },
-  { id: 'wise', a: 228, b: 331, light: 'day' },
-  { id: 'boy', a: 332, b: 487, light: 'day' },
-  { id: 'laugh', a: 488, b: 570, light: 'day' },
-  { id: 'lead', a: 571, b: 688, light: 'day' },
-  { id: 'onboard', a: 689, b: 738, light: 'day' },
-  { id: 'sank', a: 739, b: 782, light: 'day' },
-  { id: 'chalk', a: 783, b: 898, light: 'day' },
-  { id: 'off', a: 899, b: 980, light: 'day' },
-  { id: 'bring', a: 981, b: 1044, light: 'day' },
-  { id: 'load', a: 1045, b: 1123, light: 'day' },
-  { id: 'mark', a: 1124, b: 1240, light: 'day' },
-  { id: 'smile', a: 1241, b: 1442, light: 'day' },
-  { id: 'king', a: 1443, b: 1579, light: 'day' },
-  { id: 'weighed', a: 1580, b: 1696, light: 'day' },
-  { id: 'stranger', a: 1697, b: 1757, light: 'dusk' },
-  { id: 'goat', a: 1758, b: 1870, light: 'dusk' },
-  { id: 'hook', a: 1871, b: 1942, light: 'dusk' },
-];
+const SPEAK = SPK.makeSpeakPlayer(SPEAK_DATA);
+const CHEEK = { neutral: 0.45, stern: 0.42, determined: 0.5, smile: 0.55, grin: 0.65, laugh: 0.85, shock: 0.22, wonder: 0.32, angry: 0.72, proud: 0.6, smug: 0.62, wink: 0.6, nervous: 0.3, scared: 0.25, sad: 0.35, thinking: 0.45, confused: 0.4, stubborn: 0.5, squint: 0.45, relief: 0.6 };
+const faceP2 = (name) => ({ ...T.faceP(name), cheek: CHEEK[name] ?? 0.45 });
+
+export const FPS = 30, TOTAL = 1799, DECK = 0;
+export const BND = [0, 97, 183, 290, 421, 524, 639, 736, 823, 947, 1083, 1189, 1279, 1373, 1478, 1583, 1696, 1799];
+const IDS = ['l01','l02','l03','l04','l05','l06','l07','l08','l09','l10','l11','l12','l13','l14','l15','l16','l17'];
+export const SHOTS = IDS.map((id, i) => ({ id, a: BND[i], b: BND[i + 1] - 1, light: 'night' }));
 export const TIMING = SHOTS.map((s) => [s.id, s.a, s.b]);
 export const shotAt = (f) => SHOTS.find((s) => f >= s.a && f <= s.b) || (f < 0 ? SHOTS[0] : SHOTS[SHOTS.length - 1]);
 const smooth = M.smooth;
-M.linear = (t) => clamp(t);
+const F = (id) => SHOTS.find((s) => s.id === id);
+const B = (id) => F(id).a, E = (id) => F(id).b;
 
-// ---------- lights ----------
-const WATER = { waterDeep: '#1d4a66', waterShal: '#2e6a8c', glint: '#ffe9c0' };
+// ---------- lights: kit vivid daylight, copied wholesale ----------
 export const LIGHTS = {
-  day: { az: 120, el: 45, sky: '#8fb8d8', ground: '#6a5a44', hemi: 1.12, sun: '#fff2cf', sunI: 2.4, fog: '#cfe0ea', fogNear: 40, fogFar: 320,
-    skyTop: '#3a6ab0', skyHor: '#cfe8f2', sunDisc: '#fffbe0', sunSize: 0.004, sat: 1.05, vig: 0.22, shadowExt: 18, aurora: 0, gain: '#ffffff', ...WATER },
-  dusk: { az: 100, el: 19, sky: '#caa27a', ground: '#5c4a34', hemi: 1.06, sun: '#ffb763', sunI: 2.3, fog: '#e0c9a0', fogNear: 40, fogFar: 320,
-    skyTop: '#54689c', skyHor: '#ffd9a0', sunDisc: '#fff3cf', sunSize: 0.0036, sat: 1.07, vig: 0.24, shadowExt: 18, aurora: 0, gain: '#ffe9d2', ...WATER },
+  night: { az: 148, el: 57, sky: '#9fd0f7', ground: '#7d8cc9', hemi: 1.12, sun: '#ffdf9e', sunI: 2.65, fog: '#cfe9f9', fogNear: 55, fogFar: 430,
+    skyTop: '#1463d8', skyHor: '#bfe6fb', sunDisc: '#fff3c4', sunSize: 0.0055, sat: 1.24, vig: 0.13, shadowExt: 26, aurora: 0, gain: '#fff0cd',
+    waterDeep: '#0d4a68', waterShal: '#2fb3c9', glint: '#ffffff' },
+  dawn: { az: 128, el: 41, sky: '#a5d6f5', ground: '#8492c9', hemi: 1.06, sun: '#ffd488', sunI: 2.5, fog: '#dff0e2', fogNear: 50, fogFar: 400,
+    skyTop: '#1d74dc', skyHor: '#f2eecb', sunDisc: '#ffedb8', sunSize: 0.006, sat: 1.26, vig: 0.14, shadowExt: 26, aurora: 0, gain: '#ffecc4',
+    waterDeep: '#12506e', waterShal: '#35b0bd', glint: '#ffffff' },
 };
-const hexLerp = (a, b, t) => {
-  const pa = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16)), pb = [1, 3, 5].map((i) => parseInt(b.slice(i, i + 2), 16));
-  return '#' + pa.map((v, i) => Math.round(lerp(v, pb[i], t)).toString(16).padStart(2, '0')).join('');
-};
-const blendLight = (A, B, t) => {
-  const o = {};
-  for (const k of Object.keys(A)) o[k] = typeof A[k] === 'number' ? lerp(A[k], B[k], t) : hexLerp(A[k], B[k], t);
-  return o;
-};
+LIGHTS.blaze = { ...LIGHTS.night, sunI: 2.8, sat: 1.30, vig: 0.15, gain: '#ffe9bd', skyHor: '#cdf2f4' };
 export const lightFor = (S, f) => {
-  if (S.id === 'stranger') return blendLight(LIGHTS.day, LIGHTS.dusk, smooth(ramp(f, 1697, 1740)));
+  if (S.id === 'l16' || S.id === 'l17') { const L = { ...LIGHTS.night }; L.sun = '#ffd9a0'; return L; }
+  if (S.id === 'l01' || S.id === 'l11') return { ...LIGHTS.blaze };
   return { ...LIGHTS[S.light] };
 };
 
-// ---------- staging ----------
-export const THRONE = [0, 0, -2.2];
-export const WELL = [16, 0, -4.6];            // boat anchor (river, in the water strip)
-export const BOAT = [16, 0, -4.6];
-export const GOLDBAG = [16.35, 0, -0.35];
-export const BOY = [16.8, 0, -0.3];           // boy EAST of the elephant head — clear of its bulk from the SW camera
-export const BOY_COURT = [0.8, 0, -0.8];
-export const KING_R = [18.6, 0, -0.8];        // king on the dry bank
-export const KING_C = [1.9, 0, -0.9];         // king standing in court
-export const WISE_L = [-1.5, 0, -0.9];
-export const WISE_R = [1.7, 0, -1.0];
-export const SMITH = [-2.6, 0, -0.9];
-export const SOLD_L = [14.0, 0, -0.6];
-export const SOLD_R = [18.0, 0, -0.6];
-export const SHEPHERD = [-0.6, 0, -0.9];
-export const MERCHANT = [1.4, 0, -0.9];
-export const GLP = [-2.0, 0, -1.7], GRP = [2.0, 0, -1.7];
-export const ELEPH_BANK = [14.0, 0, -1.2];   // elephant waiting on the dry bank
-export const ELEPH_BOAT = [16, 0, -1.6];     // elephant standing on the boat
-
-const HERO = {
-  title: () => [16, 1.8, -3.0],
-  heavy: () => [15.5, 1.5, -2.0],
-  wise: () => [0, 1.2, -1.2],
-  boy: () => [0.8, 1.1, -0.8],
-  laugh: () => [0, 1.3, -2.2],
-  lead: () => [13.8, 1.3, -1.4],
-  onboard: () => [16, 1.4, -4.6],
-  sank: () => [16, 0.9, -4.6],
-  chalk: () => [15.2, 0.7, -4.0],
-  off: () => [14.2, 1.2, -2.0],
-  bring: () => [16.0, 1.1, -0.5],
-  load: () => [16, 1.0, -4.2],
-  mark: () => [16, 0.7, -4.6],
-  smile: () => [16.8, 1.1, -0.3],
-  king: () => [18.6, 1.25, -0.8],
-  weighed: () => [16, 1.1, -3.8],
-  stranger: () => [0, 1.2, -1.2],
-  goat: () => [-0.6, 1.1, -0.9],
-  hook: () => [0, 2.5, -2.95],
+// ---------- geography (shared with main.js) ----------
+export const BOARD_POS = [0, 2.9, 24];
+export const WATER_Y = -0.18;
+export const BOAT = { x: 1.2, z: 11.5, len: 7.2, wid: 2.6, deckY: 0.42 };
+export const BIG_BAL = { x: -4.8, z: 0.2 };
+export const SMALL_BAL = { x: 4.8, z: 2.2, tableY: 0.55 };
+export const STEP_TOP_Y = 0; // bank level
+export const stepYAtZ = (z) => { // ghat steps: z 3.2 (y0) -> 7.5 (y-0.75), 5 steps
+  if (z <= 3.2) return 0; if (z >= 7.5) return -0.75;
+  return -0.15 * Math.floor((z - 3.2) / 0.86) - 0.075;
 };
-export const heroPosAt = (f) => HERO[shotAt(f).id](f);
+export const groundAt = (x, z) => z >= 3.2 && z < 7.6 && x > -7 && x < 7 ? stepYAtZ(z) : (z >= 18 && x > 1.2 && x < 4.2 ? 0.15 : 0);
 
-// ---------- cameras ----------
-// Continuous flight: every shot's first key repeats the previous shot's
-// last key; inside a shot the camera surges TO the clause subject.
-const CAMS = {
-  title: [
-    { f: 0, pos: [12.5, 3.2, 9.5], look: [15.0, 1.9, -2.8], fov: 44 },
-    { f: 30, pos: [13.0, 3.0, 8.8], look: [15.2, 1.9, -2.8], fov: 42, ease: 'surge' },
-    { f: 56, pos: [13.0, 2.8, 8.2], look: [15.4, 1.8, -2.8], fov: 41, ease: 'surge' },
-  ],
-  heavy: [
-    { f: 57, pos: [13.0, 2.8, 8.2], look: [15.4, 1.8, -2.8], fov: 41 },
-    { f: 140, pos: [13.5, 2.4, 8.0], look: [15.5, 1.5, -2.0], fov: 41, ease: 'surge' },
-    { f: 227, pos: [14.0, 2.3, 7.6], look: [15.8, 1.4, -2.0], fov: 40 },
-  ],
-  wise: [
-    { f: 228, pos: [14.0, 2.3, 7.6], look: [15.8, 1.4, -2.0], fov: 40 },
-    { f: 280, pos: [7.5, 3.0, 8.5], look: [0, 1.8, -2.6], fov: 43, ease: 'surge' },
-    { f: 331, pos: [0.4, 2.3, 7.4], look: [0, 1.2, -1.2], fov: 43, ease: 'surge' },
-  ],
-  boy: [
-    { f: 332, pos: [0.4, 2.3, 7.4], look: [0, 1.2, -1.2], fov: 43 },
-    { f: 410, pos: [0.2, 2.0, 5.6], look: [0.8, 1.1, -0.8], fov: 40, ease: 'surge' },
-    { f: 487, pos: [0.3, 1.95, 5.4], look: [0.8, 1.1, -0.8], fov: 39 },
-  ],
-  laugh: [
-    { f: 488, pos: [0.3, 1.95, 5.4], look: [0.8, 1.1, -0.8], fov: 39 },
-    { f: 530, pos: [0.6, 2.2, 5.8], look: [0, 1.3, -2.2], fov: 41, ease: 'surge' },
-    { f: 570, pos: [0.5, 2.2, 6.0], look: [0, 1.3, -2.2], fov: 40 },
-  ],
-  lead: [
-    { f: 571, pos: [0.5, 2.2, 6.0], look: [0, 1.3, -2.2], fov: 40 },
-    { f: 630, pos: [7.0, 3.0, 9.5], look: [14, 1.2, -1.2], fov: 43, ease: 'surge' },
-    { f: 688, pos: [12.8, 2.6, 8.0], look: [14.2, 1.3, -1.2], fov: 41, ease: 'surge' },
-  ],
-  onboard: [
-    { f: 689, pos: [12.8, 2.6, 8.0], look: [14.2, 1.3, -1.2], fov: 41 },
-    { f: 710, pos: [13.0, 1.8, 8.0], look: [16, 0.6, -4.4], fov: 44, ease: 'surge' },
-    { f: 738, pos: [13.2, 1.7, 7.8], look: [16, 0.6, -4.4], fov: 43 },
-  ],
-  sank: [
-    { f: 739, pos: [13.2, 1.7, 7.8], look: [16, 0.6, -4.4], fov: 43 },
-    { f: 760, pos: [14.5, 1.8, 7.0], look: [16, 0.5, -4.6], fov: 41, ease: 'surge' },
-    { f: 782, pos: [14.6, 1.7, 6.8], look: [16, 0.5, -4.6], fov: 40 },
-  ],
-  chalk: [
-    { f: 783, pos: [14.6, 1.7, 6.8], look: [16, 0.5, -4.6], fov: 40 },
-    { f: 830, pos: [15.0, 1.8, 6.5], look: [16.2, 0.6, -4.0], fov: 39, ease: 'surge' },
-    { f: 898, pos: [15.1, 1.75, 6.3], look: [16.2, 0.6, -4.0], fov: 38 },
-  ],
-  off: [
-    { f: 899, pos: [15.1, 1.75, 6.3], look: [16.2, 0.6, -4.0], fov: 38 },
-    { f: 940, pos: [13.6, 2.4, 7.6], look: [15.0, 1.2, -2.5], fov: 40, ease: 'surge' },
-    { f: 980, pos: [13.8, 2.3, 7.4], look: [15.0, 1.1, -2.5], fov: 39 },
-  ],
-  bring: [
-    { f: 981, pos: [13.8, 2.3, 7.4], look: [15.0, 1.1, -2.5], fov: 39 },
-    { f: 1010, pos: [14.2, 2.2, 7.2], look: [15.0, 1.1, -0.7], fov: 39, ease: 'surge' },
-    { f: 1044, pos: [14.4, 2.15, 7.0], look: [15.0, 1.1, -0.7], fov: 38 },
-  ],
-  load: [
-    { f: 1045, pos: [14.4, 2.15, 7.0], look: [15.0, 1.1, -0.7], fov: 38 },
-    { f: 1080, pos: [17.5, 4.5, 6.5], look: [16, 0.7, -4.2], fov: 40, ease: 'surge' },
-    { f: 1123, pos: [17.3, 4.4, 6.3], look: [16, 0.7, -4.2], fov: 39 },
-  ],
-  mark: [
-    { f: 1124, pos: [17.3, 4.4, 6.3], look: [16, 0.7, -4.2], fov: 39 },
-    { f: 1180, pos: [15.0, 2.6, 7.5], look: [15.2, 0.5, -4.2], fov: 40, ease: 'surge' },
-    { f: 1240, pos: [15.1, 2.5, 7.3], look: [15.2, 0.5, -4.2], fov: 39, ease: 'surge' },
-  ],
-  smile: [
-    { f: 1241, pos: [15.1, 2.5, 7.3], look: [15.2, 0.5, -4.2], fov: 39 },
-    { f: 1300, pos: [14.2, 2.2, 7.4], look: [14.0, 1.1, -0.5], fov: 39, ease: 'surge' },
-    { f: 1442, pos: [14.4, 2.15, 7.2], look: [14.0, 1.1, -0.5], fov: 38 },
-  ],
-  king: [
-    { f: 1443, pos: [14.4, 2.15, 7.2], look: [14.0, 1.1, -0.5], fov: 38 },
-    { f: 1500, pos: [15.6, 2.2, 6.8], look: [17.5, 1.25, -1.2], fov: 38, ease: 'surge' },
-    { f: 1579, pos: [15.7, 2.15, 6.6], look: [17.5, 1.25, -1.2], fov: 37 },
-  ],
-  weighed: [
-    { f: 1580, pos: [15.7, 2.15, 6.6], look: [17.5, 1.25, -1.2], fov: 37 },
-    { f: 1620, pos: [14.5, 2.6, 8.5], look: [15.5, 1.5, -3.8], fov: 44, ease: 'surge' },
-    { f: 1696, pos: [14.5, 2.7, 8.8], look: [15.5, 1.5, -3.8], fov: 44 },
-  ],
-  stranger: [
-    { f: 1697, pos: [14.5, 2.7, 8.8], look: [15.5, 1.5, -3.8], fov: 44 },
-    { f: 1730, pos: [7.5, 3.0, 8.5], look: [0, 1.8, -2.6], fov: 43, ease: 'surge' },
-    { f: 1757, pos: [0.4, 2.3, 7.4], look: [0, 1.2, -1.2], fov: 43 },
-  ],
-  goat: [
-    { f: 1758, pos: [0.4, 2.3, 7.4], look: [0, 1.2, -1.2], fov: 43 },
-    { f: 1810, pos: [0.2, 2.0, 5.6], look: [-0.6, 1.1, -0.9], fov: 40, ease: 'surge' },
-    { f: 1870, pos: [0.3, 1.95, 5.4], look: [-0.6, 1.1, -0.9], fov: 39 },
-  ],
-  hook: [
-    { f: 1871, pos: [0.3, 1.95, 5.4], look: [-0.6, 1.1, -0.9], fov: 39 },
-    { f: 1900, pos: [2.6, 2.5, 5.8], look: [0, 2.45, -2.95], fov: 40, ease: 'surge' },
-    { f: 1942, pos: [2.4, 2.55, 6.2], look: [0, 2.5, -2.95], fov: 39, ease: 'surge' },
-  ],
+// ---------- boat sink / rock / loads ----------
+export const boatSinkAt = (f) => {
+  const S = shotAt(f).id;
+  const rock = (S === 'l09' || S === 'l10') ? 0.012 * Math.sin(f * 0.22) * Math.exp(-Math.max(0, f - B('l09')) / 160) : 0;
+  let sink = 0;
+  if (S === 'l07') sink = 0.52 * smooth(ramp(f, B('l07') + 20, E('l07')));
+  else if (S === 'l08') sink = 0.52;
+  else if (S === 'l09') sink = 0.52 * (1 - smooth(ramp(f, B('l09'), B('l09') + (E('l09') - B('l09')) * 0.75)));
+  else if (S === 'l10') sink = 0.52 * smooth(ramp(f, B('l10'), E('l10')));
+  else if (['l11','l12','l13','l14','l15'].includes(S)) sink = 0.52;
+  else if (S === 'l16') sink = lerp(0.52, 0.16, smooth(ramp(f, B('l16'), E('l16'))));
+  else if (S === 'l17') sink = 0.16;
+  return sink + rock;
 };
-export const camAt = (f) => camFromKeys(CAMS[shotAt(f).id], f);
+export const boatYAt = (f) => -boatSinkAt(f);
+export const deckYAt = (f) => BOAT.deckY + boatYAt(f);
+export const stoneKAt = (f) => { // stones inside the boat 0..1
+  const S = shotAt(f).id;
+  if (S === 'l10') return smooth(ramp(f, B('l10'), E('l10')));
+  if (['l11','l12','l13','l14','l15'].includes(S)) return 1;
+  if (S === 'l16') return 1 - 0.7 * smooth(ramp(f, B('l16'), E('l16')));
+  if (S === 'l17') return 0.3;
+  return 0;
+};
+export const markKAt = (f) => f >= B('l08') + Math.round((E('l08') - B('l08')) * 0.45) ? 1 : 0; // painted mid-L8
+export const snapKAt = (f) => { const t0 = B('l03') + Math.round((E('l03') - B('l03')) * 0.55); return f < t0 ? 0 : Math.min(1, (f - t0) / 6); };
+export const pileKAt = (f) => { // stone pile beside the small balance grows as loads are weighed
+  const S = shotAt(f).id;
+  if (S === 'l12') return 0.35 * smooth(ramp(f, B('l12'), E('l12')));
+  if (S === 'l13') return 0.35 + 0.5 * smooth(ramp(f, B('l13'), E('l13')));
+  if (['l14','l15','l16','l17'].includes(S)) return 0.85;
+  return 0;
+};
+export const numIdxAt = (f) => { // counting slate: 0 none, 1/2/3 in L13, 3 after
+  const S = shotAt(f).id;
+  if (S === 'l13') { const u = ramp(f, B('l13'), E('l13')); return u < 0.36 ? 1 : u < 0.7 ? 2 : 3; }
+  if (['l14','l15','l16'].includes(S)) return 3;
+  return 0;
+};
+export const smallTiltAt = (f) => {
+  const S = shotAt(f).id;
+  if (S === 'l12') return 0.16 * Math.sin(ramp(f, B('l12'), E('l12')) * Math.PI * 3) * (1 - ramp(f, B('l12'), E('l12')) * 0.6) - 0.05;
+  if (S === 'l13') return -0.05 + 0.03 * Math.sin(f * 0.1);
+  return 0;
+};
+
+// ---------- elephant track ----------
+export const elephantAt = (f) => {
+  const S = shotAt(f).id;
+  const idle = { x: -2.0, z: 1.2, y: 0, yaw: 0.5, phase: 0, moving: 0, trunk: 0.25 + 0.08 * Math.sin(f * 0.03) };
+  const path = (id, pts) => { // pts: [[x,z,y],...] lerped by shot progress
+    const u = ramp(f, B(id), E(id)) * (pts.length - 1), i = Math.min(pts.length - 2, Math.floor(u)), t = smooth(u - i);
+    const x = lerp(pts[i][0], pts[i + 1][0], t), z = lerp(pts[i][1], pts[i + 1][1], t), y = lerp(pts[i][2], pts[i + 1][2], t);
+    const dx = pts[i + 1][0] - pts[i][0], dz = pts[i + 1][1] - pts[i][1];
+    return { x, z, y, yaw: Math.atan2(dz, dx) - 0, phase: (f - B(id)) / 22, moving: 1, trunk: 0.35 };
+  };
+  switch (S) {
+    case 'l04': case 'l05': case 'l06': return { x: -6.4, z: 0.9, y: 0, yaw: 0.9, phase: 0, moving: 0, trunk: 0.3 + 0.08 * Math.sin(f * 0.03) };
+    case 'l07': return path('l07', [[-3.4, 3.4, 0], [-1.2, 5.6, -0.5], [0.4, 8.6, deckYAt(f)], [1.2, 11.3, deckYAt(f)]]);
+    case 'l08': return { x: 2.1, z: 12.1, y: deckYAt(f), yaw: -0.9, phase: 0, moving: 0, trunk: 0.55 + 0.1 * Math.sin(f * 0.04) };
+    case 'l09': return path('l09', [[1.2, 11.3, deckYAt(f)], [0.4, 8.6, deckYAt(f)], [-1.2, 5.6, -0.5], [-3.2, 3.6, 0]]);
+    case 'l10': case 'l11': case 'l12': case 'l13': return { x: -4.6, z: 3.4, y: 0, yaw: 0.9, phase: 0, moving: 0, trunk: 0.3 + 0.08 * Math.sin(f * 0.03) };
+    case 'l14': case 'l15': case 'l16': return { x: -3.4, z: 2.4, y: 0, yaw: 0.7, phase: 0, moving: 0, trunk: 0.3 };
+    default: return idle;
+  }
+};
+// yaw convention: model forward is +x when yaw=0; group.rotation.y = -yaw in main (three y-up, z toward camera south)
+// (main.js converts: rotY = -yaw + PI/2 adjustment documented there)
+
+// ---------- hero / focus ----------
+const FOCUS = {
+  l01: () => [-0.6, 1.5, 2.2], l02: () => [-0.6, 1.4, 1.6], l03: () => [BIG_BAL.x, 1.7, BIG_BAL.z],
+  l04: () => [-0.9, 1.35, 3.3], l05: () => [0.6, 1.3, 4.0], l06: () => [2.8, 0.9, 5.6],
+  l07: (f) => { const e = elephantAt(f); return [e.x, 1.4, e.z]; },
+  l08: () => [0.9, 0.5, 10.9], l09: (f) => { const e = elephantAt(f); return [e.x, 1.4, e.z]; },
+  l10: () => [-0.6, 1.1, 6.4], l11: () => [0.8, WATER_Y + 0.05, 10.2],
+  l12: () => [SMALL_BAL.x, 1.1, SMALL_BAL.z], l13: () => [3.9, 1.2, 1.6], l14: () => [0.2, 1.4, 3.6],
+  l15: () => [1.7, 1.45, 4.3], l16: () => [0.8, 1.1, 5.2], l17: () => [0.4, 2.7, 24.6],
+};
+export const heroPosAt = (f) => FOCUS[shotAt(f).id](f);
+
+// ---------- cameras: smooth rig, push-ins only, NO kicks/whips ----------
+const K = (id, keys) => ({ id, a: B(id), b: E(id), cut: 'hard', raw: keysCam({ keys: keys.map(([dt, pos, look, fov]) => ({ f: B(id) + dt, pos, look, fov, ...(dt ? { ease: 'io' } : {}) })) }) });
+const push = (id, pos0, pos1, look, fov0, fov1) => K(id, [[0, pos0, look, fov0], [13, pos1, look, fov1], [E(id) - B(id), pos1, look, fov1 - 1]]);
+const trackEle = (id, dx, dy, dz, fov) => ({ id, a: B(id), b: E(id), cut: 'hard', raw: (f) => { const e = elephantAt(f); return { pos: [e.x + dx, e.y + dy, e.z + dz], look: [e.x, e.y + 1.35, e.z], fov, roll: 0 }; } });
+const RIG_SHOTS = [
+  push('l01', [-8.6, 3.2, 19.8], [-8.0, 3.0, 18.6], [-0.2, 1.3, 2.4], 46, 42),
+  push('l02', [-8.2, 3.6, 18.5], [-7.7, 3.4, 17.6], [0.2, 1.2, 2.0], 45, 42),
+  push('l03', [-4.7, 2.3, 14.5], [-4.7, 2.15, 13.8], [BIG_BAL.x, 1.6, 0.4], 44, 40),
+  push('l04', [-0.6, 1.6, 12.2], [-0.7, 1.52, 11.5], [-0.75, 1.3, 3.55], 37, 33),
+  push('l05', [0, 1.9, -4.6], [0, 1.8, -4.0], [0, 1.15, 4.5], 48, 44),
+  push('l06', [1.8, 2.3, 11.8], [1.85, 2.2, 11.4], [1.8, 0.9, 5.2], 40, 36),
+  trackEle('l07', -10.0, 2.8, 8.5, 48),
+  push('l08', [-3.4, 1.5, 3.6], [-3.1, 1.42, 4.2], [0.5, 0.55, 10.9], 40, 36),
+  trackEle('l09', -10.0, 2.8, 8.5, 48),
+  { id: 'l10', a: B('l10'), b: E('l10'), cut: 'hard', raw: (f) => { const u = ramp(f, B('l10'), E('l10')); const cx = lerp(-3.4, 1.8, u); return { pos: [cx - 1.2, 1.75, -1.8], look: [cx + 0.6, 1.05, 6.2], fov: 39, roll: 0 }; } },
+  push('l11', [4.3, 0.3, 9.2], [4.15, 0.29, 9.35], [0.6, -0.14, 10.2], 38, 35),
+  push('l12', [4.8, 1.6, 12.8], [4.8, 1.55, 12.1], [4.75, 1.05, 2.3], 38, 34),
+  push('l13', [3.9, 1.7, 10.8], [3.9, 1.62, 10.1], [3.9, 1.12, 1.7], 38, 34),
+  push('l14', [10.5, 3.2, 18.5], [9.9, 3.0, 17.7], [0.1, 1.3, 3.4], 43, 39),
+  push('l15', [1.9, 1.72, 13.2], [1.8, 1.65, 12.5], [1.5, 1.38, 4.6], 34, 30),
+  { id: 'l16', a: B('l16'), b: E('l16'), cut: 'hard', raw: (f) => { const u = ramp(f, B('l16'), E('l16')); const cx = lerp(-2.6, 2.4, u); return { pos: [cx - 0.8, 1.7, -2.0], look: [cx + 0.4, 1.05, 5.4], fov: 39, roll: 0 }; } },
+  push('l17', [5.0, 2.9, 40.5], [4.75, 2.75, 39.6], [0.1, 2.8, 24.5], 40, 36),
+];
+const RIG = buildRig({ total: TOTAL, shots: RIG_SHOTS, kicks: [], sigma: 3.2, smoothRadius: 10, fovSigma: 1.7 });
+export const camAt = (f) => RIG.camAt(f);
+export const RIG_META = { kicks: RIG.declared.kicks, hardCuts: RIG.declared.hardCuts, blends: [], whips: RIG.declared.whips, samples: RIG.samples };
 export const dofAt = (f) => {
-  const S = shotAt(f), C = camAt(f);
-  const hp = heroPosAt(f);
-  let cinf = 2.5;
-  if (['chalk', 'mark', 'hook'].includes(S.id)) cinf = 2.2;
-  if (S.id === 'king') cinf = 2.2;
+  const S = shotAt(f), C = camAt(f), hp = heroPosAt(f);
+  let cinf = 2.0;
+  if (['l02','l14'].includes(S.id)) cinf = 1.3;
+  if (['l04','l06','l15'].includes(S.id)) cinf = 4.3;
+  if (['l11','l12','l13'].includes(S.id)) cinf = 3.4;
+  if (S.id === 'l17') cinf = 1.8;
   const d = Math.hypot(C.pos[0] - hp[0], C.pos[1] - hp[1], C.pos[2] - hp[2]);
   return { focus: d, cinf };
 };
 
 // ---------- world state ----------
-// Boat ride: floats at +0.25, sinks to -0.05 under the elephant (689-738),
-// floats back up as the elephant steps off (900-960), sinks again as the
-// stones load (1045-1240) to the SAME -0.05 — the chalk mark's level.
-const BOATY_KEYS = [[0, 0.25], [688, 0.25], [738, -0.05], [899, -0.05], [960, 0.25], [1044, 0.25], [1240, -0.05], [1942, -0.05]];
-// Elephant: bank -> boat (689-730, steps on with a settle) -> bank (900-950).
-const ELEPH_X_KEYS = [[0, 14.0], [688, 14.0], [730, 16], [899, 16], [950, 12.5], [1942, 12.5]];
-const ELEPH_Z_KEYS = [[0, -1.2], [688, -1.2], [730, -4.6], [899, -4.6], [950, -1.2], [1942, -1.2]];
 export const worldAt = (f) => {
   const S = shotAt(f);
-  const boatY = kf(BOATY_KEYS, f);
-  const onBoat = smooth(ramp(f, 689, 730)) * (1 - smooth(ramp(f, 900, 950)));
-  const moving = (f > 688 && f < 732) || (f > 899 && f < 952);
-  const bob = moving ? Math.abs(Math.sin(f * 0.55)) * 0.05 : 0;   // stepping bob while boarding
   const W = {
-    boardTitle: 0, boardPayoff: 0, boardHook: 0,
-    boatY, elephX: kf(ELEPH_X_KEYS, f), elephZ: kf(ELEPH_Z_KEYS, f),
-    elephY: onBoat * (boatY + 0.355) + (onBoat > 0 && onBoat < 1 ? bob : 0),
-    elephK: 1, chalkK: 0, pileK: 0, rippleK: 0, splashP: 0,
-    stone0: 0, stone1: 0, stone2: 0, stone3: 0, stone4: 0, stone5: 0,
-    payK: 0, goldK: 0,
+    boardHook: 0, intK: 0,
+    sink: boatSinkAt(f), stoneK: stoneKAt(f), markK: markKAt(f), snapK: snapKAt(f),
+    pileK: pileKAt(f), numIdx: numIdxAt(f), smallTilt: smallTiltAt(f),
+    eleX: elephantAt(f).x, eleZ: elephantAt(f).z, eleY: elephantAt(f).y, eleYaw: elephantAt(f).yaw,
+    elePhase: elephantAt(f).phase, eleMoving: elephantAt(f).moving, trunk: elephantAt(f).trunk,
+    dustK: ['l07','l09','l10','l16'].includes(S.id) ? 0.5 : 0.08,
   };
-  if (S.id === 'title') W.boardTitle = 1 - smooth(ramp(f, 44, 56));
-  if (S.id === 'weighed') W.boardPayoff = smooth(ramp(f, 1625, 1637)) * (1 - smooth(ramp(f, 1680, 1696)));
-  if (S.id === 'hook') W.boardHook = smooth(ramp(f, 1900, 1912));   // NO fade-out: holds 1.0 to the last frame
-  // chalk mark draws across the boat side exactly as the marking is spoken
-  W.chalkK = smooth(ramp(f, 800, 860));
-  // stone pile appears on the bank when the boy calls for stones
-  W.pileK = smooth(ramp(f, 981, 1000)) * (1 - 0.5 * smooth(ramp(f, 1045, 1240)));
-  // one stone boards per ~28 frames as the soldiers load (1045-1240)
-  for (let i = 0; i < 6; i++) W['stone' + i] = smooth(ramp(f, 1055 + i * 28, 1075 + i * 28));
-  // ripples when the elephant steps on / off the boat
-  W.rippleK = Math.max(smooth(ramp(f, 700, 730)) * (1 - smooth(ramp(f, 760, 820))), smooth(ramp(f, 905, 930)) * (1 - smooth(ramp(f, 950, 1000))));
-  W.splashP = ramp(f, 700, 726);
+  if (S.id === 'l17') W.boardHook = f < B('l17') + 20 ? smooth(ramp(f, B('l17') + 2, B('l17') + 20)) : 1;
   return W;
 };
-export const fxProfileAt = (f) => {
-  const S = shotAt(f);
-  return { smokeRate: (S.light === 'day' ? 0.3 : 0.24), dustRate: 0.08, splashRate: 0 };
-};
+export const fxProfileAt = (f) => ({ moteRate: worldAt(f).dustK, sprayRate: 0, smokeRate: 0.02, dustRate: worldAt(f).dustK });
+export const fxAt = () => [];
 
-// ---------- crows in the sky (set dressing; deterministic) ----------
-const CROW_N = 7;
-const circleAt = (f, i, cx, cz, r = 5, h = 9) => {
-  const a = f * 0.008 + i * 0.9;
-  return { p: [cx + r * Math.cos(a), h + Math.sin(f * 0.05 + i) * 0.8, cz + r * Math.sin(a)], yaw: a + Math.PI / 2, flap: f * 0.9 + i * 1.7, s: 1 };
-};
-export const flyCrowsAt = (f) => {
-  const S = shotAt(f);
-  const out = [];
-  const court = (S.id === 'wise' || S.id === 'boy' || S.id === 'laugh' || S.id === 'stranger' || S.id === 'goat' || S.id === 'hook');
-  for (let i = 0; i < CROW_N; i++) out.push(circleAt(f, i, court ? 0 : 16, -2, court ? 6 : 4, court ? 9.5 : 8.5));
-  return out;
-};
-
-// ---------- actors ----------
-// COSTUMES BY ROLE — king: crimson royal robe + gold crown + grey
-// moustache, stout. Boy: worn poor tunic, barefoot (skin-tone feet),
-// dark hair. Soldiers: red uniform + shako + gold belt. Wise men: grey
-// robes + white beards. Shepherd: straw cap + work clothes. Merchant:
-// rich blue jacket.
-const TINT = { day: '#ffffff', dusk: '#ffd9a3' };
-const tintFor = (S, f) => TINT[S.light] || '#ffffff';
+// ---------- cast ----------
 export const OUTFITS = {
-  king: { jacket: '#7a1f2e', pants: '#3a2a4a', boots: '#241a12', hat: 'crown', skin: '#e8b08a', moustache: '#d8d0c0', build: 'stout', dress: '#7a1f2e' },
-  boy: { jacket: '#7a6a4a', pants: '#5d4a30', boots: '#c98a5a', hat: 'hair', hair: '#1f160e', skin: '#c98a5a' },
-  soldier: { jacket: '#8c2f39', pants: '#2a2e3d', boots: '#1c1a17', hat: 'shako', belt: '#e8c45a', skin: '#e8b08a' },
-  soldier2: { jacket: '#8c2f39', pants: '#2a2e3d', boots: '#1c1a17', hat: 'shako', belt: '#e8c45a', skin: '#c98a5a' },
-  wiseA: { jacket: '#5a5a62', pants: '#3d3d44', boots: '#241a12', hat: 'cap', cap: '#4a4a52', skin: '#e8b08a', moustache: '#e8e8e8' },
-  wiseB: { jacket: '#6a5a52', pants: '#44403a', boots: '#241a12', hat: 'cap', cap: '#524a42', skin: '#c98a5a', moustache: '#f0f0f0' },
-  smith: { jacket: '#3d3d3d', pants: '#2e2a26', boots: '#1c1a17', hat: 'cap', cap: '#2a2a2a', skin: '#c98a5a' },
-  shepherd: { jacket: '#6a5a3a', pants: '#4a3d28', boots: '#3a2c1c', hat: 'cap', cap: '#c9a24d', skin: '#c98a5a' },
-  merchant: { jacket: '#2e4a6a', pants: '#2a2e3d', boots: '#1c1a17', hat: 'cap', cap: '#1f3247', skin: '#e8b08a' },
-  guardL: { jacket: '#8c2f39', pants: '#2a2e3d', boots: '#1c1a17', hat: 'shako', belt: '#e8c45a', skin: '#e8b08a' },
-  guardR: { jacket: '#8c2f39', pants: '#2a2e3d', boots: '#1c1a17', hat: 'shako', belt: '#e8c45a', skin: '#c98a5a' },
+  king: { jacket: '#7c2233', pants: '#3a2a3a', boots: '#241a12', hat: 'crown', skin: '#ffe2c2' },
+  boy: { jacket: '#2f7d8c', pants: '#5a4632', boots: '#4a3220', hat: 'hair', hair: '#241a12', skin: '#ffe2c2', build: 'kid' },
+  strong: { jacket: '#b3543a', pants: '#33302c', boots: '#201812', hat: 'turban', turban: '#f3e3bb', skin: '#f5c9a0', build: 'stout', moustache: '#2a201a' },
+  strong2: { jacket: '#8c5a2e', pants: '#2c3038', boots: '#1c1712', hat: 'turban', turban: '#e8dcc0', skin: '#ffe2c2', build: 'stout', moustache: '#2a201a' },
+  court1: { jacket: '#3f7d4e', pants: '#33302c', boots: '#201812', hat: 'hair', hair: '#1e1714', skin: '#ffe2c2' },
+  court2: { jacket: '#7b5ac9', pants: '#2c3038', boots: '#1c1712', hat: 'cap', cap: '#54682c', skin: '#f5c9a0' },
+  court3: { jacket: '#c99635', pants: '#33302c', boots: '#201812', hat: 'turban', turban: '#f3e3bb', skin: '#f5c9a0' },
+  court4: { jacket: '#4a6a9e', pants: '#2c3038', boots: '#201812', hat: 'hair', hair: '#2b211c', skin: '#ffe2c2' },
 };
-const RW = (T, o, opts, pos, extra = {}) => ({ key: 'pax' + JSON.stringify(o) + JSON.stringify(opts), draw: (p) => T.bodyFront(p, o, opts), x: pos[0], y: pos[1], z: pos[2], ground: pos[3] ?? pos[1], ...extra });
-const stand = (T, tint, f) => (o, expr, seed, pos, extra = {}) => RW(T, o, { expr, mode: 'stand', blink: blinkAt(f, seed), seed }, pos, { tint, ...extra });
-const bowK = (f, a, b, c, d) => smooth(ramp(f, a, b)) * (1 - smooth(ramp(f, c, d)));
-const bowOpts = (k) => ({ headTilt: q(k * 24, 1) });
-const BP = (pos, k) => [pos[0], q(-0.12 * k, 3), pos[2]];
-
-export const actorsAt = (f, T) => {
-  const S = shotAt(f), tint = tintFor(S, f), out = [];
-  const st = stand(T, tint, f);
-  const kingR = (expr, extra = {}) => st(OUTFITS.king, expr, 31, KING_R, { yaw: -0.5, ...extra });
-  const kingC = (expr, extra = {}) => st(OUTFITS.king, expr, 31, KING_C, { yaw: -0.5, ...extra });
-  const boyR = (expr, extra = {}) => st(OUTFITS.boy, expr, 91, BOY, { yaw: 0.5, ...extra });
-  const boyC = (expr, extra = {}) => st(OUTFITS.boy, expr, 92, BOY_COURT, { yaw: 0.5, ...extra });
-  const pointAt = (o, seed, pos, yaw, a, b, c, d) => {
-    const k = q(smooth(ramp(f, a, b)) * (1 - smooth(ramp(f, c, d))), 2);
-    return RW(T, o, { expr: 'grin', mode: 'stand', blink: blinkAt(f, seed), seed, prop: ['point', k] }, pos, { tint, yaw, flip: true });
+const basket = (p, withStones = true) => { // woven basket + stones, drawn in card space at the side hand
+  p.poly([[352, 596], [452, 596], [438, 692], [366, 692]], '#a07a3e', 4);
+  for (let i = 0; i < 4; i++) p.stroke([[356, 620 + i * 18], [448, 616 + i * 18]], 3, '#7a5a28');
+  for (let i = 0; i < 3; i++) p.stroke([[378 + i * 24, 598], [382 + i * 22, 690]], 3, '#8a682f');
+  if (withStones) { p.ell(382, 592, 26, 15, '#8d8578', 3); p.ell(420, 590, 24, 14, '#7d766a', 3); p.ell(402, 578, 22, 13, '#9a927f', 3); }
+};
+const sweetPlate = (p) => {
+  p.ell(300, 700, 62, 16, '#e8e2d2', 3);
+  for (const [x, y, c] of [[272, 688, '#e8a13c'], [300, 682, '#c95a7a'], [328, 688, '#f3e3bb'], [286, 694, '#7db35a'], [314, 695, '#e8a13c']]) p.ell(x, y, 13, 11, c, 2);
+};
+export const castAt = (f) => {
+  const S = shotAt(f), out = [];
+  const std = (id, o, opts, x, z, extra = {}) => {
+    const L = lifeAt({ seed: opts.seed || 1, shift: 1.1, swayAmp: 0.5 })(f);
+    const o2 = { ...opts, breath: opts.breath ?? L.breath, headTilt: q((opts.headTilt || 0) + L.tilt + (opts.speaker ? L.sway * 0.8 : 0), 1) };
+    if (!o2.exprP && o2.expr) o2.exprP = faceP2(o2.expr);
+    const side = extra.side;
+    if (side && o2.expr) o2.expr = ({ determined: 'stern', smug: 'smile', wonder: 'shock', angry: 'stern', sad: 'pained', proud: 'smile', confused: 'nervous', scared: 'nervous', thinking: 'stern', stubborn: 'stern', squint: 'stern', wink: 'smile', relief: 'relief' })[o2.expr] || o2.expr;
+    out.push({ id, x, y: extra.y ?? groundAt(x, z), z, r: 0.32, ground: extra.ground ?? groundAt(x, z),
+      actor: (T) => ({ key: 'el' + id + JSON.stringify(o) + JSON.stringify(o2) + (extra.y ?? 0), draw: (p) => { if (side) { T.bodySide(p, o, o2); if (extra.basket) basket(p); } else { T.bodyFront(p, o, o2); if (extra.sweets) sweetPlate(p); } }, x, y: extra.y ?? groundAt(x, z), z, ground: extra.ground ?? groundAt(x, z), tint: '#ffffff', s: extra.s ?? 1, ...extra }) });
   };
+  const head = (seed, tilt, look, lookY, facing = 0) => ({ headTilt: q(tilt, 1), look: q(look, 2), lookY: q(lookY, 2), facing: q(facing, 2) });
+  const speakOpts = (baseExpr, seed) => { const DS = SPEAK.at(f); return { mode: 'stand', speaker: 1, blink: blinkAt(f, seed), seed, look: 0.2, expr: baseExpr, exprP: SPK.applySpeak(faceP2(baseExpr), DS), headTilt: q(DS.nod || 0, 2), clothShade: true }; };
   switch (S.id) {
-    case 'title': {
-      out.push(boyR('grin'));
-      out.push(kingR('neutral'));
+    case 'l01': {
+      std('king', OUTFITS.king, { expr: 'stern', mode: 'stand', blink: blinkAt(f, 41), seed: 41, ...head(41, 1, -0.3, 0) }, 1.9, 3.9, { yaw: -0.25, s: 1.05 });
+      std('boy', OUTFITS.boy, { expr: 'wonder', mode: 'stand', blink: blinkAt(f, 61), seed: 61, ...head(61, -1, -0.4, 0.3) }, 2.7, 4.2, { yaw: -0.35, s: 0.72 });
+      std('strong', OUTFITS.strong, { expr: 'smug', mode: 'stand', blink: blinkAt(f, 51), seed: 51, ...head(51, 0, 0.3, 0) }, -4.9, 4.9, { yaw: 0.3, s: 1.02 });
       break;
     }
-    case 'heavy': {
-      out.push(kingR('neutral'));
-      out.push(boyR('neutral'));
+    case 'l02': {
+      std('king', OUTFITS.king, { expr: 'stern', mode: 'stand', blink: blinkAt(f, 41), seed: 41, ...head(41, 0, 0.2, 0) }, 2.6, 2.6, { yaw: -0.2, s: 1.05 });
+      std('boy', OUTFITS.boy, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 61), seed: 61, ...head(61, 0, -0.3, 0.1) }, 3.8, 3.6, { yaw: -0.3, s: 0.72 });
+      std('court1', OUTFITS.court1, { expr: 'wonder', mode: 'stand', blink: blinkAt(f, 52), seed: 52, ...head(52, -1, 0.2, 0.2) }, -0.6, 4.4, { yaw: 0.15 });
+      std('court2', OUTFITS.court2, { expr: 'wonder', mode: 'stand', blink: blinkAt(f, 53), seed: 53, ...head(53, -1, -0.2, 0.2) }, 0.6, 4.8, { yaw: -0.1 });
+      std('court3', OUTFITS.court3, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 54), seed: 54, ...head(54, 0, 0.3, 0) }, 4.9, 4.2, { yaw: -0.4 });
+      std('strong2', OUTFITS.strong2, { expr: 'smug', mode: 'stand', blink: blinkAt(f, 55), seed: 55, ...head(55, 0, -0.3, 0) }, -5.9, 4.0, { yaw: 0.35, s: 1.02 });
       break;
     }
-    case 'wise': {
-      out.push(RW(T, OUTFITS.king, { expr: 'stern', mode: 'sit', blink: blinkAt(f, 31), seed: 31 }, [...THRONE], { tint, yaw: 0 }));
-      out.push(st(OUTFITS.wiseA, 'dazed', 81, WISE_L, { yaw: 0.25 }));
-      out.push(st(OUTFITS.wiseB, 'dazed', 82, WISE_R, { yaw: -0.25 }));
-      out.push(st(OUTFITS.smith, 'neutral', 83, SMITH, { yaw: 0.2 }));
-      out.push(st(OUTFITS.guardL, 'stern', 61, GLP, { yaw: 0.15 }));
-      out.push(st(OUTFITS.guardR, 'stern', 62, GRP, { yaw: -0.15 }));
+    case 'l03': {
+      std('strong', OUTFITS.strong, { expr: 'determined', mode: 'stand', blink: blinkAt(f, 51), seed: 51, prop: ['point', 0.4], ...head(51, 0, -0.3, 0.2) }, -3.1, 2.9, { yaw: 0.3, s: 1.02 });
+      std('strong2', OUTFITS.strong2, { expr: 'shock', mode: 'stand', blink: blinkAt(f, 55), seed: 55, ...head(55, -1, 0.3, 0.1) }, -6.4, 2.7, { yaw: -0.3, s: 1.02 });
+      std('court1', OUTFITS.court1, { expr: 'shock', mode: 'stand', blink: blinkAt(f, 52), seed: 52, ...head(52, -1, 0, 0.2) }, -3.4, 4.8, { yaw: 0.2 });
       break;
     }
-    case 'boy': {
-      const k = q(smooth(ramp(f, 405, 415)) * (1 - smooth(ramp(f, 470, 487))), 2);
-      out.push(RW(T, OUTFITS.boy, { expr: 'grin', mode: 'stand', blink: blinkAt(f, 92), seed: 92, prop: ['point', k] }, BOY_COURT, { tint, yaw: 0.5, flip: true }));
-      out.push(kingC('neutral'));
-      out.push(st(OUTFITS.wiseA, 'neutral', 81, WISE_L, { yaw: 0.25 }));
+    case 'l04': {
+      std('strong', OUTFITS.strong, { ...speakOpts('smug', 51), prop: ['point', 0.55] }, -1.6, 3.3, { yaw: 0.3, s: 1.04 });
+      std('boy', OUTFITS.boy, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 61), seed: 61, ...head(61, 0, -0.45, 0) }, 0.2, 3.9, { yaw: -0.5, s: 0.72 });
       break;
     }
-    case 'laugh': {
-      out.push(RW(T, OUTFITS.king, { expr: 'laugh', mode: 'sit', blink: blinkAt(f, 31), seed: 31 }, [...THRONE], { tint, yaw: 0 }));
-      out.push(boyC('neutral'));
-      out.push(st(OUTFITS.wiseA, 'laugh', 81, WISE_L, { yaw: 0.25 }));
-      out.push(st(OUTFITS.wiseB, 'laugh', 82, WISE_R, { yaw: -0.25 }));
+    case 'l05': {
+      const laughTilt = (seed) => q(-2 + 1.2 * Math.sin(f * 0.5 + seed), 1);
+      std('court1', OUTFITS.court1, { expr: 'laugh', mode: 'stand', blink: blinkAt(f, 52), seed: 52, headTilt: laughTilt(52), look: q(0.2, 2), lookY: q(0.05, 2) }, -0.85, 4.5, { yaw: 0.2 });
+      std('court2', OUTFITS.court2, { expr: 'laugh', mode: 'stand', blink: blinkAt(f, 53), seed: 53, headTilt: laughTilt(53), look: q(-0.2, 2), lookY: q(0.05, 2) }, 0.05, 4.05, { yaw: -0.15 });
+      std('strong', OUTFITS.strong, { expr: 'laugh', mode: 'stand', blink: blinkAt(f, 51), seed: 51, headTilt: laughTilt(51), look: q(0.3, 2), lookY: q(0.05, 2) }, -1.7, 4.2, { yaw: 0.3, s: 1.02 });
+      const u5 = ramp(f, B('l05'), E('l05'));
+      const bx = lerp(1.2, 2.0, smooth(u5)), bz = lerp(4.0, 5.9, smooth(u5));
+      std('boy', OUTFITS.boy, { expr: 'thinking', mode: 'march', phase: q(u5 * 2.2, 2), blink: blinkAt(f, 61), seed: 61, ...head(61, -1, 0.3, -0.2) }, bx, bz, { yaw: 0.5, s: 0.72 });
       break;
     }
-    case 'lead': {
-      out.push(pointAt(OUTFITS.boy, 91, BOY, 0.5, 600, 615, 670, 688));
-      out.push(kingR('neutral'));
+    case 'l06': {
+      std('boy', OUTFITS.boy, { ...speakOpts('determined', 61) }, 2.4, 5.6, { yaw: -0.15, s: 0.78, y: stepYAtZ(5.6), ground: stepYAtZ(5.6) });
+      std('strong', OUTFITS.strong, { expr: 'smug', mode: 'stand', blink: blinkAt(f, 51), seed: 51, ...head(51, 0, 0.4, 0) }, 0.9, 4.5, { yaw: 0.55, s: 1.02 });
       break;
     }
-    case 'onboard': {
-      out.push(boyR('grin'));
-      out.push(kingR('shock'));
+    case 'l07': case 'l09': {
+      std('court1', OUTFITS.court1, { expr: 'wonder', mode: 'stand', blink: blinkAt(f, 52), seed: 52, ...head(52, -1, 0, 0.3) }, -4.4, 5.2, { yaw: 0.4 });
+      std('boy', OUTFITS.boy, { expr: 'determined', mode: 'stand', blink: blinkAt(f, 61), seed: 61, ...head(61, 0, 0.3, 0.2) }, -3.4, 6.0, { yaw: 0.3, s: 0.72 });
       break;
     }
-    case 'sank': {
-      const k = 0.3;   // the king leans over the boat, watching it sink
-      out.push(RW(T, OUTFITS.king, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 31), seed: 31, ...bowOpts(k) }, BP(KING_R, k), { tint, yaw: -0.5 }));
-      out.push(boyR('neutral'));
+    case 'l08': {
+      std('boy', OUTFITS.boy, { expr: 'determined', mode: 'kneel1', blink: blinkAt(f, 61), seed: 61, prop: ['carve', 0.5], ...head(61, 2, 0, -0.3) }, 0.55, 10.55, { yaw: -0.2, s: 0.72, y: deckYAt(f), ground: deckYAt(f) });
       break;
     }
-    case 'chalk': {
-      // the boy's arm reaches to the boat's side, marking the waterline
-      const k = q(smooth(ramp(f, 800, 815)) * (1 - smooth(ramp(f, 870, 898))), 2);
-      out.push(RW(T, OUTFITS.boy, { expr: 'grin', mode: 'stand', blink: blinkAt(f, 91), seed: 91, prop: ['point', k] }, BOY, { tint, yaw: 0.5, flip: true }));
-      out.push(kingR('neutral'));
+    case 'l10': {
+      for (const [id, off, seed] of [['strong', 0, 51], ['strong2', 0.5, 55]]) {
+        const u = (ramp(f, B('l10'), E('l10')) + off) % 1;
+        const x = lerp(-3.6, 2.0, u), z = lerp(4.6, 7.6, u);
+        std(id, OUTFITS[id], { expr: 'determined', mode: 'march', phase: q(stridePh(0, u * 6.4, 0.8), 2), blink: blinkAt(f, seed), seed, ...head(seed, 1, 0, -0.1) }, x, z, { side: true, basket: true, yaw: 0, s: 1.02, y: z > 3.2 && z < 7.6 ? stepYAtZ(z) : 0, ground: z > 3.2 && z < 7.6 ? stepYAtZ(z) : 0 });
+      }
+      std('boy', OUTFITS.boy, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 61), seed: 61, prop: ['count', 0.5], ...head(61, -1, 0.2, 0.1) }, 3.4, 6.6, { yaw: -0.3, s: 0.72 });
       break;
     }
-    case 'off': {
-      out.push(boyR('grin'));
-      out.push(kingR('neutral'));
+    case 'l11': break; // POV insert at the hull — no characters, the mark is the actor
+    case 'l12': {
+      std('strong', OUTFITS.strong, { expr: 'determined', mode: 'stand', blink: blinkAt(f, 51), seed: 51, prop: ['point', 0.35], ...head(51, 1, -0.3, -0.1) }, 3.6, 3.4, { yaw: 0.35, s: 1.02 });
+      std('boy', OUTFITS.boy, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 61), seed: 61, ...head(61, -1, 0.35, 0) }, 5.9, 3.8, { yaw: -0.3, s: 0.72 });
       break;
     }
-    case 'bring': {
-      out.push(pointAt(OUTFITS.boy, 91, BOY, 0.5, 990, 1000, 1030, 1044));
-      out.push(st(OUTFITS.soldier, 'stern', 61, SOLD_L, { yaw: 0.4 }));
-      out.push(st(OUTFITS.soldier2, 'stern', 62, SOLD_R, { yaw: -0.4 }));
-      out.push(kingR('neutral'));
+    case 'l13': {
+      std('court3', OUTFITS.court3, { expr: 'wonder', mode: 'stand', blink: blinkAt(f, 54), seed: 54, prop: ['count', 0.6], ...head(54, -1, 0, 0.2) }, 2.9, 3.1, { yaw: 0.25 });
+      std('court4', OUTFITS.court4, { expr: 'shock', mode: 'stand', blink: blinkAt(f, 56), seed: 56, ...head(56, -1, -0.3, 0.2) }, 5.2, 3.3, { yaw: -0.25 });
+      std('boy', OUTFITS.boy, { expr: 'proud', mode: 'stand', blink: blinkAt(f, 61), seed: 61, ...head(61, -1, 0.2, 0.1) }, 4.0, 4.6, { yaw: 0, s: 0.72 });
       break;
     }
-    case 'load': {
-      // soldiers load stones one by one — arm rises with each stone
-      const k1 = q(0.4 + 0.5 * Math.abs(Math.sin((f - 1045) * 0.09)), 2);
-      const k2 = q(0.4 + 0.5 * Math.abs(Math.cos((f - 1045) * 0.09)), 2);
-      out.push(RW(T, OUTFITS.soldier, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 61), seed: 61, prop: ['point', k1] }, SOLD_L, { tint, yaw: 0.4 }));
-      out.push(RW(T, OUTFITS.soldier2, { expr: 'neutral', mode: 'stand', blink: blinkAt(f, 62), seed: 62, prop: ['point', k2] }, SOLD_R, { tint, yaw: -0.4, flip: true }));
-      out.push(boyR('grin'));
+    case 'l14': {
+      std('king', OUTFITS.king, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 41), seed: 41, ...head(41, -1, -0.2, 0.05) }, 1.7, 3.9, { yaw: -0.2, s: 1.05 });
+      std('boy', OUTFITS.boy, { expr: 'proud', mode: 'stand', blink: blinkAt(f, 61), seed: 61, ...head(61, -1, 0.3, 0.1) }, 3.2, 4.6, { yaw: -0.35, s: 0.72 });
+      std('court1', OUTFITS.court1, { expr: 'wonder', mode: 'stand', blink: blinkAt(f, 52), seed: 52, ...head(52, -1, 0, 0.2) }, -0.6, 4.6, { yaw: 0.2 });
       break;
     }
-    case 'mark': {
-      const k = 0.35;   // the king leans over the boat, watching the waterline
-      out.push(RW(T, OUTFITS.king, { expr: 'shock', mode: 'stand', blink: blinkAt(f, 31), seed: 31, ...bowOpts(k) }, BP(KING_R, k), { tint, yaw: -0.5 }));
-      out.push(boyR('grin'));
-      out.push(st(OUTFITS.soldier, 'neutral', 61, SOLD_L, { yaw: 0.4 }));
+    case 'l15': {
+      std('king', OUTFITS.king, { ...speakOpts('smile', 41) }, 1.7, 4.3, { yaw: -0.15, s: 1.06 });
+      std('boy', OUTFITS.boy, { expr: 'smile', mode: 'stand', blink: blinkAt(f, 61), seed: 61, ...head(61, 0, -0.35, 0.05) }, 3.1, 5.0, { yaw: -0.4, s: 0.72 });
+      std('strong', OUTFITS.strong, { expr: 'sad', mode: 'stand', blink: blinkAt(f, 51), seed: 51, ...head(51, 2, 0.3, -0.1) }, -0.4, 4.8, { yaw: 0.35, s: 1.02 });
       break;
     }
-    case 'smile': {
-      const k = q(smooth(ramp(f, 1260, 1275)) * (1 - smooth(ramp(f, 1400, 1442))), 2);
-      out.push(RW(T, OUTFITS.boy, { expr: 'grin', mode: 'stand', blink: blinkAt(f, 91), seed: 91, prop: ['point', k] }, BOY, { tint, yaw: 0.5, flip: true }));
-      out.push(kingR('dazed'));
+    case 'l16': {
+      for (const [id, off, seed] of [['strong', 0, 51], ['strong2', 0.45, 55]]) {
+        const u = (ramp(f, B('l16'), E('l16')) + off) % 1;
+        const x = lerp(-3.2, 2.6, u), z = lerp(6.8, 4.8, u);
+        std(id, OUTFITS[id], { expr: 'sad', mode: 'march', phase: q(stridePh(0, u * 6.4, 0.8), 2), blink: blinkAt(f, seed), seed, ...head(seed, 2, 0, -0.1) }, x, z, { side: true, basket: true, s: 1.02, y: stepYAtZ(z), ground: stepYAtZ(z) });
+      }
+      std('boy', OUTFITS.boy, { expr: 'smile', mode: 'sit', blink: blinkAt(f, 61), seed: 61, ...head(61, -1, 0.1, 0.05) }, 3.6, 5.4, { yaw: -0.2, s: 0.72, sweets: true, y: stepYAtZ(5.4), ground: stepYAtZ(5.4) });
       break;
     }
-    case 'king': {
-      out.push(kingR('stern'));
-      out.push(boyR('grin'));
-      break;
-    }
-    case 'weighed': {
-      out.push(kingR('smile_closed'));
-      out.push(boyR('grin'));
-      out.push(st(OUTFITS.soldier, 'neutral', 61, SOLD_L, { yaw: 0.4 }));
-      break;
-    }
-    case 'stranger': {
-      out.push(RW(T, OUTFITS.king, { expr: 'dazed', mode: 'sit', blink: blinkAt(f, 31), seed: 31 }, [...THRONE], { tint, yaw: 0 }));
-      out.push(st(OUTFITS.shepherd, 'neutral', 71, SHEPHERD, { yaw: 0.25 }));
-      break;
-    }
-    case 'goat': {
-      out.push(st(OUTFITS.shepherd, 'grin', 71, SHEPHERD, { yaw: 0.25 }));
-      out.push(st(OUTFITS.merchant, 'stern', 72, MERCHANT, { yaw: -0.25 }));
-      out.push(kingC('neutral'));
-      break;
-    }
-    case 'hook': {
-      out.push(RW(T, OUTFITS.king, { expr: 'dazed', mode: 'sit', blink: blinkAt(f, 31), seed: 31 }, [...THRONE], { tint, yaw: 0 }));
-      out.push(st(OUTFITS.shepherd, 'grin', 71, SHEPHERD, { yaw: 0.25 }));
-      out.push(st(OUTFITS.merchant, 'neutral', 72, MERCHANT, { yaw: -0.25 }));
+    case 'l17': {
+      std('boy', OUTFITS.boy, { expr: 'grin', mode: 'stand', blink: blinkAt(f, 61), seed: 61, prop: ['point', 0.78], ...head(61, -2, -0.25, 0.4) }, 2.7, 28.0, { yaw: -0.1, s: 0.72, y: 0.15, ground: 0.15 });
       break;
     }
   }
   return out;
 };
-export const fxAt = (f, T) => [];
+export const actorsAt = (f, T) => castAt(f).map((c) => c.actor(T));
+
+// ---------- solidity ----------
+export const STATICS = [
+  SOL.obb(BOARD_POS[0] - 2.1, BOARD_POS[2], 0, 0.09, 0.09, { h: 3.3, id: 'boardpost' }),
+  SOL.obb(BOARD_POS[0] + 2.1, BOARD_POS[2], 0, 0.09, 0.09, { h: 3.3, id: 'boardpost' }),
+  SOL.circle(BOAT.x, BOAT.z, 3.4, { h: 1.2, id: 'boat' }),
+];
+export const WORLD = SOL.makeWorld(STATICS);
+export const dynamicsAt = (f) => castAt(f).map((a) => SOL.circle(a.x, a.z, a.r, { kind: 'dynamic', id: a.id }));
+export const groundItemsAt = (f) => castAt(f).map((a) => ({ id: a.id, y: a.y, ground: a.ground ?? 0, maxHover: 0.06 }));
