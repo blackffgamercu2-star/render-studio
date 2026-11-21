@@ -1,0 +1,362 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>Laal Car Wala Dost — Short (N1)</title>
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#000}canvas{display:block}.hud{position:fixed;left:14px;bottom:12px;color:#fff;font:600 15px system-ui;text-shadow:0 1px 4px #0009}</style>
+<script src="timings.js"></script>
+<script type="importmap">{"imports":{"three":"./lib/three.module.js","three/addons/":"./lib/addons/"}}</script>
+</head><body>
+<script>window.addEventListener('error',e=>{window.err=String(e.message);console.log('ERR '+e.message)});</script>
+<script type="module">
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { skyDome, sunLight, label, canvasTex, rng } from './src/common.js';
+import { buildTerrain, buildClouds, buildRiver, terrainH } from './src/nature.js';
+import { buildGrassCards, scatterTreesKit, makeBush, scatterDetail, groundDetailTexture, dirtTexture } from './src/naturekit.js';
+import { buildHuman } from './src/human.js';
+import { buildCar } from './src/car.js';
+
+// ============================================================================
+// "Laal Car Wala Dost" — full story Short, 9:16. All beats + camera shots are
+// keyed to the REAL N1 stem phrase timings (window.TIMINGS, stem 65.262 s).
+// Nature = v3 kit (dashcam scene3 technique): leaf-cluster alpha-card trees,
+// grass alpha cards, textured ground. Camera = Abid's Camera Law: continuous
+// travelling moves, cuts only on phrase boundaries, subject biggest+centred,
+// push-in on important beats, snap push + shake on the "Petrol khatam!" beat,
+// no character speaking in the final beat.
+// ============================================================================
+const TM = window.TIMINGS.phrases; // [{i,start,end,...}]
+const DUR = window.TIMINGS.total;
+const P = (i) => TM[i - 1];
+const ss01 = (x) => { x = THREE.MathUtils.clamp(x, 0, 1); return x * x * (3 - 2 * x); };
+const seg = (t, a, b) => ss01((t - a) / (b - a));
+const lerp = THREE.MathUtils.lerp;
+
+const ROAD_X = 3.4, PATH_X = 7.3;
+const Z_PUMP = 21.5, Z_BLD = 30.0, DOOR = { x: 7.7, z: 29.6 };
+const GY = (x, z, dy) => terrainH(x, z) + dy;
+
+// ---------- renderer / scene (v2 seek harness pattern) ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(innerWidth, innerHeight); renderer.setPixelRatio(1);
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.06;
+document.body.appendChild(renderer.domElement);
+renderer.domElement.id = 'c';
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 700);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+if ('environmentIntensity' in scene) scene.environmentIntensity = 0.35;
+
+const sky = skyDome(new THREE.Vector3(28, 40, 16)); scene.add(sky.mesh);
+scene.fog = new THREE.Fog(0xcfe2f2, 55, 180);
+const sun = sunLight(28, 40, 16, 2.8);
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -30; sun.shadow.camera.right = 30; sun.shadow.camera.top = 30; sun.shadow.camera.bottom = -30;
+scene.add(sun); scene.add(sun.target);
+scene.add(new THREE.HemisphereLight(0xbfdcff, 0x4a6b35, 0.75));
+
+// terrain (v2 splat) + close-range detail grain (v3)
+const terrain = buildTerrain(190, 110);
+terrain.material.map = groundDetailTexture();
+terrain.material.needsUpdate = true;
+scene.add(terrain);
+
+// ---- road + dirt path: terrain-hugging strips (story-demo pattern) ----
+function groundStrip(cx, w, z0, z1, yOff, mat, step = 1.6) {
+  const geos = [];
+  for (let z = z0; z < z1; z += step) {
+    const len = Math.min(step, z1 - z);
+    const g = new THREE.PlaneGeometry(w, len + 0.05, 4, 1); g.rotateX(-Math.PI / 2);
+    const p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const wx = cx + p.getX(i), wz = z + len / 2 + p.getZ(i);
+      p.setY(i, terrainH(wx, wz) + yOff); p.setX(i, wx); p.setZ(i, wz);
+    }
+    g.computeVertexNormals(); geos.push(g);
+  }
+  const m = new THREE.Mesh(mergeGeometries(geos), mat); m.receiveShadow = true; return m;
+}
+scene.add(groundStrip(ROAD_X, 7.0, -46, 34, 0.05, new THREE.MeshStandardMaterial({ map: dirtTexture(), roughness: 1 }))); // dirt shoulder
+const asphaltTex = canvasTex(256, 256, (g, w, h) => {
+  g.fillStyle = '#33363a'; g.fillRect(0, 0, w, h);
+  const r = rng(15);
+  for (let i = 0; i < 3200; i++) { const v = 42 + r() * 30; g.fillStyle = `rgb(${v},${v},${v + 4})`; g.fillRect(r() * w, r() * h, 1.6, 1.6); }
+}, { repeat: [1, 1] });
+scene.add(groundStrip(ROAD_X, 6.4, -46, 34, 0.08, new THREE.MeshStandardMaterial({ map: asphaltTex, roughness: 0.95 })));
+const dashMat = new THREE.MeshStandardMaterial({ color: 0xd8d8ce, roughness: 0.7 });
+for (let z = -44; z < 32; z += 4) scene.add(groundStrip(ROAD_X, 0.16, z, z + 1.7, 0.105, dashMat, 1.7));
+scene.add(groundStrip(PATH_X, 1.7, -44, 33, 0.06, new THREE.MeshStandardMaterial({ map: dirtTexture(), roughness: 1 }))); // walking path
+
+// ---- v3 nature kit ----
+const corridor = (x, z) => Math.abs(x - ROAD_X) < 4.5 || Math.abs(x - PATH_X) < 1.15 || (x > 7.5 && z > 19 && z < 24) || (x > 8 && z > 25.5 && z < 34.5);
+const camBand = (x, z) => (x > 8.4 && x < 13.8 && z > -31 && z < -2) ? 0.22 : 1; // thin grass near the opening-shot camera line so cards don't loom giant
+const grass = buildGrassCards({ avoid: corridor, thin: camBand });
+grass.meshes.forEach(m => scene.add(m));
+const river = buildRiver(); scene.add(river.mesh);
+const treePos = [
+  [-10, -30, 1.5], [-13, -12, 1.8], [-9, 4, 1.4], [-14, 18, 1.7], [-10, 30, 1.5],
+  [15, -31, 1.6], [15.5, -11, 1.4], [14.5, 10, 1.7], [14, 16, 1.5], [16, 34, 1.6],
+  [-18, -38, 1.9], [19, -18, 1.8], [-20, 8, 1.8], [20, 2, 1.7], [-17, 38, 1.6], [15, -38, 1.5]
+];
+const trees = scatterTreesKit(treePos); scene.add(trees.group);
+{ const r = rng(31);
+  for (let i = 0; i < 16; i++) {
+    const side = i % 2 ? 1 : -1;
+    const bx = side < 0 ? -2.2 - r() * 1.5 : 12.6 + r() * 1.8, bz = -40 + i * 4.6 + r() * 2;
+    if (bz > 16 && bz < 36 && side > 0) continue;
+    const b = makeBush(50 + i, 0.9 + r() * 0.5);
+    b.position.set(bx, terrainH(bx, bz) - 0.02, bz); scene.add(b);
+  } }
+scene.add(scatterDetail((x, z) => corridor(x, z) || (x > 8.2 && x < 14 && z > -32 && z < -1)));
+const clouds = buildClouds(9); scene.add(clouds.group);
+
+// ---- petrol pump prop ----
+function textBoard(text, w, h, bg, fg, fontPx = 90) {
+  const tex = canvasTex(512, Math.round(512 * h / w), (g, cw, ch) => {
+    g.fillStyle = bg; g.fillRect(0, 0, cw, ch);
+    g.fillStyle = fg; g.font = 'bold ' + fontPx + 'px system-ui, sans-serif';
+    g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, cw / 2, ch / 2 + 4);
+  });
+  return new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.08), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6 }));
+}
+{
+  const pump = new THREE.Group();
+  const red = new THREE.MeshStandardMaterial({ color: 0xb02020, roughness: 0.4, metalness: 0.2 });
+  const white = new THREE.MeshStandardMaterial({ color: 0xe8e6df, roughness: 0.55 });
+  const bodyP = new THREE.Mesh(new THREE.BoxGeometry(0.55, 1.45, 0.9), white); bodyP.position.y = 0.73; bodyP.castShadow = true; pump.add(bodyP);
+  const face = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.5, 0.6), new THREE.MeshStandardMaterial({ color: 0x22262c, roughness: 0.3 })); face.position.set(-0.3, 1.05, 0); pump.add(face);
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.57, 0.22, 0.92), red); stripe.position.y = 1.32; pump.add(stripe);
+  const hose = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.028, 8, 20, Math.PI * 1.5), new THREE.MeshStandardMaterial({ color: 0x14161a, roughness: 0.8 }));
+  hose.position.set(0, 0.85, 0.52); hose.rotation.y = Math.PI / 2; pump.add(hose);
+  const sign = textBoard('PETROL', 2.6, 0.62, '#b02020', '#ffffff'); sign.position.set(0, 3.05, 0); pump.add(sign);
+  for (const dz of [-1.15, 1.15]) {
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.9, 8), red);
+    pole.position.set(0, 1.45, dz); pump.add(pole);
+  }
+  const roofSlab = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.08, 3.1), red); roofSlab.position.y = 2.92; roofSlab.castShadow = true; pump.add(roofSlab);
+  pump.position.set(8.7, terrainH(8.7, Z_PUMP) - 0.03, Z_PUMP);
+  scene.add(pump);
+}
+// ---- interview building ----
+{
+  const bld = new THREE.Group();
+  const wallTex = canvasTex(512, 512, (g, w, h) => {
+    g.fillStyle = '#d9cfb8'; g.fillRect(0, 0, w, h);
+    const r = rng(63);
+    for (let i = 0; i < 1500; i++) { const v = 195 + r() * 45; g.fillStyle = `rgba(${v},${v * 0.94},${v * 0.8},0.35)`; g.fillRect(r() * w, r() * h, 3, 2); }
+    for (let fy = 0; fy < 3; fy++) for (let fx = 0; fx < 4; fx++) {
+      g.fillStyle = '#33414e'; g.fillRect(46 + fx * 112, 52 + fy * 148, 66, 92);
+      g.fillStyle = 'rgba(190,220,240,0.5)'; g.fillRect(52 + fx * 112, 58 + fy * 148, 26, 38);
+      g.strokeStyle = '#8a7c60'; g.lineWidth = 5; g.strokeRect(46 + fx * 112, 52 + fy * 148, 66, 92);
+    }
+  }, { repeat: [2, 1] });
+  const walls = new THREE.Mesh(new THREE.BoxGeometry(7.5, 5.6, 6), new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.9 }));
+  walls.position.y = 2.8; walls.castShadow = true; bld.add(walls);
+  const roofB = new THREE.Mesh(new THREE.BoxGeometry(8.1, 0.25, 6.6), new THREE.MeshStandardMaterial({ color: 0x7a4a34, roughness: 0.8 }));
+  roofB.position.y = 5.72; bld.add(roofB);
+  const door = new THREE.Mesh(new THREE.BoxGeometry(0.1, 2.3, 1.15), new THREE.MeshStandardMaterial({ color: 0x4a3220, roughness: 0.7 }));
+  door.position.set(-3.78, 1.15, -0.4); bld.add(door);
+  const sign = textBoard('OFFICE', 2.2, 0.5, '#33414e', '#ffffff', 76); sign.position.set(-3.85, 2.85, -0.4); sign.rotation.y = -Math.PI / 2; bld.add(sign);
+  bld.position.set(12.2, terrainH(12.2, Z_BLD) - 0.3, Z_BLD);
+  scene.add(bld);
+}
+
+// ---------- humans + joint registry (story-demo pattern) ----------
+function joints(h) {
+  const bodyG = h.group.children[0];
+  const bg = bodyG.children.filter(c => c.isGroup);
+  const torsoG = bg.find(g => Math.abs(g.position.y - 1.01) < 0.05);
+  const hips = bg.filter(g => g !== torsoG).sort((a, b) => a.position.x - b.position.x);
+  const knees = hips.map(x => x.children.find(c => c.isGroup));
+  const feet = knees.map(k => k.children.find(c => c.isGroup));
+  const tg = torsoG.children.filter(c => c.isGroup);
+  const neckG = tg.find(g => Math.abs(g.position.y - 0.55) < 0.03);
+  const shoulders = tg.filter(g => Math.abs(g.position.y - 0.475) < 0.03).sort((a, b) => a.position.x - b.position.x);
+  const elbows = shoulders.map(s => s.children.find(c => c.isGroup));
+  const headG = neckG.children.find(c => c.isGroup);
+  return { bodyG, torsoG, hips, knees, feet, neckG, shoulders, elbows, headG };
+}
+const NEUTRAL = (J) => [
+  [J.hips[0], 0, 0, 0], [J.hips[1], 0, 0, 0], [J.knees[0], 0.02, 0, 0], [J.knees[1], 0.02, 0, 0],
+  [J.feet[0], 0, 0, 0], [J.feet[1], 0, 0, 0],
+  [J.shoulders[0], 0, 0, 0.07], [J.shoulders[1], 0, 0, -0.07],
+  [J.elbows[0], -0.28, 0, 0], [J.elbows[1], -0.28, 0, 0], [J.torsoG, 0.03, 0, 0]
+];
+function blendNeutral(J, b) {
+  if (b <= 0) return;
+  for (const [o, tx, ty, tz] of NEUTRAL(J)) {
+    o.rotation.x += (tx - o.rotation.x) * b; o.rotation.y += (ty - o.rotation.y) * b; o.rotation.z += (tz - o.rotation.z) * b;
+  }
+  J.bodyG.position.y *= (1 - b); J.bodyG.rotation.z *= (1 - b); J.bodyG.rotation.y *= (1 - b);
+}
+const ramu = buildHuman({ shirt: 0xc44536 }); scene.add(ramu.group);
+const JR = joints(ramu);
+const chotu = buildHuman({ shirt: 0x2e7d4f, pants: 0x2c3438 }); scene.add(chotu.group);
+const JC = joints(chotu);
+
+// ---------- car ----------
+const carWrap = new THREE.Group(); scene.add(carWrap);
+const car = buildCar(0xb02020); car.group.rotation.y = -Math.PI / 2; carWrap.add(car.group);
+
+// ---------- motion profiles ----------
+// Ramu walk phase 1: 1.35 m/s, cosine decel 18.0 -> 18.8
+const walkDist = (t) => t < 18 ? 1.35 * t : 1.35 * 18 + 1.35 * (Math.min(t, 18.8) - 18) * (1 - (Math.min(t, 18.8) - 18) / 1.6) + (t > 18.8 ? 1.35 * 0.4 : 0);
+const RAMU_Z0 = -34, Z_STOP_RAMU = RAMU_Z0 + 24.84; // ≈ -9.16
+// Car z by segment (analytic ease profiles)
+const C0 = -75, C1 = -9.2, C2 = 5.2, C3 = 19.0, C4 = 26.8;
+const easeOut = (x) => 1 - Math.pow(1 - ss01(x), 3);
+const easeInOut = (x) => { x = ss01(x); return x; };
+function carZ(t) {
+  if (t < P(5).start) return C0 + (C1 - C0) * easeOut((t - 14.5) / 4.9); // far away + invisible before roll-in; stops beside Ramu as P4 ends
+  if (t < 29.0) return C1;
+  if (t < 32.5) { const z = C1 + (C2 - C1) * easeInOut((t - 29.0) / 3.5); return z + (t > 31.3 && t < 32.2 ? Math.sin(t * 55) * 0.035 * (1 - Math.abs(t - 31.75) / 0.45) : 0); }
+  if (t < 39.5) return C2;
+  if (t < 46.6) return C2 + (C3 - C2) * easeInOut((t - 39.5) / 7.1);
+  if (t < 49.8) return C3;
+  if (t < 51.6) return C3 + (C4 - C3) * easeInOut((t - 49.8) / 1.8);
+  return C4;
+}
+const carDist = (t) => Math.abs(carZ(t) - C0);
+
+// Ramu position/visibility by segment
+function ramuPose(t) {
+  const g = ramu.group;
+  if (t < 18.8) { const d = walkDist(t); g.visible = true; g.position.set(PATH_X, GY(PATH_X, RAMU_Z0 + d, 0), RAMU_Z0 + d); g.rotation.y = 0; ramu.update(d / 1.35, 1.35); blendNeutral(JR, seg(t, 18.0, 18.8)); return; }
+  if (t < 26.2) { // stopped, turns to the car, Chotu reveal
+    g.visible = true; g.position.set(PATH_X, GY(PATH_X, Z_STOP_RAMU, 0), Z_STOP_RAMU); ramu.update(walkDist(18.8) / 1.35, 0.001);
+    blendNeutral(JR, 0.92); g.rotation.y = -1.02 * seg(t, 19.0, 20.2);
+    if (JR.headG) JR.headG.rotation.y += -0.25 * seg(t, 19.0, 20.2);
+    return;
+  }
+  if (t < 28.6) { // walks to the car door
+    const f = seg(t, 26.2, 28.6), d = f * 2.3;
+    const x = lerp(PATH_X, 5.75, f), z = lerp(Z_STOP_RAMU, C1 + 0.9, f);
+    g.visible = true; g.position.set(x, GY(x, z, 0), z); g.rotation.y = -1.02 + f * 0.5; ramu.update(d / 1.1, 1.1);
+    return;
+  }
+  if (t < 33.4) { g.visible = false; return; } // riding inside
+  if (t < 38.6) { // out of the car, worried (P8)
+    g.visible = true; const z = carZ(t) + 0.4;
+    g.position.set(5.8, GY(5.8, z, 0), z); g.rotation.y = -0.55; ramu.update(30, 0.001); blendNeutral(JR, 0.95);
+    if (JR.headG) JR.headG.rotation.x += 0.30; // head down, worried
+    JR.torsoG.rotation.x += 0.10;
+    return;
+  }
+  if (t < 46.6) { pushPose(ramu, JR, t, 3.98, -2.87); return; }
+  if (t < 49.8) { g.visible = true; g.position.set(6.1, GY(6.1, C3 + 1.2, 0), C3 + 1.2); g.rotation.y = -0.9; ramu.update(30, 0.001); blendNeutral(JR, 0.95); return; }
+  if (t < 51.3) { g.visible = false; return; } // ride to the building
+  if (t < 52.2) { const f = seg(t, 51.3, 52.2), d = f * 2.6; const x = lerp(5.6, DOOR.x, f), z = lerp(C4 + 0.6, DOOR.z, f); g.visible = true; g.position.set(x, GY(x, z, 0), z); g.rotation.y = -0.5 - f * 0.9; ramu.update(d / 1.2, 1.2); return; }
+  // at the door: thumbs-up, then wave in the final beat
+  g.visible = true; g.position.set(DOOR.x, GY(DOOR.x, DOOR.z, 0), DOOR.z); g.rotation.y = -1.35; ramu.update(30, 0.001); blendNeutral(JR, 0.95);
+  const up = seg(t, 52.2, 52.9);
+  const sh = JR.shoulders[1], el = JR.elbows[1];
+  sh.rotation.z += (-2.30 - sh.rotation.z) * up; el.rotation.x += (-0.30 - el.rotation.x) * up;
+  if (t > P(14).start) { const w = seg(t, P(14).start, P(14).start + 0.5); sh.rotation.z += Math.sin(t * 7) * 0.22 * w; }
+}
+function pushPose(h, J, t, x, zOff = -2.87) {
+  const g = h.group, cz = carZ(t);
+  const d = Math.max(0, (cz - C2)) ;
+  g.visible = true; g.position.set(x, GY(x, cz + zOff, 0.0), cz + zOff); g.rotation.y = 0;
+  const moving = t > 39.5 && t < 46.6;
+  h.update(d / 1.9 + 30, moving ? 1.9 : 0.001);
+  const w = seg(t, 38.6, 39.6) * (1 - seg(t, 46.2, 46.8));
+  blendNeutral(J, 0.55 * w); // damp gait bob/sway so both feet stay planted on the asphalt
+  // ---- real push stance (fix round): deep lean, BOTH arms forward with hands
+  // landing on the trunk's rear-top edge, staggered legs (front bent, back
+  // extended toe-down) so the push reads at a glance from the rear-3/4 camera.
+  // NOTE: shoulder rotation ADDS to the torso lean, so the shoulder target is
+  // -(lean + world arm angle): -1.30 gives a ~0.9 rad forward arm in world.
+  const lean = 0.55 + Math.sin(t * 2.6) * 0.03 * w;
+  J.torsoG.rotation.x += (lean - J.torsoG.rotation.x) * w;
+  for (const s of [0, 1]) {
+    J.shoulders[s].rotation.x += (-1.30 - J.shoulders[s].rotation.x) * w;
+    J.elbows[s].rotation.x += (-0.15 - J.elbows[s].rotation.x) * w;
+  }
+  J.hips[0].rotation.x += (-0.30 - J.hips[0].rotation.x) * w;
+  J.knees[0].rotation.x += (0.34 - J.knees[0].rotation.x) * w;
+  J.feet[0].rotation.x += (-0.04 - J.feet[0].rotation.x) * w;
+  J.hips[1].rotation.x += (0.26 - J.hips[1].rotation.x) * w;
+  J.knees[1].rotation.x += (0.06 - J.knees[1].rotation.x) * w;
+  J.feet[1].rotation.x += (0.38 - J.feet[1].rotation.x) * w;
+  if (J.headG) J.headG.rotation.x += 0.18 * w;
+}
+function chotuPose(t) {
+  const g = chotu.group;
+  if (t < 19.6) { g.visible = false; return; }
+  if (t < 26.2) { g.visible = true; g.position.set(5.5, GY(5.5, C1 + 0.9, 0), C1 + 0.9); g.rotation.y = 1.25; chotu.update(30, 0.001); blendNeutral(JC, 0.95);
+    const gest = seg(t, P(6).start, P(6).start + 0.6); // beckoning gesture on his line
+    JC.shoulders[1].rotation.x += (-1.15 - JC.shoulders[1].rotation.x) * gest * (t < 26.2 ? 1 : 0);
+    return; }
+  if (t < 28.6) { const f = seg(t, 26.2, 28.2); const x = lerp(5.5, 5.15, f), z = lerp(C1 + 0.9, C1 + 0.5, f); g.visible = true; g.position.set(x, GY(x, z, 0), z); g.rotation.y = 1.25 - f * 1.2; chotu.update(f * 1.2, 1.0); return; }
+  if (t < 33.4) { g.visible = false; return; }
+  if (t < 38.6) { g.visible = true; const z = carZ(t) - 0.6; g.position.set(2.1, GY(2.1, z, 0), z); g.rotation.y = 0.7; chotu.update(30, 0.001); blendNeutral(JC, 0.95); return; }
+  if (t < 46.6) { pushPose(chotu, JC, t, 2.92, -2.87); return; }
+  if (t < 49.8) { g.visible = true; g.position.set(7.4, GY(7.4, Z_PUMP - 0.8, 0), Z_PUMP - 0.8); g.rotation.y = 1.35; chotu.update(30, 0.001); blendNeutral(JC, 0.95); return; }
+  if (t < 51.3) { g.visible = false; return; }
+  g.visible = true; g.position.set(4.7, GY(4.7, C4 + 0.8, 0), C4 + 0.8); g.rotation.y = -1.1; chotu.update(30, 0.001); blendNeutral(JC, 0.95);
+  if (t > P(13).start) { const w = seg(t, P(13).start, P(13).start + 0.6); const sh = JC.shoulders[1]; sh.rotation.z += (2.25 - sh.rotation.z) * w + Math.sin(t * 7 + 1) * 0.2 * w; }
+}
+
+// ---------- camera shots (cuts only on phrase boundaries) ----------
+const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
+function shotCam(t) {
+  const rz = RAMU_Z0 + walkDist(Math.min(t, 18.8)), cz = carZ(t);
+  const shots = [
+    { t0: 0, t1: P(2).start, cF: V3(10.6, GY(10.6, -25.6, 1.6), -25.6), cT: V3(10.2, GY(10.2, -21.5, 1.5), -21.5), lF: V3(PATH_X, GY(PATH_X, rz, 1.1), rz + 0.4), lT: V3(PATH_X, GY(PATH_X, rz, 1.1), rz + 0.4) },
+    { t0: P(2).start, t1: P(3).start, cF: V3(9.9, GY(9.9, -21.8, 1.0), -21.8), cT: V3(9.5, GY(9.5, -15.2, 0.95), -15.2), lF: V3(PATH_X, GY(PATH_X, rz, 0.6), rz + 0.3), lT: V3(PATH_X, GY(PATH_X, rz, 0.6), rz + 0.3) },
+    { t0: P(3).start, t1: P(4).start, cF: V3(9.3, GY(9.3, -15, 1.15), -15.0), cT: V3(8.8, GY(8.8, -7.6, 2.6), -7.6), lF: V3(PATH_X, GY(PATH_X, rz, 1.25), rz), lT: V3(PATH_X, GY(PATH_X, rz, 1.25), rz) },
+    { t0: P(4).start, t1: P(5).start, cF: V3(12.5, GY(12.5, -1, 2.4), -0.8), cT: V3(13.0, GY(13, -3.5, 2.8), -3.6), lF: V3(5.2, GY(5.2, -9.3, 1.0), -9.3), lT: V3(5.2, GY(5.2, -9.3, 1.0), -9.3) },
+    { t0: P(5).start, t1: P(6).start, cF: V3(10.8, GY(10.8, -3, 1.9), -3.0), cT: V3(9.4, GY(9.4, -5.6, 1.6), -5.6), lF: V3(5.3, GY(5.3, -9.1, 1.1), -9.1), lT: V3(5.3, GY(5.3, -9.1, 1.1), -9.1) },
+    { t0: P(6).start, t1: P(7).start, cF: V3(10.8, GY(10.8, -4.5, 1.85), -4.5), cT: V3(11.4, GY(11.4, -2.5, 2.0), -2.5), lF: V3(5.6, GY(5.6, -8.8, 1.05), -8.8), lT: V3(5.6, GY(5.6, -8.8, 1.05), -8.8) },
+    { t0: P(7).start, t1: P(8).start, cF: V3(10.4, GY(10.4, cz + 9, 1.8), cz + 9), cT: V3(10.4, GY(10.4, cz + 9, 1.8), cz + 9), lF: V3(3.6, GY(3.6, cz, 0.9), cz + 0.5), lT: V3(3.6, GY(3.6, cz, 0.9), cz + 0.5), jolt: true },
+    { t0: P(8).start, t1: P(9).start, cF: V3(-1.5, GY(-1.5, 10.5, 1.6), 10.5), cT: V3(-0.4, GY(-0.4, 8.2, 1.5), 8.2), lF: V3(5.8, GY(5.8, 5.6, 1.3), 5.6), lT: V3(5.8, GY(5.8, 5.6, 1.3), 5.6) },
+    { t0: P(9).start, t1: P(10).start, cF: V3(7.3, GY(7.3, cz - 5.6, 1.30), cz - 5.6), cT: V3(6.9, GY(6.9, cz - 4.9, 1.22), cz - 4.9), lF: V3(3.5, GY(3.5, cz - 2.2, 0.95), cz - 2.2), lT: V3(3.5, GY(3.5, cz - 2.2, 0.95), cz - 2.2) },
+    { t0: P(10).start, t1: P(11).start, cF: V3(6.9, GY(6.9, cz - 4.9, 1.22), cz - 4.9), cT: V3(6.6, GY(6.6, cz - 4.3, 1.18), cz - 4.3), lF: V3(3.5, GY(3.5, cz - 2.2, 0.95), cz - 2.2), lT: V3(3.5, GY(3.5, cz - 2.2, 0.95), cz - 2.2) },
+    { t0: P(11).start, t1: P(12).start, cF: V3(0.0, GY(0, 25, 2.0), 25.0), cT: V3(0.8, GY(0.8, 30, 1.9), 30.0), lF: V3(7.5, GY(7.5, Z_PUMP, 1.2), Z_PUMP), lT: V3(DOOR.x, GY(DOOR.x, DOOR.z, 1.3), DOOR.z) },
+    { t0: P(12).start, t1: P(13).start, cF: V3(2.4, GY(2.4, 34.6, 1.7), 34.6), cT: V3(3.4, GY(3.4, 32.8, 1.6), 32.8), lF: V3(DOOR.x, GY(DOOR.x, DOOR.z, 1.25), DOOR.z), lT: V3(DOOR.x, GY(DOOR.x, DOOR.z, 1.25), DOOR.z) },
+    { t0: P(13).start, t1: P(14).start, cF: V3(3.0, GY(3.0, 39.8, 1.52), 39.8), cT: V3(3.6, GY(3.6, 39.0, 1.45), 39.0), lF: V3(5.9, GY(5.9, 28.5, 1.05), 28.5), lT: V3(5.9, GY(5.9, 28.5, 1.05), 28.5) },
+    { t0: P(14).start, t1: DUR + 0.01, cF: V3(3.6, GY(3.6, 39.0, 1.45), 39.0), cT: V3(4.3, GY(4.3, 37.9, 1.42), 37.9), lF: V3(5.95, GY(5.95, 28.5, 1.08), 28.5), lT: V3(5.95, GY(5.95, 28.5, 1.08), 28.5) }
+  ];
+  const s = shots.find(s => t >= s.t0 && t < s.t1) || shots[shots.length - 1];
+  const f = ss01((t - s.t0) / (s.t1 - s.t0));
+  const cam = s.cF.clone().lerp(s.cT, f), look = s.lF.clone().lerp(s.lT, f);
+  cam.x += Math.sin(t * 0.45) * 0.07; cam.y += Math.sin(t * 0.6) * 0.045; // never frozen: micro-drift
+  let fov = 55;
+  if (s.jolt && t > 31.3 && t < 32.4) { // "Petrol khatam!" — snap push + shake
+    const e = Math.sin(Math.min(1, (t - 31.3) / 1.1) * Math.PI);
+    fov = 55 + 9 * e;
+    cam.x += Math.sin(t * 47) * 0.05 * e; cam.y += Math.cos(t * 53) * 0.045 * e;
+    cam.lerp(look, 0.10 * e);
+  }
+  return { cam, look, fov };
+}
+
+// HUD label removed in the staged studio copy (debug overlay, not part of the film);
+
+function update(t) {
+  sky.update(t); grass.update(t); river.update(t); clouds.update(t); trees.update(t);
+  ramuPose(t); chotuPose(t);
+  const cz = carZ(t);
+  carWrap.visible = t > 14.2;
+  carWrap.position.set(ROAD_X, terrainH(ROAD_X, cz) + 0.02, cz);
+  carWrap.rotation.x = -Math.atan((terrainH(ROAD_X, cz + 2) - terrainH(ROAD_X, cz - 2)) / 4);
+  car.update(carDist(t) / 3.2);
+  const { cam, look, fov } = shotCam(t);
+  camera.position.copy(cam); camera.lookAt(look);
+  if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
+  sun.position.set(look.x + 26, look.y + 34, look.z + 14);
+  sun.target.position.copy(look);
+  window.__dbg = { t, cam: camera.position.toArray().map(v => +v.toFixed(2)), look: look.toArray().map(v => +v.toFixed(2)), carZ: +cz.toFixed(2), ramu: ramu.group.position.toArray().map(v => +v.toFixed(2)), ramuVis: ramu.group.visible, chotu: chotu.group.position.toArray().map(v => +v.toFixed(2)), chotuVis: chotu.group.visible };
+}
+
+window.__seek = (t) => { update(t); renderer.render(scene, camera); };
+// ---- render-studio harness (staged copy): the studio engine loads index.html
+// at 1080x1920, waits for window.ready, then calls window.renderFrame(f) per
+// frame (30 fps) and reads canvas #c. ----
+window.renderFrame = (f) => { window.__seek(Math.min(f / 30, DUR)); return true; };
+const __readyIv = setInterval(() => {
+  const M = THREE.DefaultLoadingManager;
+  if (M.itemsTotal > 0 && M.itemsLoaded >= M.itemsTotal) { window.ready = true; clearInterval(__readyIv); }
+}, 200);
+THREE.DefaultLoadingManager.onLoad = () => { window.ready = true; clearInterval(__readyIv); };
+</script></body></html>
