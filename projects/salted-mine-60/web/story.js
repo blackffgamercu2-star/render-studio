@@ -264,16 +264,16 @@ const RIG_BY_ID = {
   s03d: { cut: 'hard', raw: keysCam({ keys: [
     { f: 142, pos: [-0.6, 1.7, -1.6], look: [1.3, 1.4, -4.6], fov: 37 },
     { f: 159, pos: [0.7, 1.64, -3.2], look: [3.4, 1.58, -4.95], fov: 33, ease: 'surge' }] }) },
-    s04: { cut: 'hard', raw: pushInCam({ subject: buddyPos, a: 160, b: 227, d0: 3.1, d1: 2.55, h0: 1.52, h1: 1.5, lookOff: [0, 1.42, 0], fov0: 34, fov1: 30,
+    s04: { cut: 'hard', raw: pushInCam({ subject: buddyPos, a: 160, b: 227, d0: 3.1, d1: 2.3, h0: 1.52, h1: 1.5, lookOff: [0, 1.42, 0], fov0: 34, fov1: 30,
     dir: () => [0.55, 0.83] }) },
-  s05: { cut: 'hard', raw: pushInCam({ subject: minerPos, a: 228, b: 289, d0: 3.3, d1: 2.7, h0: 1.54, h1: 1.52, lookOff: [0, 1.45, 0], fov0: 34, fov1: 30,
+  s05: { cut: 'hard', raw: pushInCam({ subject: minerPos, a: 228, b: 289, d0: 3.3, d1: 2.45, h0: 1.54, h1: 1.52, lookOff: [0, 1.45, 0], fov0: 34, fov1: 30,
     dir: () => [-0.5, 0.86] }) },
   s06: { cut: 'hard', raw: keysCam({ keys: [
     { f: 290, pos: [7.5, 3.4, 24], look: [0, 3.2, 10.4], fov: 44 },
     { f: 464, pos: [6.6, 3.1, 22.4], look: [0, 3.1, 10.4], fov: 41, ease: 'surge' }] }) },
   s07: { cut: 'hard', raw: pushInCam({ subject: () => [3.0, 0, 12.7], a: 465, b: 559, d0: 5.2, d1: 4.2, h0: 1.6, h1: 1.45, lookOff: [0, 1.0, 0], fov0: 38, fov1: 34,
     dir: () => [0.3, 0.95] }) },
-  s08: { cut: 'hard', raw: pushInCam({ subject: bankerPos, a: 560, b: 632, d0: 7.4, d1: 5.4, h0: 1.8, h1: 1.6, lookOff: [0, 1.5, 0], fov0: 42, fov1: 36,
+  s08: { cut: 'hard', raw: pushInCam({ subject: bankerPos, a: 560, b: 632, d0: 7.4, d1: 4.85, h0: 1.8, h1: 1.6, lookOff: [0, 1.5, 0], fov0: 42, fov1: 36,
     dir: () => [0.3, 0.95] }) },
   s09a: { cut: 'hard', raw: keysCam({ keys: [
     { f: 633, pos: [2.4, 1.7, 12.8], look: [1.2, 1.4, 9.5], fov: 38 },
@@ -283,6 +283,7 @@ const RIG_BY_ID = {
     { f: 722, pos: [2.15, 1.6, 0.75], look: [0.7, 1.42, 3.45], fov: 32, ease: 'surge' }] }) },
   s10: { cut: 'hard', raw: keysCam({ keys: [
     { f: 723, pos: [0.4, 1.7, -1.6], look: [2.9, 1.35, -5.2], fov: 38 },
+    { f: 754, pos: [0.55, 1.64, -2.1], look: [3.0, 1.32, -5.25], fov: 35 },
     { f: 809, pos: [0.7, 1.6, -2.6], look: [3.1, 1.3, -5.3], fov: 33, ease: 'surge' }] }) },
   s11: { cut: 'hard', raw: keysCam({ keys: [
     { f: 810, pos: [0.9, 1.35, -3.4], look: [2.55, 0.95, -6.1], fov: 34 },
@@ -290,7 +291,7 @@ const RIG_BY_ID = {
   s12: { cut: 'hard', raw: keysCam({ keys: [
     { f: 851, pos: [1.85, 1.25, -4.7], look: [2.68, 0.88, -6.28], fov: 30 },
     { f: 883, pos: [1.95, 1.18, -5.05], look: [2.68, 0.88, -6.28], fov: 27, ease: 'surge' }] }) },
-  s13: { cut: 'hard', raw: pushInCam({ subject: expertPos, a: 884, b: 979, d0: 3.2, d1: 2.6, h0: 1.52, h1: 1.5, lookOff: [0, 1.42, 0], fov0: 33, fov1: 29,
+  s13: { cut: 'hard', raw: pushInCam({ subject: expertPos, a: 884, b: 944, d0: 3.2, d1: 2.75, h0: 1.52, h1: 1.5, lookOff: [0, 1.42, 0], fov0: 33, fov1: 29,
     dir: () => [0.55, 0.83] }) },
   s14: { cut: 'hard', raw: keysCam({ keys: [
     { f: 980, pos: [1.15, 1.62, -3.55], look: [2.3, 1.5, -5.3], fov: 28 },
@@ -301,14 +302,14 @@ const RIG_BY_ID = {
   s16: { cut: 'hard', raw: keysCam({ keys: [
     { f: 1021, pos: [-0.6, 1.66, -1.4], look: [1.6, 1.4, -4.9], fov: 37 },
     { f: 1091, pos: [-0.3, 1.6, -2.2], look: [1.2, 1.42, -4.7], fov: 33, ease: 'surge' }] }) },
-  s17: { cut: 'hard', raw: pushInCam({ subject: bankerPos, a: 1092, b: 1183, d0: 3.6, d1: 2.8, h0: 1.56, h1: 1.54, lookOff: [0, 1.52, 0], fov0: 34, fov1: 29,
+  s17: { cut: 'hard', raw: pushInCam({ subject: bankerPos, a: 1092, b: 1150, d0: 3.6, d1: 3.0, h0: 1.56, h1: 1.54, lookOff: [0, 1.52, 0], fov0: 34, fov1: 29,
     dir: () => [0.5, 0.86] }) },
-  s18: { cut: 'hard', raw: pushInCam({ subject: buddyPos, a: 1184, b: 1258, d0: 3.4, d1: 2.8, h0: 1.52, h1: 1.5, lookOff: [0, 1.42, 0], fov0: 34, fov1: 30,
+  s18: { cut: 'hard', raw: pushInCam({ subject: buddyPos, a: 1184, b: 1216, d0: 3.4, d1: 3.05, h0: 1.52, h1: 1.5, lookOff: [0, 1.42, 0], fov0: 34, fov1: 30,
     dir: () => [0.55, 0.83] }) },
   s19: { cut: 'hard', raw: keysCam({ keys: [
     { f: 1259, pos: [6.8, 2.6, 20.5], look: [0.4, 1.2, 12.4], fov: 40 },
     { f: 1362, pos: [6.2, 2.45, 19.6], look: [-0.6, 1.2, 13], fov: 37, ease: 'surge' }] }) },
-  s20: { cut: 'hard', raw: pushInCam({ subject: bankerPos, a: 1363, b: 1508, d0: 4.6, d1: 3.4, h0: 1.62, h1: 1.56, lookOff: [0, 1.4, 0], fov0: 38, fov1: 32,
+  s20: { cut: 'hard', raw: pushInCam({ subject: bankerPos, a: 1363, b: 1395, d0: 4.6, d1: 4.05, h0: 1.62, h1: 1.56, lookOff: [0, 1.4, 0], fov0: 38, fov1: 32,
     dir: () => [0.45, 0.89] }) },
   s21: { cut: 'hard', raw: keysCam({ keys: [
     { f: 1509, pos: [1.9, 1.5, 3.1], look: [0.85, 1.15, 0.95], fov: 32 },
@@ -326,11 +327,51 @@ const RIG_BY_ID = {
     { f: 1642, pos: [0.8, 1.95, -18.6], look: [0.1, 1.5, -30.4], fov: 38 },
     { f: 1799, pos: [0.6, 1.85, -20.4], look: [0.12, 1.45, -30.6], fov: 35, ease: 'surge' }] }) },
 };
+// RUN 3 v4: 38 rig segments (29 shots, 9 internal hard cuts on word
+// onsets). Segment A of a split shot reuses the shot's original rig
+// (keysCam/pushInCam interpolate naturally over the truncated span);
+// segment B gets a new rig. Cut frames are OLD-space word onsets —
+// they land on the NEW stem's word onsets through the warp anchors.
+// SHOTS / castAt / worldAt are untouched.
+const segOf = (id) => { const s = SHOTS.find((x) => x.id === id); return { a: s.a, b: s.b, ...RIG_BY_ID[id] }; };
+const RIG_SEGMENTS = [
+  segOf('s01'), segOf('s02'), segOf('s03a'), segOf('s03b'), segOf('s03c'), segOf('s03d'),
+  segOf('s04'), segOf('s05'),
+  { a: 290, b: 373, ...RIG_BY_ID.s06 }, // s06-A: wide, reaches run-2 end framing by f373
+  { a: 374, b: 464, cut: 'hard', raw: keysCam({ keys: [ // s06-B: medium on the men at the entrance
+    { f: 374, pos: [-0.4, 1.75, 4.2], look: [-2.3, 1.35, 12.0], fov: 38 },
+    { f: 464, pos: [-1.2, 1.65, 4.7], look: [-2.4, 1.3, 12.2], fov: 35, ease: 'surge' }] }) },
+  segOf('s07'), segOf('s08'), segOf('s09a'),
+  { a: 653, b: 671, ...RIG_BY_ID.s09b }, // s09b-A: walk-in framing
+  { a: 672, b: 722, cut: 'hard', raw: keysCam({ keys: [ // s09b-B: closer single from the bonk frame
+    { f: 672, pos: [2.35, 1.7, 0.9], look: [0.72, 1.55, 3.5], fov: 34 },
+    { f: 722, pos: [2.1, 1.64, 1.3], look: [0.7, 1.52, 3.55], fov: 31, ease: 'surge' }] }) },
+  segOf('s10'), segOf('s11'), segOf('s12'),
+  { a: 884, b: 944, ...RIG_BY_ID.s13 }, // s13-A: pushIn 3.2->2.75
+  { a: 945, b: 979, cut: 'hard', raw: pushInCam({ subject: expertPos, a: 945, b: 979, d0: 2.6, d1: 2.3, h0: 1.52, h1: 1.5, lookOff: [0, 1.42, 0], fov0: 29, fov1: 28, dir: () => [0.55, 0.83] }) }, // s13-B: tighter lens single
+  segOf('s14'), segOf('s15'),
+  { a: 1021, b: 1043, ...RIG_BY_ID.s16 }, // s16-A: expert accusation
+  { a: 1044, b: 1091, cut: 'hard', raw: pushInCam({ subject: bankerPos, a: 1044, b: 1091, d0: 3.0, d1: 2.5, h0: 1.56, h1: 1.54, lookOff: [0, 1.52, 0], fov0: 34, fov1: 30, dir: () => [0.5, 0.86] }) }, // s16-B: banker reaction close
+  { a: 1092, b: 1150, ...RIG_BY_ID.s17 }, // s17-A: pushIn 3.6->3.0
+  { a: 1151, b: 1183, cut: 'hard', raw: pushInCam({ subject: bankerPos, a: 1151, b: 1183, d0: 2.9, d1: 2.45, h0: 1.56, h1: 1.54, lookOff: [0, 1.52, 0], fov0: 29, fov1: 26, dir: () => [0.5, 0.86] }) }, // s17-B: "That's insane" closer single
+  { a: 1184, b: 1216, ...RIG_BY_ID.s18 }, // s18-A: pushIn 3.4->3.05
+  { a: 1217, b: 1258, cut: 'hard', raw: pushInCam({ subject: buddyPos, a: 1217, b: 1258, d0: 2.95, d1: 2.5, h0: 1.52, h1: 1.5, lookOff: [0, 1.42, 0], fov0: 30, fov1: 27, dir: () => [0.55, 0.83] }) }, // s18-B: buddy quote tighter single
+  { a: 1259, b: 1327, ...RIG_BY_ID.s19 }, // s19-A: payment framing
+  { a: 1328, b: 1362, cut: 'hard', raw: keysCam({ keys: [ // s19-B: lateral tracking follow of the bolt
+    { f: 1328, pos: [5.6, 2.3, 19.8], look: [-0.4, 1.15, 12.8], fov: 39 },
+    { f: 1362, pos: [2.6, 2.2, 20.4], look: [-3.2, 1.15, 14.2], fov: 37, ease: 'surge' }] }) },
+  { a: 1363, b: 1395, ...RIG_BY_ID.s20 }, // s20-A: pushIn 4.6->4.05
+  { a: 1396, b: 1455, cut: 'hard', raw: pushInCam({ subject: bankerPos, a: 1396, b: 1455, d0: 3.6, d1: 2.7, h0: 1.62, h1: 1.56, lookOff: [0, 1.4, 0], fov0: 34, fov1: 29, dir: () => [0.45, 0.89] }) }, // s20-B: dynamite reveal tighter push
+  { a: 1456, b: 1508, cut: 'hard', raw: keysCam({ keys: [ // s20-C: side medium
+    { f: 1456, pos: [3.1, 1.6, 2.6], look: [0.5, 1.35, 0.8], fov: 36 },
+    { f: 1508, pos: [2.7, 1.55, 2.2], look: [0.5, 1.32, 0.8], fov: 33, ease: 'surge' }] }) },
+  segOf('s21'), segOf('s22'), segOf('s23'), segOf('s24'), segOf('s25'),
+];
 const RIG = buildRig({
   total: TOTAL,
-  shots: SHOTS.map((s) => ({ a: s.a, b: s.b, ...RIG_BY_ID[s.id] })),
+  shots: RIG_SEGMENTS,
   kicks: [{ f: 96, a: 0.05 }, { f: 124, a: 0.05 }, { f: 146, a: 0.04 }, { f: BLAST_F, a: 0.09 }],
-  sigma: 2.3, fovSigma: 1.6,
+  sigma: 2.8, fovSigma: 1.6,
 });
 // exposure flash: muzzle pops + the blast (builds ~6f, recovers ~10f)
 const flashAt = (f) => {

@@ -4,6 +4,7 @@ import * as P from './paint.js';
 import * as FX from './fx.js';
 import * as M4 from './materials.js';
 import { TOTAL, shotAt, camAt, dofAt, lightFor, actorsAt, worldAt, fxAt, fxProfileAt, SIGN_POS, gunAt } from './story.js';
+import { warpF } from './timewarp.js';
 import { WORDS } from './words.js';
 
 const W = 1080, H = 1920;
@@ -962,7 +963,12 @@ const swapForNd = (on) => {
     }
   });
 };
-window.renderFrame = (f) => {
+window.renderFrame = (fNew) => {
+  // RUN 3: the renderer calls us in NEW-stem frames; the whole picture
+  // (shots, cast, rig, light, world, fx) lives in OLD story frames, so
+  // warp the frame and drive the body on it. Captions stay in NEW space
+  // (drawCaption below reads words.js = new timings).
+  const f = warpF(fNew);
   const S = shotAt(f), L = lightFor(S, f), C = camAt(f);
   applyLight(L, f);
   camera.position.set(...C.pos); camera.up.set(0, 1, 0); camera.lookAt(...C.look); camera.rotateZ(rx(C.roll || 0));
@@ -981,7 +987,7 @@ window.renderFrame = (f) => {
   renderer.setRenderTarget(rtInk); renderer.render(inkScene, fsCam);
   dofU.focus.value = D.focus; dofU.cinf.value = D.cinf; dofU.near.value = D.near ?? 1;
   renderer.setRenderTarget(null); renderer.render(dofScene, fsCam);
-  drawCaption(f);
+  drawCaption(fNew);
   renderer.autoClear = false; renderer.render(capScene, fsCam); renderer.autoClear = true;
   return true;
 };
