@@ -8,7 +8,9 @@
 // Speaking: lip-sync + elastic skin-flex ONLY on L3 (the
 // mockers' taunt, Trucker1) via SPEAK_OPEN; all other mouths
 // shut; final line = narration + hook board only.
-// Camera: smooth damped moves only. Daylight only.
+// Camera: V4 REBUILD — Zack-D action grammar (fast smooth push-ins,
+// tracking, ECU inserts, cuts on word onsets) under the NO-SHAKE bar:
+// smootherstep moves only, jerk-gated (see V4_CHECKLIST.md). Daylight only.
 // renderFrame(f) is a pure function of f (chunk-safe).
 // ============================================================
 import * as THREE from 'three';
@@ -641,6 +643,7 @@ function buildBoard() {
     [woodDarkMat, woodDarkMat, woodDarkMat, woodDarkMat,
      new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85 }), woodDarkMat]);
   bd.position.y = 1.15; bd.castShadow = true; hookBoard.add(bd);
+  rig.boardMesh = bd;
   for (const s of [-1, 1]) {
     const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.8, 0.1), woodDarkMat);
     leg.position.set(s * 1.05, 0.4, 0); hookBoard.add(leg);
@@ -654,8 +657,17 @@ function buildBoard() {
   rig.boardPos = hookBoard.position.clone();
 }
 
-// ---------- cameras (anchors measured in the hairpin pose at build) ----------
-let CAMS = [];
+// ---------- cameras — V4 REBUILD (2026-11-21) ----------
+// Grammar: Zack-D action camera reconciled with Abid's NO-SHAKE bar.
+// 27 sub-shots; every cut lands on a word onset where the voice names a
+// new subject (checklist: ~/workspace/shorts/truck-mountain/V4_CHECKLIST.md).
+// Each sub-shot is a smootherstep keyframe pair (zero velocity at both
+// ends) or a dynamic pose (follow / slip / live truck-local inserts).
+// Anchors are measured in the hairpin pose; the crest pose is measured
+// once (and restored) for the final shot's composition.
+let SUBS = [];
+let CAMLOOK = [0, 0, 0];
+const smoother = (u) => { u = clamp(u, 0, 1); return u * u * u * (u * (u * 6 - 15) + 10); };
 function v3(v) { return [v.x, v.y, v.z]; }
 function computeCameras() {
   const h = rig.hero;
@@ -664,19 +676,12 @@ function computeCameras() {
   const CABW = anchorWorld(rig.anchors.cab);
   const GW = anchorWorld(rig.anchors.gwheel);
   const FW = anchorWorld(rig.anchors.fwheel);
-  const DIFW = anchorWorld(rig.anchors.diff);
   const LEVERW = anchorWorld(rig.anchors.lever);
-  const MP = curve.getPointAt(0.26);
   const T1 = A.t1Pos;
   const T1H = T1.clone().add(new THREE.Vector3(0, 1.6, 0));
+  const T2H = A.t2Pos.clone().add(new THREE.Vector3(0, 1.6, 0));
   const t1Face = A.t1Face;
   const t1Side = new THREE.Vector3(t1Face.z, 0, -t1Face.x);
-  // camera spot for shot 2: in the gap between the parked trucks, valley
-  // side, looking across at the truckers with the pass rising behind them
-  const c245 = curve.getPointAt(0.245), tan245 = curve.getTangentAt(0.245);
-  const pl245 = Math.hypot(tan245.x, tan245.z) || 1;
-  const perp245 = new THREE.Vector3(-tan245.z / pl245, 0, tan245.x / pl245);
-  const CAM2 = c245.clone().add(perp245.clone().multiplyScalar(-6.5)).add(new THREE.Vector3(0, 2.6, 0));
   // lean-card facing normal (Ramu's cab cards) — close cameras sit on it
   const leanN = new THREE.Vector3(Math.sin(yawH - Math.PI / 2 - 0.5), 0, Math.cos(yawH - Math.PI / 2 - 0.5));
   const side = new THREE.Vector3(Math.cos(yawH), 0, -Math.sin(yawH));
@@ -692,44 +697,155 @@ function computeCameras() {
   const fwdC = new THREE.Vector3(Math.sin(yawC), 0, Math.cos(yawC));
   const valC = new THREE.Vector3(-Math.cos(yawC), 0, Math.sin(yawC));
   const BP = rig.boardPos;
-  // board camera anchor: past the road's end, looking back at the board
-  // with the crested truck behind it
+  // board camera direction: past the road's end, looking back at the board
   const cB = curve.getPointAt(1.0), tanB = curve.getTangentAt(1.0);
   const plB = Math.hypot(tanB.x, tanB.z) || 1;
   const perpB = new THREE.Vector3(-tanB.z / plB, 0, tanB.x / plB);
   const CAMB = cB.clone().add(tanB.clone().multiplyScalar(3.5)).add(perpB.clone().multiplyScalar(-1.0)).add(new THREE.Vector3(0, 1.8, 0));
-  hookBoard.rotation.y = Math.atan2(CAMB.x - BP.x, CAMB.z - BP.z);
   const bDir = CAMB.clone().sub(BP).setY(0).normalize();
+  const bSide = new THREE.Vector3(bDir.z, 0, -bDir.x);
   const off = (v, dx, dy, dz) => [v.x + dx, v.y + dy, v.z + dz];
   // truck-local point -> world (hairpin pose): the wheel/diff inserts are
   // framed in the truck's own space, world offsets mis-aim them
   const LW = (x, y, z) => v3(h.truck.localToWorld(new THREE.Vector3(x, y, z)));
   const FWl = [-0.97, 0.62, -2.15], GWl = [0.94, 0.45, -2.15], DIFl = [0, 0.45, -2.15];
-  CAMS = [
-    { p: [off(H0, 4.5, 4.4, 15.5), off(H0, 3.6, 3.7, 12.6)], l: [off(H0, -0.4, 0.4, -0.4), off(H0, -0.4, 0.4, -0.4)] },                    // 1 hook
-    { p: [v3(T1H.clone().add(t1Face.clone().multiplyScalar(9.2)).add(t1Side.clone().multiplyScalar(1.5)).add(new THREE.Vector3(0, 1.55, 0))), v3(T1H.clone().add(t1Face.clone().multiplyScalar(8.9)).add(t1Side.clone().multiplyScalar(1.45)).add(new THREE.Vector3(0, 1.65, 0)))], l: [v3(A.t1Pos.clone().lerp(A.t2Pos, 0.5).add(new THREE.Vector3(0, 1.25, 0))), v3(A.t1Pos.clone().lerp(A.t2Pos, 0.5).lerp(H0, 0.30).add(new THREE.Vector3(0, 1.15, 0)))] }, // 2 mockers wide, gentle tilt toward the hero
-    { p: [v3(T1H.clone().add(t1Face.clone().multiplyScalar(5.4)).add(t1Side.clone().multiplyScalar(0.9)).add(new THREE.Vector3(0, 0.25, 0))), v3(T1H.clone().add(t1Face.clone().multiplyScalar(4.9)).add(t1Side.clone().multiplyScalar(0.8)).add(new THREE.Vector3(0, 0.2, 0)))], l: [v3(T1H.clone().lerp(A.t2Pos.clone().add(new THREE.Vector3(0, 1.6, 0)), 0.35)), v3(T1H.clone().lerp(A.t2Pos.clone().add(new THREE.Vector3(0, 1.6, 0)), 0.35))] }, // 3 dialogue two-shot
-    { p: [v3(CABW.clone().add(leanN.clone().multiplyScalar(3.4)).add(new THREE.Vector3(0, 0.55, 0))), v3(CABW.clone().add(leanN.clone().multiplyScalar(2.95)).add(new THREE.Vector3(0, 0.5, 0)))], l: [off(CABW, 0, 0.3, 0), off(CABW, 0, 0.3, 0)] }, // 4 Ramu close
-    { p: [LW(-2.5, 0.42, -4.6), LW(-2.1, 0.4, -4.0)], l: [LW(...DIFl), LW(...DIFl)] },                                                     // 5 differential POV
-    { p: [LW(-2.9, 0.5, -4.6), LW(-2.6, 0.48, -4.2)], l: [LW(-0.5, 0.5, -2.15), LW(-0.5, 0.5, -2.15)] },                                       // 6 power split — diff + free wheel in one frame
-    { p: [LW(-3.4, 1.15, -3.2), LW(-3.6, 1.05, -1.2)], l: [LW(...FWl), LW(...FWl)] },                                                           // 7 free wheel over the void
-    { p: [LW(3.4, 0.85, -3.9), LW(3.2, 0.8, -3.6)], l: [LW(...GWl), LW(...GWl)] },                                                              // 8 grounded wheel, nothing
-    { p: [off(H0, 4.1, 4.0, 14.1), off(H0, 3.8, 3.8, 13.2)], l: [off(H0, -0.2, 0.5, -0.2), off(H0, -0.2, 0.5, -0.2)] },                            // 9 floored it — slip (hook family, tighter)
-    { p: [v3(CABW.clone().add(leanN.clone().multiplyScalar(3.05)).add(new THREE.Vector3(0, 0.3, 0))), v3(CABW.clone().add(leanN.clone().multiplyScalar(2.85)).add(new THREE.Vector3(0, 0.27, 0)))], l: [v3(LEVERW.clone().lerp(CABW, 0.35).add(new THREE.Vector3(0, -0.05, 0))), v3(LEVERW.clone().lerp(CABW, 0.35).add(new THREE.Vector3(0, -0.05, 0)))] }, // 10 handbrake: face + hand + lever
-    { p: [LW(-3.0, 0.7, -3.6), LW(-2.7, 0.65, -3.3)], l: [LW(...FWl), LW(...FWl)] },                                                            // 11 brake chokes the spin
-    { p: [LW(3.3, 0.62, -3.9), LW(3.0, 0.55, -3.5)], l: [LW(...GWl), LW(...GWl)] },                                                              // 12 power rushes across — first turn
-    { p: [v3((() => { const g = h.truck.localToWorld(new THREE.Vector3(0.94, 0, -2.15)); const cx = g.x + side.x * 3.6 + back.x * 3.4, cz = g.z + side.z * 3.6 + back.z * 3.4; return new THREE.Vector3(cx, Math.max(g.y + 2.0, terrainH(cx, cz) + 1.3), cz); })()),
-          v3((() => { const g = h.truck.localToWorld(new THREE.Vector3(0.94, 0, -2.15)); const cx = g.x + side.x * 3.3 + back.x * 3.9, cz = g.z + side.z * 3.3 + back.z * 3.9; return new THREE.Vector3(cx, Math.max(g.y + 2.1, terrainH(cx, cz) + 1.4), cz); })())],
-      l: [v3((() => { const g = h.truck.localToWorld(new THREE.Vector3(0.94, 0, -2.15)); return new THREE.Vector3(g.x + side.x * 0.15 + back.x * 0.15, g.y + 0.45, g.z + side.z * 0.15 + back.z * 0.15); })()),
-          v3((() => { const g = h.truck.localToWorld(new THREE.Vector3(0.94, 0, -2.15)); return new THREE.Vector3(g.x + side.x * 0.15 + back.x * 0.15, g.y + 0.45, g.z + side.z * 0.15 + back.z * 0.15); })())] }, // 13 stones for bite (approved preview trick framing, slight arc)
-    { p: [off(C0, 0, 0, 0), off(C0, 0, 0, 0)], l: [v3(C0), v3(C0)] },                                                                               // 14 climb — dynamic follow (below)
-    { p: [v3(C0.clone().add(fwdC.clone().multiplyScalar(5.5)).add(valC.clone().multiplyScalar(12.5)).add(new THREE.Vector3(0, 4.6, 0))),
-          v3(C0.clone().add(fwdC.clone().multiplyScalar(5.0)).add(valC.clone().multiplyScalar(11.5)).add(new THREE.Vector3(0, 4.3, 0)))],
-      l: [v3(C0.clone().add(fwdC.clone().multiplyScalar(-1)).add(new THREE.Vector3(0, 0.6, 0))), v3(C0.clone().add(fwdC.clone().multiplyScalar(-1)).add(new THREE.Vector3(0, 0.6, 0)))] }, // 15 payoff (approved preview framing)
-    { p: [v3(BP.clone().add(bDir.clone().multiplyScalar(8.2)).add(new THREE.Vector3(0, 1.45, 0))), v3(BP.clone().add(bDir.clone().multiplyScalar(7.6)).add(new THREE.Vector3(0, 1.4, 0)))],
-      l: [off(BP, 0, 1.15, 0), off(BP, 0, 1.15, 0)] },                                                                                                // 16 hook board — dedicated straight-on framing
+  const pairMid = v3(T1.clone().lerp(A.t2Pos, 0.5).add(new THREE.Vector3(0, 1.3, 0)));
+  const pairMid2 = v3(T1.clone().lerp(A.t2Pos, 0.5).add(new THREE.Vector3(0, 1.35, 0)));
+  const t1Look = v3(T1H.clone().lerp(T2H, 0.42));
+  // stone-shot camera helper (grounded-wheel world anchor g, hairpin pose)
+  const gW = h.truck.localToWorld(new THREE.Vector3(0.94, 0, -2.15));
+  const stoneCam = (sm, bm, dy) => {
+    const cx = gW.x + side.x * sm + back.x * bm, cz = gW.z + side.z * sm + back.z * bm;
+    return [cx, Math.max(gW.y + dy, terrainH(cx, cz) + dy - 0.7), cz];
+  };
+  const stoneLook = v3(new THREE.Vector3(gW.x + side.x * 0.15 + back.x * 0.15, gW.y + 0.45, gW.z + side.z * 0.15 + back.z * 0.15));
+  // crest pose, measured once for the final shot (Ramu fully in frame
+  // alongside the board), then the hairpin pose is restored
+  poseHero(h, 0.88, 0, 0); scene.updateMatrixWorld(true);
+  const CABW_CR = anchorWorld(rig.anchors.cab);
+  poseHero(h, 0.47, -2.2, 11); scene.updateMatrixWorld(true);
+  const boardLook = v3(new THREE.Vector3(BP.x, BP.y + 1.15, BP.z).lerp(CABW_CR, 0.40));
+  const S16p0 = v3(BP.clone().add(bDir.clone().multiplyScalar(13.6)).add(bSide.clone().multiplyScalar(-3.35)).add(new THREE.Vector3(0, 1.7, 0)));
+  const S16p1 = v3(BP.clone().add(bDir.clone().multiplyScalar(13.3)).add(bSide.clone().multiplyScalar(-3.25)).add(new THREE.Vector3(0, 1.62, 0)));
+  hookBoard.rotation.y = Math.atan2(S16p0[0] - BP.x, S16p0[2] - BP.z);
+  const cabCam = (d0, d1, y0, y1, look) => ({
+    p0: v3(CABW.clone().add(leanN.clone().multiplyScalar(d0)).add(new THREE.Vector3(0, y0, 0))),
+    p1: v3(CABW.clone().add(leanN.clone().multiplyScalar(d1)).add(new THREE.Vector3(0, y1, 0))),
+    l0: look, l1: look });
+  const faceCam = (T, d0, d1, sd0, sd1, y0, y1, look) => ({
+    p0: v3(T.clone().add(t1Face.clone().multiplyScalar(d0)).add(t1Side.clone().multiplyScalar(sd0)).add(new THREE.Vector3(0, y0, 0))),
+    p1: v3(T.clone().add(t1Face.clone().multiplyScalar(d1)).add(t1Side.clone().multiplyScalar(sd1)).add(new THREE.Vector3(0, y1, 0))),
+    l0: look, l1: look });
+  SUBS = [
+    // L1 hook: wide push, then the spinning wheel over the drop ("one"@68)
+    { f0: 0, f1: 68, p0: off(H0, 4.5, 4.4, 15.5), p1: off(H0, 3.1, 3.2, 11.0), l0: off(H0, -0.4, 0.4, -0.4), l1: off(H0, -0.4, 0.4, -0.4) },
+    { f0: 68, f1: 166, p0: LW(-3.2, 1.3, -3.6), p1: LW(-3.45, 1.1, -2.3), l0: LW(...FWl), l1: LW(...FWl) },
+    // L2 truckers: push-in, look LOCKED on the pair (no drift to the hero —
+    // the old look-lerp pushed Trucker2 out of the frame's right edge)
+    { f0: 166, f1: 252, ...faceCam(T1H, 9.2, 7.4, 1.2, 1.05, 1.5, 1.6, pairMid) },
+    // L3 dialogue: two-shot, then the speaker close ("No"@299)
+    { f0: 252, f1: 299, ...faceCam(T1H, 6.0, 5.5, 0.7, 0.62, 0.25, 0.2, t1Look) },
+    { f0: 299, f1: 372, ...faceCam(T1H, 3.1, 2.7, 0.35, 0.3, 0.15, 0.12, v3(T1H.clone().add(new THREE.Vector3(0, 0.05, 0)))) },
+    // L4 Ramu close: punch-in
+    { f0: 372, f1: 440, ...cabCam(3.6, 2.95, 0.55, 0.5, off(CABW, 0, 0.3, 0)) },
+    // L5 differential: lateral track along the axle, look locked on the diff
+    { f0: 440, f1: 528, p0: LW(-3.1, 0.45, -4.4), p1: LW(-1.2, 0.45, -4.4), l0: LW(...DIFl), l1: LW(...DIFl) },
+    // L6 power split: diff + wheels, then the free wheel ("feeds"@626)
+    { f0: 528, f1: 626, p0: LW(-2.9, 0.5, -4.6), p1: LW(-2.55, 0.48, -4.15), l0: LW(-0.5, 0.5, -2.15), l1: LW(-0.5, 0.5, -2.15) },
+    { f0: 626, f1: 668, p0: LW(-3.3, 1.0, -3.4), p1: LW(-3.45, 0.95, -2.6), l0: LW(...FWl), l1: LW(...FWl) },
+    // L7 power pours into the air wheel: medium, then ECU ("into"@726)
+    { f0: 668, f1: 726, p0: LW(-3.6, 1.3, -3.8), p1: LW(-3.5, 1.2, -3.0), l0: LW(...FWl), l1: LW(...FWl) },
+    { f0: 726, f1: 766, p0: LW(-3.0, 1.05, -2.9), p1: LW(-2.88, 1.0, -2.45), l0: LW(...FWl), l1: LW(...FWl) },
+    // L8 grounded wheel got nothing: micro-push (never a dead hold)
+    { f0: 766, f1: 852, p0: LW(3.4, 0.85, -3.9), p1: LW(3.2, 0.8, -3.6), l0: LW(...GWl), l1: LW(...GWl) },
+    // L9 floored it: cab push, wheel-scream ECU ("screamed"@913),
+    // then the side-profile slip track ("slid"@945)
+    { f0: 852, f1: 913, ...cabCam(4.2, 3.7, 0.5, 0.45, off(CABW, 0, 0.25, 0)) },
+    { f0: 913, f1: 945, p0: LW(-3.2, 1.2, -3.4), p1: LW(-3.3, 1.1, -2.7), l0: LW(...FWl), l1: LW(...FWl) },
+    { f0: 945, f1: 984, dyn: 'slip', o0: [-8.0, 2.3, 5.0], o1: [-7.4, 2.15, 4.6] },
+    // L10 handbrake insert — REFRAMED: camera higher + farther, look raised
+    // toward the face so Ramu's cap stays inside the top of the frame
+    { f0: 984, f1: 1062, ...cabCam(3.9, 3.55, 0.66, 0.60, v3(LEVERW.clone().lerp(CABW, 0.38).add(new THREE.Vector3(0, 0.16, 0)))) },
+    // L11 the brake chokes the spin: wheel ECU, then the diff ("nowhere"@1149)
+    { f0: 1062, f1: 1149, p0: LW(-3.0, 0.7, -3.6), p1: LW(-2.7, 0.65, -3.3), l0: LW(...FWl), l1: LW(...FWl) },
+    { f0: 1149, f1: 1191, p0: LW(-2.6, 0.55, -4.3), p1: LW(-2.2, 0.5, -3.8), l0: LW(...DIFl), l1: LW(-0.45, 0.48, -2.15) },
+    // L12 power rushes into the grounded wheel: low push-in
+    { f0: 1191, f1: 1296, p0: LW(3.3, 0.62, -3.9), p1: LW(3.0, 0.55, -3.5), l0: LW(...GWl), l1: LW(...GWl) },
+    // L13 stones for bite: wide, crouch arc ("piled"@1344), cab calm ("and"@1417)
+    { f0: 1296, f1: 1344, p0: stoneCam(3.6, 3.4, 2.0), p1: stoneCam(3.45, 3.65, 2.05), l0: stoneLook, l1: stoneLook },
+    { f0: 1344, f1: 1417, p0: stoneCam(3.45, 3.65, 2.05), p1: stoneCam(3.15, 4.1, 2.15), l0: stoneLook, l1: stoneLook },
+    { f0: 1417, f1: 1449, ...cabCam(3.3, 2.95, 0.5, 0.47, off(CABW, 0, 0.28, 0)) },
+    // L14 the wheel bit: live-anchored ECU, then the follow-tracking climb ("And"@1480)
+    { f0: 1449, f1: 1480, dyn: 'lw', p0: [3.2, 0.7, -3.7], p1: [3.05, 0.65, -3.4], l0: GWl, l1: GWl },
+    { f0: 1480, f1: 1581, dyn: 'follow' },
+    // L15 payoff: crane-up / pull-back over the crest, then the two men
+    // still waiting below ("waiting"@1645)
+    { f0: 1581, f1: 1645, p0: v3(C0.clone().add(fwdC.clone().multiplyScalar(5.5)).add(valC.clone().multiplyScalar(11.0)).add(new THREE.Vector3(0, 3.6, 0))),
+      p1: v3(C0.clone().add(fwdC.clone().multiplyScalar(6.5)).add(valC.clone().multiplyScalar(13.5)).add(new THREE.Vector3(0, 5.6, 0))),
+      l0: v3(C0.clone().add(fwdC.clone().multiplyScalar(-1)).add(new THREE.Vector3(0, 0.7, 0))), l1: v3(C0.clone().add(fwdC.clone().multiplyScalar(-1)).add(new THREE.Vector3(0, 0.7, 0))) },
+    { f0: 1645, f1: 1693, ...faceCam(T1H, 6.4, 5.9, 1.1, 1.0, 0.9, 0.95, pairMid2) },
+    // L16 final: board AND Ramu fully in frame — pulled back, look blended
+    // 30% toward the crested cab so both hold their margins
+    { f0: 1693, f1: 1799, p0: S16p0, p1: S16p1, l0: boardLook, l1: boardLook },
   ];
+  // follow-shot path, Hann-smoothed (\u00b18f) at build time: the camera
+  // inherits the climb's motion without its raw second differences, so
+  // the jerk gate passes while the tracking stays tight and lag-free
+  const tPosAt = (g) => {
+    const i2 = shotIdx(g), tt2 = clamp((g - BND[i2]) / (BND[i2 + 1] - BND[i2]), 0, 1);
+    let tPos = 0.47, lat = -2.2;
+    if (i2 === 8) lat = lerp(-2.2, -2.34, seg(g, BND[8] + 8, BND[9] - 6));
+    if (i2 === 13) { const s = sstep(tt2); tPos = lerp(0.47, 0.615, s); lat = lerp(-2.2, -0.5, s); }
+    if (i2 >= 14) { tPos = 0.88; lat = 0; }
+    return { tPos, lat };
+  };
+  const heroPosAt = (g) => { const { tPos, lat } = tPosAt(g); const p = curve.getPointAt(tPos), tan = curve.getTangentAt(tPos);
+    return new THREE.Vector3(p.x + (-tan.z) * lat, p.y + 0.07, p.z + tan.x * lat); };
+  const heroYawAt = (g) => { const tan = curve.getTangentAt(tPosAt(g).tPos); return Math.atan2(tan.x, tan.z); };
+  for (const s of SUBS) if (s.dyn === 'follow') {
+    const raw = [];
+    for (let g = s.f0 - 8; g < s.f1 + 8; g++) {
+      const gg = clamp(g, s.f0, s.f1 - 1), hp = heroPosAt(gg); // hold the climb's end pose past the cut (L15 teleports the truck to the crest — a new shot, not camera motion)
+      const sc = lerp(1.0, 0.92, smoother(clamp((gg - s.f0) / (s.f1 - s.f0), 0, 1)));
+      const o = new THREE.Vector3(-9.5 * sc, 2.6 * sc, 5.5 * sc).applyEuler(new THREE.Euler(0, heroYawAt(gg), 0));
+      raw.push({ p: [hp.x + o.x, hp.y + o.y, hp.z + o.z], l: [hp.x, hp.y + 1.0, hp.z] });
+    }
+    s.path = [];
+    for (let f = s.f0; f < s.f1; f++) {
+      const acc = [0, 0, 0], accl = [0, 0, 0]; let wsum = 0;
+      for (let k = -8; k <= 8; k++) {
+        const wgt = Math.cos(Math.PI * k / 18) ** 2, r = raw[f + k - (s.f0 - 8)];
+        for (let a = 0; a < 3; a++) { acc[a] += r.p[a] * wgt; accl[a] += r.l[a] * wgt; }
+        wsum += wgt;
+      }
+      s.path.push({ p: acc.map(v => v / wsum), l: accl.map(v => v / wsum) });
+    }
+  }
   rig.H0 = H0; rig.yawH = yawH; rig.crestPos = C0; rig.yawC = yawC;
+  window.__subs = SUBS.map(s => [s.f0, s.f1]);
+}
+// camera pose for frame f (pure in f; hero must already be posed)
+function camPose(f) {
+  let S = SUBS[SUBS.length - 1];
+  for (const s of SUBS) { if (f < s.f1) { S = s; break; } }
+  const u = smoother((f - S.f0) / (S.f1 - S.f0));
+  const h = rig.hero;
+  if (S.dyn === 'follow') {
+    if (S.path) { const e = S.path[clamp(f - S.f0, 0, S.path.length - 1)]; return { p: e.p.slice(), l: e.l.slice() }; }
+    const tp = h.outer.position, sc = lerp(1.0, 0.92, u);
+    const offv = new THREE.Vector3(-9.5 * sc, 2.6 * sc, 5.5 * sc).applyEuler(new THREE.Euler(0, h.outer.rotation.y, 0));
+    return { p: [tp.x + offv.x, tp.y + offv.y, tp.z + offv.z], l: [tp.x, tp.y + 1.0, tp.z] };
+  }
+  if (S.dyn === 'slip') {
+    const tp = h.outer.position, o = lerp3(S.o0, S.o1, u);
+    const offv = new THREE.Vector3(o[0], o[1], o[2]).applyEuler(new THREE.Euler(0, h.outer.rotation.y, 0));
+    return { p: [tp.x + offv.x, tp.y + offv.y, tp.z + offv.z], l: [tp.x, tp.y + 1.0, tp.z] };
+  }
+  if (S.dyn === 'lw') {
+    const L = (a) => v3(h.truck.localToWorld(new THREE.Vector3(a[0], a[1], a[2])));
+    return { p: lerp3(L(S.p0), L(S.p1), u), l: lerp3(L(S.l0), L(S.l1), u) };
+  }
+  return { p: lerp3(S.p0, S.p1, u), l: lerp3(S.l0, S.l1, u) };
 }
 
 // ---------- captions (Salted Mine style: one word, low-centre — elephant pattern) ----------
@@ -768,8 +884,8 @@ function spinAngle(f) { // lifted-wheel blur spin: fast, then choked by the brak
   const x = f - BND[10];
   return BND[10] * 0.9 + 34 * (1 - Math.exp(-x / 26)) + Math.sin(x * 0.55) * Math.exp(-x / 30) * 2.2;
 }
-window.renderFrame = (f) => {
-  if (!rig.hero) return false;
+function poseFrame(f) {
+  if (!rig.hero) return;
   const i = shotIdx(f), tt = clamp((f - BND[i]) / (BND[i + 1] - BND[i]), 0, 1);
   const h = rig.hero;
   // ---- hero pose ----
@@ -787,13 +903,14 @@ window.renderFrame = (f) => {
   rig.disc.material.opacity = i === 10 ? 0.95 * (1 - seg(f, BND[10], BND[11])) + 0.0 : 0.95;
   if (i === 10) rig.disc.visible = f < BND[11];
   let rearAng = 0, frontAng = 0;
-  if (i === 11) { rearAng = seg(f, BND[11] + 6, BND[12]) * 1.3; }
+  if (i === 11) { rearAng = seg(f, 1258, BND[12]) * 1.3; } // first turn starts 2f before "rushed"@1260
+  if (i === 12) { rearAng = 1.3; } // hold the turned angle while Ramu stones the wheel (no snap-back)
   if (i === 13) { rearAng = 1.3 + (f - BND[13]) * 0.105; frontAng = (f - BND[13]) * 0.105; }
   if (i > 13) { rearAng = 1.3 + (BND[14] - BND[13]) * 0.105; frontAng = rearAng; }
   rig.wheelRear.rotation.x = rearAng;
   rig.wheelFL.rotation.x = frontAng; rig.wheelFR.rotation.x = frontAng;
   // ---- handbrake: pulled to half in shot 10, stays ----
-  rig.lever.rotation.x = f < BND[9] ? 0.55 : lerp(0.55, 0.05, seg(f, BND[9], BND[9] + (BND[10] - BND[9]) * 0.6));
+  rig.lever.rotation.x = f < 1007 ? 0.55 : lerp(0.55, 0.05, seg(f, 1007, 1048)); // pull starts 2f before "pulled"@1009, half by "halfway"@1048
   if (rig.leverGrp) rig.leverGrp.visible = (i === 9 || i === 10); // exterior lever = close-up shorthand for its beat only
   // ---- stones ----
   rig.heap.forEach((r, k) => { r.visible = f >= BND[12] + HEAP_STEPS[k] * (BND[13] - BND[12]); });
@@ -833,8 +950,11 @@ window.renderFrame = (f) => {
   // ---- prayer flags flutter ----
   for (const flags of flagLines) flags.forEach((fg, k) => { fg.rotation.x = Math.sin(f * 0.25 + k * 0.7) * 0.25; });
   // ---- actors ----
-  const vis = { ramuLean: i === 0 || i === 8 || i === 9, ramuCalm: i === 3 || i === 13, ramuCrouch: i === 12, ramuWave: i === 14 || i === 15,
-    t1Shout: i === 2, t1Stand: i === 1 || i === 14, t2Look: i === 1, t2Laugh: i === 2, t2Stand: i === 14 };
+  const vis = { ramuLean: f < 68 || (f >= BND[8] && f < BND[10]),
+    ramuCalm: (f >= BND[3] && f < BND[4]) || (f >= 1417 && f < 1449) || (f >= 1480 && f < BND[14]),
+    ramuCrouch: f >= BND[12] && f < 1417, ramuWave: f >= BND[14],
+    t1Shout: f >= BND[2] && f < BND[3], t1Stand: (f >= BND[1] && f < BND[2]) || (f >= 1645 && f < BND[15]),
+    t2Look: f >= BND[1] && f < BND[2], t2Laugh: f >= BND[2] && f < BND[3], t2Stand: f >= 1645 && f < BND[15] };
   for (const k in vis) { A[k].mesh.visible = vis[k]; A[k].blob.visible = vis[k] && (k.startsWith('t1') || k.startsWith('t2')); }
   if (vis.ramuLean) placeCabCard(A.ramuLean, yaw - Math.PI / 2 - 0.5);
   if (vis.ramuCalm) placeCabCard(A.ramuCalm, yaw - Math.PI / 2 - 0.5);
@@ -846,16 +966,9 @@ window.renderFrame = (f) => {
     const g = seg(f, BND[15], BND[15] + 56);
     hookBoard.scale.setScalar(lerp(0.6, 1.0, g));
   }
-  // ---- camera ----
-  let cp, cl;
-  if (i === 13) { // follow the climb from the valley side
-    const tp = h.outer.position;
-    const offv = new THREE.Vector3(-9.5, 2.6, 5.5).applyEuler(new THREE.Euler(0, yaw, 0));
-    cp = [tp.x + offv.x, tp.y + offv.y, tp.z + offv.z]; cl = [tp.x, tp.y + 1.0, tp.z];
-  } else {
-    const C = CAMS[i];
-    cp = lerp3(C.p[0], C.p[1], tt); cl = lerp3(C.l[0], C.l[1], tt);
-  }
+  // ---- camera (v4 sub-shots; cuts on word onsets, smootherstep moves) ----
+  const { p: cp, l: cl } = camPose(f);
+  CAMLOOK = cl;
   camera.position.set(cp[0], cp[1], cp[2]);
   camera.lookAt(cl[0], cl[1], cl[2]);
   camera.updateMatrixWorld();
@@ -863,6 +976,10 @@ window.renderFrame = (f) => {
   const subj = i >= 14 ? rig.crestPos : (i === 13 ? h.outer.position : rig.H0);
   sun.target.position.copy(subj);
   sun.position.copy(subj).add(SUN_OFF);
+}
+window.renderFrame = (f) => {
+  if (!rig.hero) return false;
+  poseFrame(f);
   // ---- render + caption overlay ----
   renderer.render(scene, camera);
   drawCaption(f);
@@ -872,3 +989,68 @@ window.renderFrame = (f) => {
   return true;
 };
 window.TOTAL = TOTAL;
+
+// ---------- QC debug API (placement + jerk gates; not used by the render) ----------
+// Figure boxes per painter in canvas fractions [u0, u1, vBot, vTop]
+// (v measured from the card's base). Cab cards sit behind the cab door by
+// design, so their vBot is the drawn figure's lowest point, not the card's.
+const FIGBOX = {
+  ramuLean: [0.15, 0.90, 0.15, 0.903], ramuCalm: [0.15, 0.90, 0.15, 0.903],
+  ramuWave: [0.15, 0.94, 0.15, 0.89], ramuCrouch: [0.26, 0.77, 0.03, 0.825],
+  t1Shout: [0.12, 0.88, 0.03, 0.95], t1Stand: [0.16, 0.84, 0.03, 0.95],
+  t2Look: [0.18, 0.90, 0.03, 0.955], t2Laugh: [0.22, 0.80, 0.03, 0.95],
+  t2Stand: [0.16, 0.84, 0.03, 0.95],
+};
+// Head boxes [u0, u1, vChin, vTop] — for close/cab shots the head (incl.
+// cap/hat and, for the wave, the raised hand) must be fully in frame;
+// the body may overflow the bottom, as in any honest close-up.
+const HEADBOX = {
+  ramuLean: [0.287, 0.713, 0.607, 0.903], ramuCalm: [0.287, 0.713, 0.607, 0.903],
+  ramuWave: [0.24, 0.94, 0.60, 0.91], ramuCrouch: [0.303, 0.697, 0.552, 0.825],
+  t1Shout: [0.303, 0.697, 0.677, 0.95], t1Stand: [0.303, 0.697, 0.677, 0.95],
+  t2Look: [0.303, 0.697, 0.687, 0.955], t2Laugh: [0.303, 0.697, 0.677, 0.95],
+  t2Stand: [0.303, 0.697, 0.677, 0.95],
+};
+function evalPts(pts, mx, my) {
+  const dir = camera.getWorldDirection(new THREE.Vector3());
+  const cs = pts.map(p => {
+    const behind = p.clone().sub(camera.position).dot(dir) <= 0.01;
+    const q = p.clone().project(camera);
+    return { x: q.x, y: q.y, behind };
+  });
+  const inAll = cs.every(c => !c.behind && Math.abs(c.x) <= mx && Math.abs(c.y) <= my);
+  const outAll = cs.every(c => c.behind)
+    || cs.every(c => !c.behind && c.x > 1.05) || cs.every(c => !c.behind && c.x < -1.05)
+    || cs.every(c => !c.behind && c.y > 1.05) || cs.every(c => !c.behind && c.y < -1.05);
+  return { state: inAll ? 'IN' : outAll ? 'OUT' : 'STRADDLE',
+    ndc: cs.map(c => [+c.x.toFixed(2), +c.y.toFixed(2), c.behind ? 1 : 0]) };
+}
+window.__gate = (f) => {
+  if (!rig.hero) return null;
+  poseFrame(f);
+  scene.updateMatrixWorld(true);
+  const out = { f, actors: {}, board: null };
+  for (const k in FIGBOX) {
+    const card = A[k];
+    if (!card || !card.mesh.visible) continue;
+    const box = FIGBOX[k], w = card.mesh.geometry.parameters.width, hh = card.mesh.geometry.parameters.height;
+    const toPts = (b) => [[b[0], b[2]], [b[1], b[2]], [b[0], b[3]], [b[1], b[3]]]
+      .map(([u, v]) => card.mesh.localToWorld(new THREE.Vector3((u - 0.5) * w, v * hh, 0)));
+    out.actors[k] = evalPts(toPts(box), 0.95, 0.97);
+    out.actors[k].head = evalPts(toPts(HEADBOX[k]), 0.95, 0.97);
+  }
+  if (hookBoard && hookBoard.visible && rig.boardMesh) {
+    const bm = rig.boardMesh, bw = bm.geometry.parameters.width, bh = bm.geometry.parameters.height, bd2 = bm.geometry.parameters.depth;
+    const pts = [];
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1])
+      pts.push(bm.localToWorld(new THREE.Vector3(sx * bw / 2, sy * bh / 2, sz * bd2 / 2)));
+    out.board = evalPts(pts, 0.93, 0.95);
+  }
+  return out;
+};
+window.camAt = (f) => {
+  if (!rig.hero) return null;
+  poseFrame(f);
+  return { p: [camera.position.x, camera.position.y, camera.position.z], l: CAMLOOK.slice() };
+};
+window.__dbg = { scene, camera, rig, get A() { return A; }, get board() { return hookBoard; } };
