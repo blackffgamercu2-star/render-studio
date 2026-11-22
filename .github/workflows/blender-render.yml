@@ -1,0 +1,49 @@
+name: blender-render
+on:
+  workflow_dispatch:
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        chunk: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compute frame range
+        id: rng
+        run: |
+          START=$(( ${{ matrix.chunk }} * 44 + 1 ))
+          END=$(( START + 43 ))
+          if [ $END -gt 1752 ]; then END=1752; fi
+          echo "start=$START" >> $GITHUB_OUTPUT
+          echo "end=$END" >> $GITHUB_OUTPUT
+          echo "chunk ${{ matrix.chunk }}: frames $START-$END"
+      - name: Download Blender 4.2.3
+        run: |
+          curl -sL -o /tmp/blender.tar.xz https://download.blender.org/release/Blender4.2/blender-4.2.3-linux-x64.tar.xz
+          tar -xf /tmp/blender.tar.xz -C /tmp
+      - name: Download scene blend (30 parts)
+        run: |
+          cd /tmp
+          for i in 00 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29; do
+            curl -sL -o part$i https://github.com/gustuplode/render-studio/releases/download/stump-rings-v1/anim_scene.blend.part$i
+          done
+          cat part00 part01 part02 part03 part04 part05 part06 part07 part08 part09 part10 part11 part12 part13 part14 part15 part16 part17 part18 part19 part20 part21 part22 part23 part24 part25 part26 part27 part28 part29 > anim_scene.blend
+          echo "bf66349cead598e59ecee05c5dd465fa046ec7260ffdbf8f9d773cab61d08641  anim_scene.blend" | sha256sum -c -
+          ls -lh anim_scene.blend
+      - name: Render chunk
+        run: |
+          /tmp/blender-4.2.3-linux-x64/blender -b /tmp/anim_scene.blend -P scripts/render_frames_gh.py -- /tmp/frames ${{ steps.rng.outputs.start }} ${{ steps.rng.outputs.end }} 24
+          ls /tmp/frames | head -3; ls /tmp/frames | wc -l
+      - name: Zip and upload chunk to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd /tmp/frames && zip -q -9 /tmp/chunk-${{ matrix.chunk }}.zip *.jpg
+          ls -lh /tmp/chunk-${{ matrix.chunk }}.zip
+          gh release view stump-frames >/dev/null 2>&1 || gh release create stump-frames --title "stump frames" --notes "rendered chunks"
+          gh release upload stump-frames /tmp/chunk-${{ matrix.chunk }}.zip --clobber
