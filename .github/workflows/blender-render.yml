@@ -22,22 +22,22 @@ jobs:
           echo "start=$START" >> $GITHUB_OUTPUT
           echo "end=$END" >> $GITHUB_OUTPUT
           echo "chunk ${{ matrix.chunk }}: frames $START-$END"
-      - name: Download Blender 4.2.3
+      - name: Download Blender 5.2.2
         run: |
-          curl -sL -o /tmp/blender.tar.xz https://download.blender.org/release/Blender4.2/blender-4.2.3-linux-x64.tar.xz
+          curl -sfL --retry 3 -o /tmp/blender.tar.xz https://download.blender.org/release/Blender5.2/blender-5.2.2-linux-x64.tar.xz
           tar -xf /tmp/blender.tar.xz -C /tmp
       - name: Download scene blend (30 parts)
         run: |
           cd /tmp
           for i in 00 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29; do
-            curl -sL -o part$i https://github.com/gustuplode/render-studio/releases/download/stump-rings-v1/anim_scene.blend.part$i
+            curl -sfL --retry 3 -o part$i https://github.com/gustuplode/render-studio/releases/download/stump-rings-v1/anim_scene.blend.part$i
           done
           cat part00 part01 part02 part03 part04 part05 part06 part07 part08 part09 part10 part11 part12 part13 part14 part15 part16 part17 part18 part19 part20 part21 part22 part23 part24 part25 part26 part27 part28 part29 > anim_scene.blend
           echo "bf66349cead598e59ecee05c5dd465fa046ec7260ffdbf8f9d773cab61d08641  anim_scene.blend" | sha256sum -c -
           ls -lh anim_scene.blend
       - name: Render chunk
         run: |
-          /tmp/blender-4.2.3-linux-x64/blender -b /tmp/anim_scene.blend -P scripts/render_frames_gh.py -- /tmp/frames ${{ steps.rng.outputs.start }} ${{ steps.rng.outputs.end }} 24
+          /tmp/blender-5.2.2-linux-x64/blender -b /tmp/anim_scene.blend -P scripts/render_frames_gh.py -- /tmp/frames ${{ steps.rng.outputs.start }} ${{ steps.rng.outputs.end }} 24
           ls /tmp/frames | head -3; ls /tmp/frames | wc -l
       - name: Zip and upload chunk to release
         env:
