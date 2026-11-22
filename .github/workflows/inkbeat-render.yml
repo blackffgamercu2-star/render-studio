@@ -31,18 +31,6 @@ jobs:
       - name: Install
         working-directory: inkbeat
         run: npm install --no-audit --no-fund
-      - name: Fonts (Poppins TTF from Google Fonts) and placeholder audio
-        working-directory: inkbeat
-        run: |
-          mkdir -p public/fonts
-          css=$(curl -s "https://fonts.googleapis.com/css2?family=Poppins:wght@700;800" -A "Mozilla/5.0 (X11; Linux x86_64)")
-          url700=$(echo "$css" | grep -B2 "font-weight: 700" | grep -o "https://[^)]*" | head -1)
-          url800=$(echo "$css" | grep -B2 "font-weight: 800" | grep -o "https://[^)]*" | head -1)
-          echo "700=$url700"; echo "800=$url800"
-          curl -sL "$url700" -o public/fonts/Poppins-Bold.ttf
-          curl -sL "$url800" -o public/fonts/Poppins-ExtraBold.ttf
-          file public/fonts/*.ttf
-          ffmpeg -y -v error -f lavfi -i anullsrc=r=44100:cl=stereo -t 21 public/soundtrack.wav
       - name: Render chunk
         working-directory: inkbeat
         run: npx remotion render src/index.ts Molasses chunk-${{ matrix.idx }}.mp4 --frames=${{ matrix.frames }} --muted --gl=angle --timeout=240000 --concurrency=2 --crf=16
