@@ -43,7 +43,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cd /tmp/frames && zip -q -9 /tmp/chunk-${{ matrix.chunk }}.zip *.jpg
+          (cd /tmp/frames && zip -q -9 /tmp/chunk-${{ matrix.chunk }}.zip *.jpg)
           ls -lh /tmp/chunk-${{ matrix.chunk }}.zip
-          gh release view stump-frames >/dev/null 2>&1 || gh release create stump-frames --title "stump frames" --notes "rendered chunks"
-          gh release upload stump-frames /tmp/chunk-${{ matrix.chunk }}.zip --clobber
+          gh release upload stump-frames /tmp/chunk-${{ matrix.chunk }}.zip --clobber -R gustuplode/render-studio
