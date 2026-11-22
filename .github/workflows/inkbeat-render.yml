@@ -1,0 +1,77 @@
+name: inkbeat-render
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "inkbeat-bundle.tar.gz"
+permissions:
+  contents: write
+jobs:
+  chunk:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { idx: 0, frames: "0-73" }
+          - { idx: 1, frames: "74-147" }
+          - { idx: 2, frames: "148-221" }
+          - { idx: 3, frames: "222-295" }
+          - { idx: 4, frames: "296-369" }
+          - { idx: 5, frames: "370-443" }
+          - { idx: 6, frames: "444-517" }
+          - { idx: 7, frames: "518-591" }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unpack project bundle
+        run: tar xzf inkbeat-bundle.tar.gz && ls inkbeat/
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install
+        working-directory: inkbeat
+        run: npm install --no-audit --no-fund
+      - name: Fonts (Poppins TTF from Google Fonts) and placeholder audio
+        working-directory: inkbeat
+        run: |
+          mkdir -p public/fonts
+          css=$(curl -s "https://fonts.googleapis.com/css2?family=Poppins:wght@700;800" -A "Mozilla/5.0 (X11; Linux x86_64)")
+          url700=$(echo "$css" | grep -B2 "font-weight: 700" | grep -o "https://[^)]*" | head -1)
+          url800=$(echo "$css" | grep -B2 "font-weight: 800" | grep -o "https://[^)]*" | head -1)
+          echo "700=$url700"; echo "800=$url800"
+          curl -sL "$url700" -o public/fonts/Poppins-Bold.ttf
+          curl -sL "$url800" -o public/fonts/Poppins-ExtraBold.ttf
+          file public/fonts/*.ttf
+          ffmpeg -y -v error -f lavfi -i anullsrc=r=44100:cl=stereo -t 21 public/soundtrack.wav
+      - name: Render chunk
+        working-directory: inkbeat
+        run: npx remotion render src/index.ts Molasses chunk-${{ matrix.idx }}.mp4 --frames=${{ matrix.frames }} --muted --gl=angle --timeout=240000 --concurrency=2 --crf=16
+      - name: Verify chunk frame count
+        working-directory: inkbeat
+        run: |
+          n=$(ffprobe -v error -select_streams v:0 -count_frames -show_entries stream=nb_read_frames -of csv=p=0 chunk-${{ matrix.idx }}.mp4)
+          echo "chunk ${{ matrix.idx }} frames=$n"
+          test "$n" = "74"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chunk-${{ matrix.idx }}
+          path: inkbeat/chunk-${{ matrix.idx }}.mp4
+  finalize:
+    needs: chunk
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: chunks
+      - name: Concat and publish to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -R chunks
+          for i in 0 1 2 3 4 5 6 7; do echo "file 'chunks/chunk-$i/chunk-$i.mp4'"; done > list.txt
+          ffmpeg -y -v error -f concat -safe 0 -i list.txt -c:v libx264 -crf 16 -pix_fmt yuv420p -r 30 molasses-silent.mp4
+          n=$(ffprobe -v error -select_streams v:0 -count_frames -show_entries stream=nb_read_frames -of csv=p=0 molasses-silent.mp4)
+          echo "final frames=$n"; test "$n" = "592"
+          tag="inkbeat-molasses-${{ github.run_number }}"
+          gh release create "$tag" molasses-silent.mp4 --repo ${{ github.repository }} --title "Inkbeat Molasses render ${{ github.run_number }}" --notes "Silent video; soundtrack is muxed locally."
+          echo "RELEASE_TAG=$tag"
