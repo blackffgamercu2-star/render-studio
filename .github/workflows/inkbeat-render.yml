@@ -7,7 +7,40 @@ on:
 permissions:
   contents: write
 jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unpack project bundle
+        run: tar xzf inkbeat-bundle.tar.gz && ls inkbeat/
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install
+        working-directory: inkbeat
+        run: npm install --no-audit --no-fund
+      - name: Install full Chromium (Playwright) for WebGL
+        working-directory: inkbeat
+        run: |
+          npx -y playwright@1.49.1 install --with-deps chromium
+          ls -d $HOME/.cache/ms-playwright/chromium-*/chrome-linux/chrome
+      - name: Smoke stills (WebGL proof, 3 frames)
+        working-directory: inkbeat
+        run: |
+          CHROME=$(ls -d $HOME/.cache/ms-playwright/chromium-*/chrome-linux/chrome | head -1)
+          echo "CHROME=$CHROME"
+          for f in 10 300 580; do
+            npx remotion still src/index.ts Molasses smoke-f$f.png --frame=$f --scale=0.5 --gl=angle --timeout=240000 --browser-executable=$CHROME
+          done
+          ls -la smoke-f*.png
+          for f in 10 300 580; do test -s smoke-f$f.png; done
+          echo "SMOKE OK: WebGL context works, 3 distinct stills written"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: smoke-stills
+          path: inkbeat/smoke-f*.png
   chunk:
+    needs: smoke
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -31,9 +64,14 @@ jobs:
       - name: Install
         working-directory: inkbeat
         run: npm install --no-audit --no-fund
+      - name: Install full Chromium (Playwright) for WebGL
+        working-directory: inkbeat
+        run: npx -y playwright@1.49.1 install --with-deps chromium
       - name: Render chunk
         working-directory: inkbeat
-        run: npx remotion render src/index.ts Molasses chunk-${{ matrix.idx }}.mp4 --frames=${{ matrix.frames }} --muted --gl=angle --timeout=240000 --concurrency=2 --crf=16
+        run: |
+          CHROME=$(ls -d $HOME/.cache/ms-playwright/chromium-*/chrome-linux/chrome | head -1)
+          npx remotion render src/index.ts Molasses chunk-${{ matrix.idx }}.mp4 --frames=${{ matrix.frames }} --muted --gl=angle --timeout=240000 --concurrency=2 --crf=16 --browser-executable=$CHROME
       - name: Verify chunk frame count
         working-directory: inkbeat
         run: |
