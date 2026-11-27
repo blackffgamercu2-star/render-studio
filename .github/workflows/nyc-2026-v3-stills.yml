@@ -1,0 +1,83 @@
+name: nyc-2026-v3-stills
+# Nyc2026 V3 — ZERO-DEFECT FIX PASS ROUND 3, frames-only verification stills.
+# Renders FIVE proof stills of composition Nyc2026 at full resolution
+# (1080x1920, scale 1), one per risky beat, and publishes them as
+# release `nyc-2026-v3stills-3`:
+#   f681  — old man "just smiles": smile pushed to top-of-real scale
+#           (corners +7mm, cheeks +5mm, stronger Duchenne squeeze,
+#           inner brow relaxed) + head tilt/lean-in; hot dog re-seated
+#           in the palm (was centred on the wrist, end in the sleeve)
+#   f827  — Danny "freezes. No cash.": wallet REBUILT as a real bifold
+#           (two panels, fold, card slots, fake notes), held OPEN at
+#           CHEST height (was belt height) tilted 60deg up, hands
+#           gripping the outer edges (fingers re-aimed inward+up, a
+#           grip not a dangle); freeze asymmetry via uneven shrug
+#           (L 0.26 / R 0.05 rad) + wallet roll + head roll; duffel
+#           REBUILT as a vertical hanging bag on a flat visible strap
+#   f1018 — L9 snap-up + white decoy card visible above the wallet
+#   f1458 — L13 "drops" word frame: camera closes in on Danny (was a
+#           wide dead-pavement transition); wallet in his fist at his
+#           side, no belt slab
+#   f1533 — L13 spill: camera whips to the SPILL point (key lands on
+#           f1533) — dropped duffel lying on the pavement + 6 spilled
+#           wallets + the open decoy wallet, all in frame
+# Modelled on the proven nyc-2026-render smoke job (same bundle
+# reassembly, Node 22, npm ci, Playwright full Chromium, same
+# `remotion still` command + --gl=angle). NO chunk/finalize jobs —
+# this workflow never renders the film.
+# Upload order (same discipline as the render workflows): commit
+# THIS file to .github/workflows/nyc-2026-v3-stills.yml first,
+# DISABLE the workflow, upload the bundle parts
+# (nyc-2026-v3-bundle.part-00..03) to the repo root, ENABLE the
+# workflow, then re-upload the LAST part (or use Run workflow) to
+# trigger exactly one run with all parts present.
+# The stills are RAW (ungraded), exactly like the proofs Abid
+# judged — grade locally with grade_nyc.py if a board needs the
+# finish look.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "nyc-2026-v3-bundle.part-*"
+permissions:
+  contents: write
+jobs:
+  stills:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reassemble and unpack project bundle
+        run: |
+          cat nyc-2026-v3-bundle.part-* > nyc-2026-v3-bundle.tar.gz
+          tar xzf nyc-2026-v3-bundle.tar.gz
+          ls video-nyc-2026/ video-nyc-2026/remotion/
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install
+        working-directory: video-nyc-2026/remotion
+        run: npm ci --no-audit --no-fund
+      - name: Install full Chromium (Playwright) for WebGL
+        working-directory: video-nyc-2026/remotion
+        run: |
+          npx -y playwright@1.49.1 install --with-deps chromium
+          ls -d $HOME/.cache/ms-playwright/chromium-*/chrome-linux/chrome
+      - name: Render proof stills (full res 1080x1920)
+        working-directory: video-nyc-2026/remotion
+        run: |
+          CHROME=$(ls -d $HOME/.cache/ms-playwright/chromium-*/chrome-linux/chrome | head -1)
+          echo "CHROME=$CHROME"
+          for fr in 681 827 1018 1458 1533; do
+            npx remotion still src/index.ts Nyc2026 f$fr.png --frame=$fr --gl=angle --timeout=600000 --browser-executable=$CHROME
+            test -s f$fr.png
+          done
+          ls -la f681.png f827.png f1018.png f1458.png f1533.png
+          echo "STILLS OK: all five proof frames written"
+      - name: Publish release (5 proof stills)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="nyc-2026-v3stills-3"
+          gh release create "$tag" video-nyc-2026/remotion/f681.png video-nyc-2026/remotion/f827.png video-nyc-2026/remotion/f1018.png video-nyc-2026/remotion/f1458.png video-nyc-2026/remotion/f1533.png --repo ${{ github.repository }} --title "Nyc2026 V3 zero-defect fix ROUND 3 — proof stills f681/f827/f1018/f1458/f1533" --notes "Frames-only verification of the V3 zero-defect fix pass ROUND 3 (round-2 stills failed: wallet read as a flat plank at the belt, duffel as a floating torpedo, smile faint, spill pavement empty). Round-3 rebuilds, all verified on local stills first: (1) WALLET rebuilt from scratch as a real bifold — two 0.105m panels hinged at the centre fold (shallow V when open, never the -106deg flap), card slots + fake notes on the inner faces, white decoy card standing up; held OPEN at CHEST height (y 1.18, was 0.95 belt height), 0.30m out, face tilted 60deg up toward his eyes/camera; wrists 4cm below centre so palms cup the edges; hold-wrist re-aim changed to fingers INWARD+UP (round 2's forward+down left fingers dangling beside the wallet). (2) DUFFEL rebuilt as a vertical hanging bag (long axis along Y, end pocket, zipper, handle) on a flat 0.055m visible strap over the shoulder, hanging 0.30m out against his thigh (was a horizontal capsule 0.50m out). (3) DROP: wallet leaves his belt entirely — carried vertical in his right fist after the reveal, then falls flat on the pavement at the spill point with the bag at DROP_F. (4) FREEZE asymmetry: shrug L 0.26 / R 0.05 rad (was 0.17/0.10), wallet roll 0.2 rad, head roll, uneven hand lift. (5) SMILE pushed to top-of-real scale (corners +7mm, cheeks +5mm, stronger Duchenne squeeze, inner brow relaxed down) + head tilt 0.12 rad + lean-in. (6) L13 CAMERA: round 2 stayed locked on Danny so the spill (fixed point, metres behind the running Danny) was never in frame — now keys whip to the SPILL subject on the 'spill' word (key lands exactly on f1533) and close in on Danny on the 'drops' word (key lands exactly on f1458). (7) Hot dog re-seated 6cm toward the fingers so it sits in the palm, not centred on the wrist. Locked layers untouched (script, V2 voice stem + 1750f timings, beats, set, END RULE, audio md5 113159a6ee0fd1fefcdad62ed33eff81). RAW stills, ungraded. See PREP_REPORT_V3FILM.md in boards-nyc-2026/."
+          echo "RELEASE_TAG=$tag"
